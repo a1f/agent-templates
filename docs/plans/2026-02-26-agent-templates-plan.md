@@ -1442,9 +1442,41 @@ Task 17 (install.sh)   Depends on Tasks 2-15 (installs them)
 Task 18 (README)        Depends on all above
 ```
 
-**Recommended execution order:**
-1. Task 1 (dirs)
-2. Tasks 2-15 in parallel batches (rules → skills → hooks → templates)
-3. Task 16 (validate)
-4. Task 17 (install)
-5. Task 18 (README + final validation)
+## Step-by-Step Execution
+
+| Step | Task(s) | What to Do | Files Created | Parallel? | Depends On | Commit Message |
+|------|---------|-----------|---------------|-----------|------------|----------------|
+| 1 | T1 | Create all directories (`skills/`, `rules/`, `hooks/`, `templates/` and subdirs) | 10 dirs | No | — | `chore: create directory structure` |
+| 2a | T2 | Write `rules/python.md` with paths frontmatter + full Python rules (typing, ruff, pytest, pathlib, keyword-only params, modern syntax) | `rules/python.md` | Yes (2a-2d) | Step 1 | `feat: add Python language rules` |
+| 2b | T3 | Write `rules/typescript.md` with paths frontmatter + TS rules (strict, pnpm, vitest, zod, Result types) | `rules/typescript.md` | Yes (2a-2d) | Step 1 | `feat: add TypeScript language rules` |
+| 2c | T4 | Write `rules/rust.md` with paths frontmatter + Rust rules (clippy, Result, thiserror/anyhow, doc comments) | `rules/rust.md` | Yes (2a-2d) | Step 1 | `feat: add Rust language rules` |
+| 2d | T5 | Write `rules/cpp.md` with paths frontmatter + C++ rules (C++20, smart ptrs, RAII, clang-format) | `rules/cpp.md` | Yes (2a-2d) | Step 1 | `feat: add C++ language rules` |
+| 3 | T6 | Copy existing skills from `~/.claude/skills/` to `skills/clean-code-planner/SKILL.md` and `skills/python-coding-rules/SKILL.md` | 2 files | No | Step 1 | `feat: add existing skills` |
+| 4a | T7 | Write `hooks/notify-slack.sh` (reads `CLAUDE_SLACK_WEBHOOK_URL`, sends POST to Slack on Notification/Stop events), `chmod +x` | `hooks/notify-slack.sh` | Yes (4a-4b) | Step 1 | `feat: add Slack notification hook` |
+| 4b | T8 | Write `hooks/auto-approve.sh` (pattern-matches tool names, outputs `{"action":"allow"}` for safe ops), `chmod +x` | `hooks/auto-approve.sh` | Yes (4a-4b) | Step 1 | `feat: add auto-approve hook` |
+| 5a | T9 | Write `templates/settings-hooks.json` with Notification, Stop, PermissionRequest hook config | `templates/settings-hooks.json` | Yes (5a-5b) | Step 4a-4b | `feat: add hook settings template` |
+| 5b | T10 | Write `templates/CLAUDE.md.template` with workflow reference, language rules list, context management pattern | `templates/CLAUDE.md.template` | Yes (5a-5b) | Step 1 | `feat: add CLAUDE.md template` |
+| 6a | T12 | Write `skills/plan-codebase/SKILL.md` (skill metadata) + `codebase-planner-prompt.md` (agent prompt: scan codebase, output code-spec.md) | 2 files | Yes (6a-6d) | Step 1 | `feat: add plan-codebase skill` |
+| 6b | T13 | Write `skills/plan-tests/SKILL.md` (skill metadata) + `test-planner-prompt.md` (agent prompt: scan tests, output test-plan.md) | 2 files | Yes (6a-6d) | Step 1 | `feat: add plan-tests skill` |
+| 6c | T14 | Write `skills/implement-parallel/SKILL.md` + `implementer-prompt.md` (impl coder) + `test-coder-prompt.md` (test coder) | 3 files | Yes (6a-6d) | Step 1 | `feat: add implement-parallel skill` |
+| 6d | T15 | Write `skills/review-parallel/SKILL.md` + `refactor-reviewer-prompt.md` + `code-reviewer-prompt.md` + `consensus-rules.md` | 4 files | Yes (6a-6d) | Step 1 | `feat: add review-parallel skill` |
+| 7 | T11 | Write `skills/implement-orchestrator/SKILL.md` — master orchestrator referencing all Phase 1-4 skills and their prompt templates | 1 file | No | Steps 6a-6d | `feat: add implement-orchestrator skill` |
+| 8 | T16 | Write `validate.sh` — validates YAML frontmatter, file references, hook executability, JSON validity. Flags: `--skills`, `--rules`, `--hooks`, `--smoke`. `chmod +x`. Run it. | `validate.sh` | No | Steps 2-7 | `feat: add validation script` |
+| 9 | T17 | Write `install.sh` — interactive menu (rules/skills/hooks/template/all), `--target`, `--dry-run`, `--non-interactive`, `--uninstall`, JSON merge for settings, backup before overwrite. `chmod +x`. Test `--dry-run`. | `install.sh` | No | Steps 2-7 | `feat: add interactive installer` |
+| 10 | T18 | Update `README.md` with project description, install instructions, workflow diagram, component docs, contributing guide. Run `./validate.sh --smoke`. | `README.md` | No | Steps 8-9 | `docs: add comprehensive README` |
+
+### Execution Summary
+
+| Phase | Steps | Tasks | Files | Can Parallelize? |
+|-------|-------|-------|-------|-----------------|
+| **Foundation** | 1 | T1 | 10 dirs | No |
+| **Language Rules** | 2a-2d | T2-T5 | 4 files | All 4 parallel |
+| **Existing Skills** | 3 | T6 | 2 files | No |
+| **Hooks** | 4a-4b | T7-T8 | 2 files | Both parallel |
+| **Templates** | 5a-5b | T9-T10 | 2 files | Both parallel |
+| **Workflow Skills** | 6a-6d | T12-T15 | 11 files | All 4 parallel |
+| **Orchestrator** | 7 | T11 | 1 file | No (needs 6a-6d) |
+| **Validation** | 8 | T16 | 1 file | No (needs 2-7) |
+| **Installer** | 9 | T17 | 1 file | No (needs 2-7) |
+| **Documentation** | 10 | T18 | 1 file | No (needs 8-9) |
+| **TOTAL** | **10 steps** | **18 tasks** | **~35 files** | |
