@@ -56,7 +56,7 @@ Barrel files are acceptable only at package public API boundaries (the main `ind
 
 ## Type Safety
 
-- **`unknown` over `any`:** When a dynamic type is needed, use `unknown` with type narrowing (type guards, `instanceof`, `typeof`, or Zod parsing). Never use `any` unless wrapping an untyped third-party API, and isolate it behind a typed wrapper.
+- **`unknown` over `any`:** When a dynamic type is needed, use `unknown` with type narrowing (type guards, `instanceof`, `typeof`, or Zod parsing). Never use `any`. If a third-party API lacks types and no `@types/` package exists, write a `.d.ts` declaration file instead.
 - **`const` over `let`**, never `var`. Reassignment should be rare; prefer deriving new values.
 - **Explicit return types** on exported functions and public methods. Inferred return types are fine for local/private functions.
 - **Discriminated unions** for modeling state:
