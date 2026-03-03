@@ -372,17 +372,86 @@ validate_smoke() {
   # Create temp directory with cleanup trap
   local tmpdir
   tmpdir=$(mktemp -d)
+  # shellcheck disable=SC2064
   trap "rm -rf '$tmpdir'" EXIT
 
-  # TODO: Run install.sh once it exists (Task 17/18)
-  # ./install.sh --target="$tmpdir" --non-interactive --all
-  warn "Smoke test stubbed — install.sh does not exist yet"
-  warn "Will be implemented in Task 18 (Smoke test integration)"
+  # Run install.sh with HOME pointed at tmpdir so hooks/skills/settings
+  # all land inside the temp directory instead of the real home.
+  printf "  Running installer into temp dir: %s\n" "$tmpdir"
+  local install_output
+  if install_output=$(HOME="$tmpdir" "$SCRIPT_DIR/install.sh" --target="$tmpdir" --non-interactive --all 2>&1); then
+    pass "install.sh exited successfully"
+  else
+    fail "install.sh exited with non-zero status"
+    printf "         %s\n" "$install_output"
+    return
+  fi
 
-  # Placeholder checks (to be enabled after install.sh exists):
-  # - Verify expected files exist in $tmpdir
-  # - Verify hooks are executable
-  # - Verify JSON files are valid
+  # --- Check rules ---
+  local expected_rules="python.md typescript.md rust.md cpp.md"
+  for rule in $expected_rules; do
+    if [ -f "$tmpdir/.claude/rules/$rule" ]; then
+      pass "rule installed: $rule"
+    else
+      fail "rule missing: $tmpdir/.claude/rules/$rule"
+    fi
+  done
+
+  # --- Check skills ---
+  # All skill directories with content should have SKILL.md installed
+  local expected_skills="clean-code-planner python-coding-rules implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel"
+  for skill in $expected_skills; do
+    if [ -f "$tmpdir/.claude/skills/$skill/SKILL.md" ]; then
+      pass "skill installed: $skill/SKILL.md"
+    else
+      fail "skill missing: $tmpdir/.claude/skills/$skill/SKILL.md"
+    fi
+  done
+
+  # --- Check hooks ---
+  local expected_hooks="auto-approve.sh notify-slack.sh"
+  for hook in $expected_hooks; do
+    if [ -f "$tmpdir/.claude/hooks/$hook" ]; then
+      pass "hook installed: $hook"
+      # Verify hooks are executable
+      if [ -x "$tmpdir/.claude/hooks/$hook" ]; then
+        pass "hook executable: $hook"
+      else
+        fail "hook not executable: $hook"
+      fi
+    else
+      fail "hook missing: $tmpdir/.claude/hooks/$hook"
+    fi
+  done
+
+  # --- Check settings.json ---
+  if [ -f "$tmpdir/.claude/settings.json" ]; then
+    pass "settings.json installed"
+
+    # Validate JSON if jq is available
+    if command -v jq >/dev/null 2>&1; then
+      if jq . "$tmpdir/.claude/settings.json" >/dev/null 2>&1; then
+        pass "settings.json is valid JSON"
+      else
+        fail "settings.json is not valid JSON"
+      fi
+    else
+      warn "jq not installed, skipping JSON validation of settings.json"
+    fi
+  else
+    fail "settings.json missing: $tmpdir/.claude/settings.json"
+  fi
+
+  # --- Check CLAUDE.md template ---
+  if [ -f "$tmpdir/CLAUDE.md" ]; then
+    pass "CLAUDE.md installed"
+  else
+    fail "CLAUDE.md missing: $tmpdir/CLAUDE.md"
+  fi
+
+  # Clean up (trap handles this, but be explicit)
+  rm -rf "$tmpdir"
+  trap - EXIT
 }
 
 # ===========================================================================
