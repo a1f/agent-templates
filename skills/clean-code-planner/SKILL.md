@@ -81,13 +81,29 @@ Small changes: just answer the 3 questions inline. No full template needed unles
 
 ## Key Principles for Planning Decisions
 
-**Single Responsibility:** If you need "and" to describe what something does — split it. One reason to change, driven by one actor.
+### SOLID
+
+**Single Responsibility (S):** If you need "and" to describe what something does — split it. One reason to change, driven by one actor.
+
+**Open/Closed (O):** Extend behavior by adding new code (new function, new class, new module) — not by modifying existing working code. Use interfaces, strategy patterns, or composition to make components extensible without editing their source.
+
+**Liskov Substitution (L):** Every subtype must be usable wherever its parent type is expected, with no surprises. If overriding a method changes preconditions, postconditions, or side effects — the inheritance is wrong. Prefer composition over inheritance when substitution semantics are unclear.
+
+**Interface Segregation (I):** Many small, focused interfaces beat one large interface. No client should depend on methods it doesn't use. Split fat interfaces into role-specific ones.
+
+**Dependency Inversion (D):** Stable things define interfaces; volatile things implement them. Business logic never imports from DB, HTTP, or UI layers. High-level modules depend on abstractions, not concrete implementations.
+
+### Other Core Principles
 
 **DRY:** One authoritative source per piece of knowledge. Before writing anything new, search: does this already exist? Duplication is not only copy-paste — it's any two places that must change when one fact changes.
 
-**Naming reveals intent:** If you can't name it cleanly, it's doing too many things. Name by what it IS or DOES, not how it works internally. `get_active_users_by_role()` not `get_users2()`. When you struggle to name something, that is a design signal — split it.
+**YAGNI:** Do not build features, abstractions, or configurability that are not needed right now. Three similar lines of code is better than a premature abstraction. Design for current requirements, not hypothetical future ones.
 
-**Dependency direction:** Stable things define interfaces; volatile things implement them. Business logic never imports from DB, HTTP, or UI layers.
+**KISS:** Choose the simplest solution that solves the problem. If the design needs a diagram to explain — simplify it. Complexity is a cost; justify every piece of it.
+
+**Composition over inheritance:** Prefer composing objects (has-a) over inheritance hierarchies (is-a). Inheritance couples parent and child tightly and makes changes fragile. Use inheritance only when there is a genuine "is-a" relationship with Liskov-safe substitution.
+
+**Naming reveals intent:** If you can't name it cleanly, it's doing too many things. Name by what it IS or DOES, not how it works internally. `get_active_users_by_role()` not `get_users2()`. When you struggle to name something, that is a design signal — split it.
 
 **Function abstraction level:** Each function operates at one level of abstraction. A function that orchestrates a workflow calls named sub-functions — it does not mix high-level steps with low-level implementation details in the same body.
 
@@ -105,6 +121,10 @@ Small changes: just answer the 3 questions inline. No full template needed unles
 | Function does two things | Split it; name each part |
 | Name describes implementation, not concept | Name the concept (`build_user_index` not `parse_json_and_build_dict`) |
 | Everything in one file | One file = one responsibility; split by type of change |
+| Deep inheritance hierarchy | Flatten with composition; inherit only for genuine is-a |
+| Building for "future requirements" | YAGNI — delete it and add when actually needed |
+| Fat interface with many methods | Split into focused role-specific interfaces |
+| Modifying working code to add a feature | Extend via new code; use abstraction to keep existing code closed |
 
 ## Language-Specific Structure
 
