@@ -7,6 +7,26 @@ description: Use when writing, editing, or reviewing Python code. Apply to all P
 
 These rules apply to all Python code. Follow them for every file you write or modify.
 
+## Validation Checklist
+
+Before outputting Python code, verify each item:
+
+- [ ] Every function/method has typed parameters and return type
+- [ ] Every variable has a type annotation at first assignment
+- [ ] Constants are `Final[T]` and live in `constants.py`
+- [ ] Types/enums/dataclasses live in `types.py`
+- [ ] `__init__.py` files are empty
+- [ ] No in-function imports, no `if TYPE_CHECKING:` guards
+- [ ] No bare tuples for multi-value returns (use frozen dataclass)
+- [ ] Stateless methods are `@staticmethod`
+- [ ] `defaultdict` results converted to `dict` before returning
+- [ ] Classes used only when stateful — prefer functions otherwise
+- [ ] Using modern type syntax: `list[T]` not `List[T]`, `T | None` not `Optional[T]`
+- [ ] All functions use keyword-only args (`*` as first param)
+- [ ] No mutable default parameter values — use `None` sentinel
+- [ ] Module docstrings only if they add info beyond the filename
+- [ ] Docstrings are one sentence explaining WHY — no Args/Returns sections
+
 ## 1. Type Hints — Required Everywhere
 
 Every function signature, method, and variable where the type is not obvious must have type annotations.
@@ -104,7 +124,7 @@ API_VERSION: Final[str] = "v2"
 
 ## 4. Functions Over Classes
 
-Use plain functions for stateless logic. Classes are for state or lifecycle management.
+Use plain functions for stateless logic. Classes are for state or lifecycle management. If a method doesn't use `self`, make it a `@staticmethod`.
 
 ```python
 # Yes — stateless, use a function
@@ -115,6 +135,10 @@ class ConnectionPool:
     def __init__(self, max_size: int) -> None:
         self._connections: list[Connection] = []
         self._max_size = max_size
+
+    @staticmethod
+    def validate_config(config: dict[str, Any]) -> bool:
+        return "host" in config
 ```
 
 ## 5. Dataclasses for Structured Data
@@ -133,7 +157,13 @@ class SearchResult:
 
 Use Pydantic for data that crosses trust boundaries (API input, config files, external data).
 
-## 6. Async by Default
+## 6. Imports
+
+Always use **top-level imports**. Never import inside functions — it hides circular dependencies.
+
+**Never use `if TYPE_CHECKING:`** — always import directly at the top level. If a type-only import causes a circular dependency, fix the architecture (split files).
+
+## 7. Async by Default
 
 Use `asyncio` for I/O-bound work. Never use threads for I/O.
 
@@ -141,7 +171,21 @@ Use `asyncio` for I/O-bound work. Never use threads for I/O.
 async def fetch_user(client: HttpClient, user_id: int) -> User: ...
 ```
 
-## 7. Parameters — Safe Defaults
+## 8. defaultdict Pattern
+
+Use `defaultdict` for aggregation. Convert to plain `dict` before returning.
+
+```python
+from collections import defaultdict
+
+def count_items(items: list[str]) -> dict[str, int]:
+    result: defaultdict[str, int] = defaultdict(int)
+    for item in items:
+        result[item] += 1
+    return dict(result)
+```
+
+## 9. Parameters — Safe Defaults
 
 Never use mutable defaults (lists, dicts, sets). Use `None` sentinel for optional mutable params. Allow sensible immutable defaults (bool, int, str, tuples).
 
@@ -158,19 +202,18 @@ def process(items: list[str] | None = None) -> list[str]:
 def process(items: list[str] = []) -> list[str]: ...
 ```
 
-## 8. Keyword-Only Arguments
+## 10. Keyword-Only Arguments
 
-For functions with 3 or more parameters, use keyword-only args (`*` as first param):
+Always use keyword-only args (`*` as first param) for all functions. No runtime overhead — CPython stores this as a simple integer in the code object. Benefits: prevents argument-order bugs, makes APIs evolvable, and self-documents call sites.
 
 ```python
-# 2 params — positional is fine
-def get_user(user_id: int, include_deleted: bool = False) -> User: ...
+# All functions use keyword-only args
+def get_user(*, user_id: int, include_deleted: bool = False) -> User: ...
 
-# 3+ params — use keyword-only
 def create_user(*, name: str, email: str, role: str = "viewer") -> User: ...
 ```
 
-## 9. Docstrings — Explain Why
+## 11. Docstrings — Explain Why
 
 Single sentence explaining WHY the function exists, not what it does (the signature shows that). No `Args:` / `Returns:` sections — type hints serve that purpose.
 
@@ -180,7 +223,17 @@ def calculate_priority(task: Task) -> int:
     ...
 ```
 
-## 10. Code Health and Tooling
+Only write a module-level docstring if it communicates something the filename does not. Never restate the filename:
+
+```python
+# WRONG — constants.py doesn't need to say it contains constants
+"""Constants for the translation module."""
+
+# CORRECT — omit entirely, or write only if non-obvious
+"""Retry budget and model selection defaults shared across translation entrypoints."""
+```
+
+## 12. Code Health and Tooling
 
 ### Formatter and Linter — ruff
 
@@ -235,7 +288,7 @@ from pathlib import Path
 config_path = Path("config") / "settings.toml"
 ```
 
-## 11. Error Handling
+## 13. Error Handling
 
 Define project exception hierarchies. All custom exceptions inherit from a single project base.
 
@@ -268,7 +321,7 @@ except* ConnectionError as eg:
         logger.error("connection_failed", error=str(exc))
 ```
 
-## 12. Testing
+## 14. Testing
 
 Write tests for all business logic. Follow the Arrange-Act-Assert pattern.
 
