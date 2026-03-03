@@ -1,0 +1,41 @@
+# {{PROJECT_NAME}}
+
+{{One-sentence project description.}}
+
+## Tech Stack
+
+{{List primary language, framework, and key dependencies.}}
+
+## Commands
+
+- **Build:** `{{build command}}`
+- **Test:** `{{test command}}`
+- **Lint:** `{{lint command}}`
+- **Format:** `{{format command}}`
+
+## Rules
+
+Language-specific rules are in `.claude/rules/` and load automatically when editing matching files.
+
+## Agentic Workflow
+
+Use `/implement-orchestrator` to execute plans through the 4-phase agentic pipeline.
+
+### Skill Entry Points
+
+| Command | Purpose |
+|---------|---------|
+| `/implement-orchestrator` | Run the full 4-phase implementation pipeline from a plan |
+| `/plan-codebase` | Generate a code specification from a plan |
+| `/plan-tests` | Generate a test plan from a plan |
+| `/implement-parallel` | Execute code-spec and test-plan with parallel coders |
+| `/review-parallel` | Run parallel code reviews with severity-based consensus |
+| `/clean-code-planner` | Apply clean code principles to a plan |
+
+## Context Management
+
+For long tasks, use `impl-tmp/progress.md` to track state. Use `/clear` then continue with the progress file.
+
+## Project Structure
+
+{{Brief description of key directories and files.}}
