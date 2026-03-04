@@ -26,6 +26,7 @@ Before outputting Python code, verify each item:
 - [ ] No mutable default parameter values — use `None` sentinel
 - [ ] Module docstrings only if they add info beyond the filename
 - [ ] Docstrings are one sentence explaining WHY — no Args/Returns sections
+- [ ] Tests use pytest (never unittest)
 
 ## 1. Type Hints — Required Everywhere
 

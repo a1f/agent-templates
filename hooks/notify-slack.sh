@@ -15,8 +15,9 @@ WEBHOOK_URL="${CLAUDE_SLACK_WEBHOOK_URL:-}"
 # Silently exit if webhook URL is not configured
 [[ -z "$WEBHOOK_URL" ]] && exit 0
 
-# Extract project directory name from current working directory
+# Extract repo name and branch
 PROJECT_NAME="${PWD##*/}"
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 
 # Generate UTC timestamp
 TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
@@ -24,12 +25,12 @@ TIMESTAMP=$(date -u +"%Y-%m-%d %H:%M UTC")
 # Build display label from event type
 case "$EVENT_TYPE" in
   notification)
-    EVENT_LABEL="Notification"
-    DESCRIPTION="Claude Code needs your attention"
+    EVENT_LABEL="Needs Input"
+    DESCRIPTION="Claude Code is waiting for your input"
     ;;
   stop)
-    EVENT_LABEL="Stop"
-    DESCRIPTION="Claude Code has stopped"
+    EVENT_LABEL="Task Finished"
+    DESCRIPTION="Claude Code has finished the task"
     ;;
   *)
     EVENT_LABEL="Event"
@@ -41,13 +42,13 @@ esac
 # "text" serves as fallback for mobile/desktop notifications
 PAYLOAD=$(cat <<EOF
 {
-  "text": "Claude Code [$EVENT_LABEL]: $PROJECT_NAME needs your attention",
+  "text": "Claude Code [$EVENT_LABEL]: $PROJECT_NAME ($BRANCH) needs your attention",
   "blocks": [
     {
       "type": "section",
       "text": {
         "type": "mrkdwn",
-        "text": "*Claude Code $EVENT_LABEL*\n*Project:* \`$PROJECT_NAME\`\n*Time:* $TIMESTAMP\n$DESCRIPTION"
+        "text": "*Claude Code $EVENT_LABEL*\n*Repo:* \`$PROJECT_NAME\`  *Branch:* \`$BRANCH\`\n*Time:* $TIMESTAMP\n$DESCRIPTION"
       }
     }
   ]

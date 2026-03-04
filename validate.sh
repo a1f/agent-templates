@@ -293,6 +293,13 @@ validate_hooks() {
         fi
         ;;
       notify-slack.sh)
+        # Check CLAUDE_SLACK_WEBHOOK_URL is set in current environment
+        if [ -n "${CLAUDE_SLACK_WEBHOOK_URL:-}" ]; then
+          pass "$hook_name: CLAUDE_SLACK_WEBHOOK_URL is set"
+        else
+          warn "$hook_name: CLAUDE_SLACK_WEBHOOK_URL is not set (notifications will be silent)"
+        fi
+
         # Test with no webhook URL set — should exit silently
         local notify_output
         notify_output=$(CLAUDE_SLACK_WEBHOOK_URL="" "$hook_file" stop 2>&1) || true

@@ -94,7 +94,21 @@ This copies each `rules/*.md` file to `<project>/.claude/rules/`, where Claude C
 
 ### Slack Notification Hook (`hooks/notify-slack.sh`)
 
-Sends a Slack message when Claude Code fires a `Notification` or `Stop` event. Configure by setting the `CLAUDE_SLACK_WEBHOOK_URL` environment variable. Silently no-ops if the variable is unset. Never blocks Claude -- always exits 0.
+Sends a Slack message when Claude Code needs input (`Notification`) or finishes a task (`Stop`). Includes repo name and branch. Silently no-ops if the webhook URL is unset. Never blocks Claude -- always exits 0.
+
+#### Setup
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
+2. Name it (e.g. "Claude Code Notifications"), pick your workspace
+3. Left sidebar: **Incoming Webhooks** → toggle **On**
+4. Click **Add New Webhook to Workspace** → pick a channel
+5. Copy the webhook URL and add to your shell profile (`~/.zshrc` or `~/.bashrc`):
+
+```bash
+export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../xxx"
+```
+
+6. Verify with `./validate.sh --hooks` — it will confirm the variable is set.
 
 ### Auto-Approve Hook (`hooks/auto-approve.sh`)
 
