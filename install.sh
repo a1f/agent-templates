@@ -4,7 +4,7 @@ set -euo pipefail
 # =============================================================================
 # Claude Code Agent Templates Installer
 # =============================================================================
-# Interactive installer for rules, skills, hooks, and CLAUDE.md template.
+# Interactive installer for rules, skills, and hooks.
 # Works on macOS (bash 3.2) and Linux.
 #
 # Usage:
@@ -421,56 +421,6 @@ install_hooks() {
   fi
 }
 
-# install_template() — copies CLAUDE.md.template -> <target>/CLAUDE.md
-install_template() {
-  local template_src="${SCRIPT_DIR}/templates/CLAUDE.md.template"
-  local template_dst="${TARGET_DIR}/CLAUDE.md"
-
-  echo ""
-  printf "${BOLD}Installing CLAUDE.md Template${RESET}\n"
-  echo "  Source: $template_src"
-  echo "  Target: $template_dst"
-  echo ""
-
-  if [ ! -f "$template_src" ]; then
-    warn "CLAUDE.md template not found: $template_src"
-    return 0
-  fi
-
-  if [ -f "$template_dst" ]; then
-    if [ "$DRY_RUN" = "true" ]; then
-      dry "Would install CLAUDE.md (file already exists)"
-      show_diff "$template_src" "$template_dst"
-      return 0
-    fi
-
-    if [ "$NON_INTERACTIVE" = "true" ]; then
-      info "Skipping CLAUDE.md — file already exists (non-interactive mode)"
-      return 0
-    fi
-
-    # Interactive mode: ask user what to do
-    show_diff "$template_src" "$template_dst"
-    echo "  CLAUDE.md already exists at: $template_dst"
-    echo ""
-    echo "  [r] Replace with template"
-    echo "  [s] Skip (keep existing)"
-    echo ""
-    printf "  Choose [r/s]: "
-    read -r answer
-    case "$answer" in
-      [rR])
-        install_file "$template_src" "$template_dst"
-        ;;
-      *)
-        info "Skipped: CLAUDE.md"
-        ;;
-    esac
-  else
-    install_file "$template_src" "$template_dst"
-  fi
-}
-
 # =============================================================================
 # Main
 # =============================================================================
@@ -510,7 +460,6 @@ if [ "$INSTALL_ALL" = "true" ]; then
   install_rules
   install_skills
   install_hooks
-  install_template
 
   echo ""
   echo "======================================"
@@ -520,9 +469,8 @@ if [ "$INSTALL_ALL" = "true" ]; then
     info "Installation complete!"
     echo ""
     echo "  Next steps:"
-    echo "    1. Edit CLAUDE.md to fill in your project details"
-    echo "    2. Set CLAUDE_SLACK_WEBHOOK_URL for Slack notifications"
-    echo "    3. Review .claude/rules/ for language-specific conventions"
+    echo "    1. Set CLAUDE_SLACK_WEBHOOK_URL for Slack notifications"
+    echo "    2. Review .claude/rules/ for language-specific conventions"
   fi
   echo ""
   exit 0
@@ -542,8 +490,7 @@ while true; do
   echo "    [1] Language Rules (python, typescript, rust, cpp)"
   echo "    [2] Skills (agentic workflow pipeline)"
   echo "    [3] Hooks (Slack notifications, auto-approve)"
-  echo "    [4] CLAUDE.md template"
-  echo "    [5] Everything"
+  echo "    [4] Everything"
   echo "    [0] Exit"
   echo ""
   printf "  Select options (comma-separated): "
@@ -579,13 +526,9 @@ while true; do
         install_hooks
         ;;
       4)
-        install_template
-        ;;
-      5)
         install_rules
         install_skills
         install_hooks
-        install_template
         ;;
       *)
         warn "Unknown option: $choice"

@@ -449,13 +449,6 @@ validate_smoke() {
     fail "settings.json missing: $tmpdir/.claude/settings.json"
   fi
 
-  # --- Check CLAUDE.md template ---
-  if [ -f "$tmpdir/CLAUDE.md" ]; then
-    pass "CLAUDE.md installed"
-  else
-    fail "CLAUDE.md missing: $tmpdir/CLAUDE.md"
-  fi
-
   # Clean up (trap handles this, but be explicit)
   rm -rf "$tmpdir"
   trap - EXIT

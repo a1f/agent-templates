@@ -148,21 +148,9 @@ The installer merges hook configuration from `templates/settings-hooks.json` int
 
 ## Templates
 
-### CLAUDE.md Template (`templates/CLAUDE.md.template`)
-
-A starter `CLAUDE.md` for new projects. Includes placeholders for project name, tech stack, build/test/lint commands, and a reference table of all skill entry points.
-
 ### Settings Hook Template (`templates/settings-hooks.json`)
 
-Pre-configured `settings.json` fragment that registers the Slack notification and auto-approve hooks on the correct event types (`Notification`, `Stop`, `PreToolUse`).
-
-### Installation
-
-```bash
-./install.sh   # Select [4] CLAUDE.md template
-```
-
-The CLAUDE.md template is installed to `<project>/CLAUDE.md`. The settings template is merged automatically when installing hooks.
+Pre-configured `settings.json` fragment that registers the Slack notification and auto-approve hooks on the correct event types (`Notification`, `Stop`, `PreToolUse`). The settings template is merged automatically when installing hooks.
 
 ## Installation Details
 
@@ -172,7 +160,6 @@ The CLAUDE.md template is installed to `<project>/CLAUDE.md`. The settings templ
 | Skills | `~/.claude/skills/<skill-name>/` | Global (all projects) |
 | Hooks | `~/.claude/hooks/*.sh` | Global (all projects) |
 | Settings | `~/.claude/settings.json` | Global (all projects) |
-| CLAUDE.md | `<project>/CLAUDE.md` | Per-project |
 
 The installer creates timestamped backups (`.bak.<timestamp>`) of any file it overwrites and records them in `.claude/.install-backup-manifest`. Run `./install.sh --uninstall` to restore all backups.
 
