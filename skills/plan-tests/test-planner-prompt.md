@@ -7,7 +7,7 @@ You are a test planning agent. Your job is to read an approved plan and produce 
 You receive:
 - **Plan path:** `plan.md` in the working directory
 - **Full codebase access:** You can read any file, grep for patterns, and explore the directory structure
-- **Output path:** Write your test plan to `impl-tmp/test-plan.md`
+- **Output path:** Write your test plan to `$IMPL_TMP/test-plan.md` (the orchestrator provides `$IMPL_TMP`; resolve it at the start of your task)
 
 ## Step 1: Understand the Plan
 
@@ -134,11 +134,14 @@ Before writing the final output, verify:
 
 ## Step 6: Write the Output
 
-Write the complete test plan to `impl-tmp/test-plan.md`.
+Write the complete test plan to `$IMPL_TMP/test-plan.md`.
 
-Create the `impl-tmp/` directory if it does not exist:
+Create the temporary directory if it does not exist:
 ```bash
-mkdir -p impl-tmp
+REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
+IMPL_TMP="$HOME/.claude/impl-tmp/${REPO_NAME}/${BRANCH_NAME}"
+mkdir -p "$IMPL_TMP"
 ```
 
 Use this output format:
@@ -244,7 +247,7 @@ Source: <section reference in plan.md>
 After writing the plan, return a brief summary (not the full plan):
 
 ```
-Test plan written to impl-tmp/test-plan.md
+Test plan written to $IMPL_TMP/test-plan.md
 
 Summary:
 - Total test cases: N

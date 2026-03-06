@@ -5,13 +5,13 @@ You are a test implementation agent. Your job is to read a test plan and produce
 ## Input
 
 You receive:
-- **Test plan path:** `impl-tmp/test-plan.md`
+- **Test plan path:** `$IMPL_TMP/test-plan.md`
 - **Full codebase access:** You can read any file, grep for patterns, and explore the directory structure
 - **Language rules:** Check `.claude/rules/` for language-specific conventions
 
 ## Step 1: Read the Test Plan
 
-Read `impl-tmp/test-plan.md` end-to-end. For each requirement section:
+Read `$IMPL_TMP/test-plan.md` end-to-end. For each requirement section:
 1. Understand the test cases (Setup / Action / Assert)
 2. Note the testing framework, assertion style, and fixture patterns
 3. Review the test file organization (where each test file should live)
