@@ -1,26 +1,26 @@
 ---
 name: plan-tests
-description: Use when dispatched by implement-orchestrator to create a test plan from an approved plan, or when you need to design a comprehensive test strategy for a feature
+description: Use when dispatched by implement-orchestrator to create a test plan from a plan (file or context), or when you need to design a comprehensive test strategy for a feature
 ---
 
 # Plan Tests
 
-Produce a structured test plan (`$IMPL_TMP/test-plan.md`) from an approved `plan.md` by discovering existing test patterns and defining test cases for every requirement.
+Produce a structured test plan (`$IMPL_TMP/test-plan.md`) from a plan by discovering existing test patterns and defining test cases for every requirement.
 
 ## When to Use
 
-- Dispatched by implement-orchestrator as Phase 1b (parallel with plan-codebase)
+- Dispatched by implement-orchestrator for a specific step
 - Manually invoked to generate a test plan before implementation
 
 ## Prerequisites
 
-- `plan.md` exists in the working directory
+- A plan or step description is available (from `plan.md`, `$IMPL_TMP/steps.md`, `$IMPL_TMP/current-step.md`, or conversation context)
 
 ## The Process
 
 ### 1. Read the Plan
 
-Read `plan.md` end-to-end. Extract every requirement and acceptance criterion. Note edge cases, error conditions, and constraints that need verification.
+Read the plan from whatever source is available — `plan.md`, `$IMPL_TMP/current-step.md`, or the step description provided by the orchestrator. Extract every requirement and acceptance criterion. Note edge cases, error conditions, and constraints that need verification.
 
 ### 2. Discover Test Infrastructure
 
@@ -64,7 +64,7 @@ Return a short summary to the orchestrator:
 
 | Step | Action | Output |
 |------|--------|--------|
-| 1 | Read plan.md | Requirements + acceptance criteria |
+| 1 | Read plan/step | Requirements + acceptance criteria |
 | 2 | Discover test infra | Framework, fixtures, conventions |
 | 3 | Define test cases | Cases per requirement |
 | 4 | Specify fixtures/mocks | Test structure |

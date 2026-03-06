@@ -19,18 +19,19 @@ Language-specific rules are in `.claude/rules/` and load automatically when edit
 
 ## Agentic Workflow
 
-Use `/implement-orchestrator` to execute plans through the 4-phase agentic pipeline.
+Use `/implement-orchestrator` to execute plans step-by-step. The plan can come from any source — a file, conversation context, or description. Each step is implemented, reviewed via `/simplify`, and committed separately.
 
 ### Skill Entry Points
 
 | Command | Purpose |
 |---------|---------|
-| `/implement-orchestrator` | Run the full 4-phase implementation pipeline from a plan |
-| `/plan-codebase` | Generate a code specification from a plan |
-| `/plan-tests` | Generate a test plan from a plan |
-| `/implement-parallel` | Execute code-spec and test-plan with parallel coders |
+| `/implement-orchestrator` | Run the step-by-step pipeline from any plan source |
+| `/plan-codebase` | Generate a code specification for a step |
+| `/plan-tests` | Generate a test plan for a step |
+| `/implement-parallel` | Dispatch parallel Impl Coder and Test Coder for a step |
 | `/review-parallel` | Run parallel code reviews with severity-based consensus |
-| `/clean-code-planner` | Apply clean code principles to a plan |
+| `/clean-code-planner` | Apply clean code principles before any code change |
+| `/simplify` | Review changed code for reuse, quality, and efficiency |
 
 ## Context Management
 

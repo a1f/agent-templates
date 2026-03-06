@@ -68,7 +68,7 @@ You are a refactoring reviewer. Analyze the implemented code against `$IMPL_TMP/
 - Wrapper classes that add no behavior beyond delegation
 
 **What NOT to flag:**
-- Complexity required by the spec (check plan.md)
+- Complexity required by the spec (check the plan or step description)
 - Standard design patterns used appropriately (e.g., strategy pattern with 3+ variants)
 - Error handling that seems verbose but covers real edge cases
 

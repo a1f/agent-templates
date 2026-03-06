@@ -33,7 +33,7 @@ Dispatch 5 fully independent reviewers via the Task tool. Each reviewer uses `co
 | Reviewer | Focus |
 |----------|-------|
 | **Correctness** | Logic errors, edge cases, null handling, race conditions |
-| **Spec Compliance** | plan.md vs actual code, missing/extra features |
+| **Spec Compliance** | Plan/step spec vs actual code, missing/extra features |
 | **Security** | OWASP top 10, input validation, injection, auth |
 | **Maintainability** | Readability, DRY, complexity, testability |
 | **Performance** | Algorithmic complexity, memory, I/O, allocations |

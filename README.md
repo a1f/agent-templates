@@ -30,42 +30,39 @@ Or install everything non-interactively:
 
 ## Agentic Workflow
 
-The core of this repository is a 4-phase agentic implementation pipeline. Start with an approved `plan.md` and invoke `/implement-orchestrator` to run the full pipeline:
+The core of this repository is a step-by-step agentic implementation pipeline. Provide a plan from any source (conversation, file, or description) and invoke `/implement-orchestrator` to run the full pipeline:
 
 ```
-Plan.md (approved) ──> implement-orchestrator
+Plan (any source) ──> implement-orchestrator
                             │
+                     Extract Steps
+                            │
+                     For each step:
                      ┌──────┴──────┐
                      ▼              ▼
-               Code Planner    Test Planner         Phase 1: Planning
+               Impl Coder    Test Coder              Implement
                      │              │
                      └──────┬──────┘
                             ▼
-                     code-spec.md + test-plan.md
+                     Run simplify skill               Quality Review
                             │
-                     ┌──────┴──────┐
-                     ▼              ▼
-               Test Coder     Impl Coder            Phase 2: Implementation
+                            ▼
+                     Commit step                      One commit per step
                             │
-               ┌────────────┼────────────┐
-               ▼            ▼            ▼
-          Arch Review   DRY Review   Simplify        Phase 3: Refactoring
-               ┌──┬──┬──┬──┼──┐
-               ▼  ▼  ▼  ▼  ▼  ▼
-         5 Code Reviewers (consensus)               Phase 4: Code Review
-                            │
-                       todo.md → Fix Loop (max 3x) → Done
+                     Next step ──> repeat
 ```
+
+Each plan step produces one focused commit, independently reviewed for quality via the `simplify` skill. A 3-step plan produces 3 commits.
 
 ### Skills Reference
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| **implement-orchestrator** | `/implement-orchestrator` | Run the full 4-phase pipeline from an approved plan |
-| **plan-codebase** | `/plan-codebase` | Phase 1a: Analyze codebase and produce `code-spec.md` |
-| **plan-tests** | `/plan-tests` | Phase 1b: Discover test patterns and produce `test-plan.md` |
-| **implement-parallel** | `/implement-parallel` | Phase 2: Dispatch parallel Impl Coder and Test Coder agents |
-| **review-parallel** | `/review-parallel` | Phases 3-4: Run parallel reviewers with severity-based consensus |
+| **implement-orchestrator** | `/implement-orchestrator` | Run the step-by-step pipeline from any plan source |
+| **plan-codebase** | `/plan-codebase` | Analyze codebase and produce implementation spec for a step |
+| **plan-tests** | `/plan-tests` | Discover test patterns and produce test plan for a step |
+| **implement-parallel** | `/implement-parallel` | Dispatch parallel Impl Coder and Test Coder for a step |
+| **review-parallel** | `/review-parallel` | Run parallel reviewers with severity-based consensus |
 | **clean-code-planner** | `/clean-code-planner` | Produce a code plan before any code change (any size) |
 | **python-coding-rules** | `/python-coding-rules` | Apply Python 3.12+ coding standards interactively |
 

@@ -1,20 +1,26 @@
 ---
 name: implement-orchestrator
-description: Use when the user asks to implement a plan using the agentic workflow, or invokes /implement-orchestrator, or says "implement this plan" or "execute this plan with agents"
+description: Use when the user asks to implement a plan using the agentic workflow, or invokes /implement-orchestrator, or says "implement this plan" or "execute this plan with agents". Works with any plan — from a plan.md file, conversation context, or user-provided description.
 ---
 
 # Implement Orchestrator
 
-Master orchestrator for the 4-phase agentic implementation pipeline. Coordinates parallel subagents, manages state via a temporary directory outside the repo, and enforces quality through iterative code review.
+Master orchestrator for the step-by-step agentic implementation pipeline. Breaks a plan into individual steps, implements each step separately with quality review via the `simplify` skill, and commits each step independently. Manages state via a temporary directory outside the repo.
 
 ```
-plan.md --> [Phase 1: Planning] --> [Phase 2: Implementation] --> [Phase 3: Refactoring] --> [Phase 4: Review Loop] --> Done
-               2 agents ||            2 agents ||                  3 reviewers ||              5 reviewers ||
+Plan (from any source) --> Extract Steps --> For each step:
+  [Plan Step] --> [Implement] --> [Run simplify skill] --> [Commit]
 ```
 
-## Prerequisites
+## Accepting the Plan
 
-An approved `plan.md` must exist in the working directory. Abort with a clear message if missing.
+The plan can come from **any source** — do NOT require a `plan.md` file:
+
+1. **Conversation context** — the user described the plan in the current conversation
+2. **plan.md file** — if one exists in the working directory, use it
+3. **Any other file** — the user may point to a design doc, issue, or spec
+
+Extract the plan from whatever source is available. If no plan is clear, ask the user to describe what they want implemented.
 
 ## Temporary Directory Setup
 
@@ -29,87 +35,142 @@ mkdir -p "$IMPL_TMP"
 
 All agents must resolve `IMPL_TMP` at the start and pass it to subagents. Every reference to temporary files below uses `$IMPL_TMP/` as the prefix.
 
-## Phase 1: Planning
+## Step 1: Extract Implementation Steps
 
-Dispatch 2 parallel subagents via the Task tool:
+Parse the plan into discrete, independently implementable steps. Each step should be:
+- Small enough to be a single coherent commit
+- Self-contained (compiles/passes after the step is done)
+- Ordered by dependency (earlier steps don't depend on later ones)
 
-1. **Plan-Codebase** agent -- reads `plan.md`, writes `$IMPL_TMP/code-spec.md`
-2. **Plan-Tests** agent -- reads `plan.md`, writes `$IMPL_TMP/test-plan.md`
+Write the extracted steps to `$IMPL_TMP/steps.md` for reference:
+```markdown
+## Step 1: [description]
+[Details of what to implement]
 
-**REQUIRED SUB-SKILL:** plan-codebase
-**REQUIRED SUB-SKILL:** plan-tests
+## Step 2: [description]
+[Details of what to implement]
 
-On completion, write `$IMPL_TMP/manifest.json`:
-```json
-{"phase":1,"status":"complete","outputs":{"code_spec":"$IMPL_TMP/code-spec.md","test_plan":"$IMPL_TMP/test-plan.md"},"timestamp":"<ISO-8601>"}
+...
 ```
 
-## Phase 2: Implementation
+## Step 2: Implement Each Step Separately
 
-Dispatch 2 parallel subagents:
+For **each step** in the plan, execute this cycle:
 
-1. **Impl Coder** -- reads `$IMPL_TMP/code-spec.md`, writes source files
-2. **Test Coder** -- reads `$IMPL_TMP/test-plan.md`, writes test files
+### 2a. Plan the Step
 
-**REQUIRED SUB-SKILL:** implement-parallel
+Dispatch a subagent to analyze the codebase and plan the specific step:
+- Scan the codebase for reuse opportunities and existing patterns
+- Apply clean-code principles (DRY, SRP, dependency direction)
+- Produce a focused implementation plan for just this step
 
-Update `$IMPL_TMP/manifest.json` with phase 2 status and output file list.
+**REQUIRED SUB-SKILL:** clean-code-planner
 
-## Phase 3: Refactoring Review
+### 2b. Implement the Step
 
-Dispatch 3 parallel reviewers (Architecture, DRY, Simplification). Each writes findings to `$IMPL_TMP/refactor-review-{name}.md`. Merge results into `$IMPL_TMP/refactor-suggestions.md`. Re-dispatch impl + test coders to apply accepted suggestions.
+Implement the code changes for this step:
+- Write source files and test files as needed
+- Follow existing project conventions and language rules
+- Run linter/formatter if available
+- Run tests to verify the step works
 
-## Phase 4: Code Review Loop
+**REQUIRED SUB-SKILL:** plan-codebase (for codebase analysis)
 
-Dispatch 5 independent parallel reviewers (Correctness, Spec Compliance, Security, Maintainability, Performance). Each outputs `[{file, line, issue, severity, category}]`.
+### 2c. Run the Simplify Skill
 
-**REQUIRED SUB-SKILL:** review-parallel
+After implementation, **always** run the `simplify` skill on the changes from this step. This reviews the changed code for:
+- Reuse opportunities
+- Code quality issues
+- Efficiency improvements
 
-**Consensus rules:**
+Apply any fixes the simplify skill identifies before committing.
+
+**REQUIRED SKILL:** simplify
+
+### 2d. Commit the Step
+
+Create a single commit for this step with a descriptive message:
 ```
-CRITICAL (security, crashes, data corruption): >=1 reviewer --> todo.md
-MAJOR (logic errors, spec violations):         >=2 reviewers --> todo.md
-MINOR (maintainability, minor perf):           >=3 reviewers --> todo.md
-LOW (style nits, suggestions):                 Logged only, not required
+<type>: <description of what this step accomplishes>
 ```
-Issues grouped by code location (within 5 lines = same location). Highest severity assigned to each group. Actionability check: "Would a senior engineer change code based on this?"
 
-**Early exit:** `todo.md` empty or <2 issues.
-**Max iterations:** 3. On iteration 3, escalate remaining critical issues to human.
+The commit should include all source and test changes from this step, including any fixes from the simplify skill review.
 
-Re-dispatch impl + test coders with `$IMPL_TMP/todo.md` after each iteration.
+### 2e. Move to Next Step
 
-## Error Recovery
-
-3-tier strategy:
-1. **Retry** -- per-agent retry (max 2) for transient failures or malformed output
-2. **Checkpoint** -- save `$IMPL_TMP/checkpoint.json` before each phase; rollback and re-dispatch on phase failure
-3. **Graceful degradation** -- if one parallel agent fails, continue with successful ones; retry only the failed agent
+Repeat 2a-2d for the next step. Each step builds on the committed state of previous steps.
 
 ## State Management
 
 All state lives in `$IMPL_TMP/` (outside the repository):
 ```
 ~/.claude/impl-tmp/<repo>/<branch>/
-  manifest.json          # Phase tracking
-  checkpoint.json        # Rollback state (saved before each phase)
-  code-spec.md           # Phase 1 output
-  test-plan.md           # Phase 1 output
-  refactor-suggestions.md
-  refactor-review-*.md
-  todo.md                # Phase 4 review issues
+  steps.md              # Extracted plan steps
+  current-step.md       # Current step being implemented (for recovery)
+  manifest.json         # Step tracking and progress
 ```
 
-`checkpoint.json` schema: `{"phase":<N>,"manifest":<snapshot>,"files":[<list of modified files>]}`
+`manifest.json` schema:
+```json
+{
+  "total_steps": 3,
+  "current_step": 2,
+  "completed_steps": [
+    {"step": 1, "description": "...", "commit": "<sha>", "files": ["..."]},
+    {"step": 2, "description": "...", "commit": "<sha>", "files": ["..."]}
+  ],
+  "status": "in_progress",
+  "timestamp": "<ISO-8601>"
+}
+```
 
 Agents write to unique files -- no merge conflicts. Orchestrator context stays lean: read summaries, not full artifacts.
 
 ## Cleanup
 
-After the pipeline completes (all phases done or escalated to human), remove the temporary directory:
+After the pipeline completes, remove the temporary directory:
 
 ```bash
 rm -rf "$IMPL_TMP"
 ```
 
 This ensures no temporary planning artifacts persist after implementation is finished. If you need to inspect artifacts after completion, they can be re-generated by re-running the relevant phase.
+
+## Error Recovery
+
+2-tier strategy:
+1. **Retry** — if implementation or simplify fails for a step, retry that step (max 2 retries)
+2. **Checkpoint** — each committed step is a natural checkpoint; on failure, the previously committed steps are safe
+
+## Example Walkthrough
+
+Given a plan with 3 steps:
+
+1. **Step 1: Add user model** → implement → simplify → commit `feat: add user model with validation`
+2. **Step 2: Add user API endpoints** → implement → simplify → commit `feat: add user CRUD API endpoints`
+3. **Step 3: Add user authentication** → implement → simplify → commit `feat: add JWT-based user authentication`
+
+Result: 3 clean, focused commits, each independently reviewed for quality.
+
+## Quick Reference
+
+| Phase | Action | Output |
+|-------|--------|--------|
+| Accept plan | Read from context, file, or conversation | Plan text |
+| Extract steps | Break plan into ordered steps | `$IMPL_TMP/steps.md` |
+| Per step: Plan | Analyze codebase for this step | Implementation approach |
+| Per step: Implement | Write code and tests | Source + test files |
+| Per step: Simplify | Run simplify skill | Quality-reviewed code |
+| Per step: Commit | Commit all changes | One focused commit |
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Requiring plan.md to exist | Accept plan from any source — conversation, file, or description |
+| Implementing all steps at once | Implement one step at a time, commit after each |
+| Skipping simplify skill | ALWAYS run simplify after every implementation step |
+| Batching commits | One commit per step, not one commit for everything |
+| Steps that depend on later steps | Order steps by dependency — earlier steps are independent |
+| Huge steps | Break into smaller, independently committable units |
+| Storing temp files in repo | Use `$IMPL_TMP` (outside repo) for all temporary artifacts |

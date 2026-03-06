@@ -1,26 +1,26 @@
 ---
 name: plan-codebase
-description: Use when dispatched by implement-orchestrator to create a code specification from an approved plan, or when you need to analyze a codebase and produce a detailed implementation specification
+description: Use when dispatched by implement-orchestrator to create a code specification from a plan (file or context), or when you need to analyze a codebase and produce a detailed implementation specification
 ---
 
 # Plan Codebase
 
-Produce a file-by-file code specification (`$IMPL_TMP/code-spec.md`) from an approved `plan.md` by analyzing the existing codebase and applying clean-code principles.
+Produce a file-by-file code specification (`$IMPL_TMP/code-spec.md`) from a plan by analyzing the existing codebase and applying clean-code principles.
 
 ## When to Use
 
-- Dispatched by implement-orchestrator as Phase 1a
+- Dispatched by implement-orchestrator for a specific step
 - Manually invoked to generate a code specification before implementation
 
 ## Prerequisites
 
-- `plan.md` exists in the working directory
+- A plan or step description is available (from `plan.md`, `$IMPL_TMP/steps.md`, `$IMPL_TMP/current-step.md`, or conversation context)
 
 ## The Process
 
 ### 1. Read the Plan
 
-Read `plan.md` end-to-end. Extract every requirement, feature, and acceptance criterion. Note any explicit file paths, APIs, or constraints mentioned.
+Read the plan from whatever source is available — `plan.md`, `$IMPL_TMP/current-step.md`, or the step description provided by the orchestrator. Extract every requirement, feature, and acceptance criterion. Note any explicit file paths, APIs, or constraints mentioned.
 
 ### 2. Scan the Codebase
 
@@ -64,7 +64,7 @@ Return a short summary to the orchestrator (not the full spec):
 
 | Step | Action | Output |
 |------|--------|--------|
-| 1 | Read plan.md | Requirements list |
+| 1 | Read plan/step | Requirements list |
 | 2 | Scan codebase | Reuse map, patterns found |
 | 3 | Classify changes | File-by-file change list |
 | 4 | Apply clean-code | Refined spec |
