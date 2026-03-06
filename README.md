@@ -94,9 +94,18 @@ This copies each `rules/*.md` file to `<project>/.claude/rules/`, where Claude C
 
 ### Slack Notification Hook (`hooks/notify-slack.sh`)
 
-Sends a Slack message when Claude Code needs input (`Notification`) or finishes a task (`Stop`). Includes repo name and branch. Silently no-ops if the webhook URL is unset. Never blocks Claude -- always exits 0.
+Sends a Slack message when Claude Code needs input (`Notification`) or finishes a task (`Stop`). Messages include the user's original task, notification context, repo name, and branch. Silently no-ops if no Slack credentials are set. Never blocks Claude -- always exits 0.
 
-#### Setup
+Two modes are supported:
+
+| Mode | Variables | Threading | Message Updates |
+|------|-----------|-----------|-----------------|
+| **Webhook** (simple) | `CLAUDE_SLACK_WEBHOOK_URL` | No | No |
+| **Bot API** (recommended) | `CLAUDE_SLACK_BOT_TOKEN` + `CLAUDE_SLACK_CHANNEL` | Yes | Yes |
+
+Bot API mode groups all events from the same Claude Code session into a single Slack thread. The parent message is updated with the final status when the task finishes.
+
+#### Webhook Setup (simple)
 
 1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
 2. Name it (e.g. "Claude Code Notifications"), pick your workspace
@@ -109,6 +118,22 @@ export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../xxx"
 ```
 
 6. Verify with `./validate.sh --hooks` — it will confirm the variable is set.
+
+#### Bot API Setup (threading)
+
+1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
+2. Under **OAuth & Permissions**, add the `chat:write` scope
+3. **Install to Workspace** → copy the **Bot User OAuth Token** (`xoxb-...`)
+4. Invite the bot to your channel: `/invite @YourBotName`
+5. Get the channel ID (right-click channel name → **View channel details** → copy ID)
+6. Add to your shell profile:
+
+```bash
+export CLAUDE_SLACK_BOT_TOKEN="xoxb-..."
+export CLAUDE_SLACK_CHANNEL="C0123456789"
+```
+
+Both modes can be configured simultaneously — bot API takes priority when available.
 
 ### Auto-Approve Hook (`hooks/auto-approve.sh`)
 
