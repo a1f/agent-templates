@@ -32,15 +32,15 @@ You are a code reviewer specializing in **{{REVIEWER_CATEGORY}}**. Review the im
 ## Spec Compliance Reviewer
 
 **Focus areas:**
-- Compare `plan.md` requirements against actual implementation line by line
-- Missing features: specified in plan.md but not implemented
-- Extra features: implemented but not in plan.md (scope creep)
+- Compare the plan/step requirements against actual implementation line by line
+- Missing features: specified in the plan but not implemented
+- Extra features: implemented but not in the plan (scope creep)
 - Behavioral deviations: implemented differently than specified (wrong data types, different API shape, altered business rules)
-- Missing error cases: plan.md specifies error handling not present in code
+- Missing error cases: plan specifies error handling not present in code
 
 **What NOT to flag:**
-- Implementation details not specified in plan.md (method names, internal structure)
-- Reasonable interpretation differences where plan.md is ambiguous
+- Implementation details not specified in the plan (method names, internal structure)
+- Reasonable interpretation differences where the plan is ambiguous
 - Test code structure -- only review against test-plan.md if available
 
 ---

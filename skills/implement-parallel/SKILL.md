@@ -1,21 +1,21 @@
 ---
 name: implement-parallel
-description: Use when dispatched by implement-orchestrator to execute code-spec.md and test-plan.md with parallel coders, or when you need to implement code and tests from specifications simultaneously
+description: Use when dispatched by implement-orchestrator to implement a single plan step with parallel coders, or when you need to implement code and tests from a step specification simultaneously
 ---
 
 # Implement Parallel
 
-Dispatch two parallel coding agents (Impl Coder + Test Coder) to execute Phase 2 of the agentic pipeline. Each agent reads its spec from `$IMPL_TMP/` and writes to naturally separate file paths -- no worktrees needed.
+Dispatch two parallel coding agents (Impl Coder + Test Coder) to implement a single plan step. Each agent reads the step specification and writes to naturally separate file paths -- no worktrees needed.
 
 ## When to Use
 
-- Dispatched by implement-orchestrator as Phase 2
-- Manually invoked when `$IMPL_TMP/code-spec.md` and `$IMPL_TMP/test-plan.md` both exist and you want parallel implementation
+- Dispatched by implement-orchestrator for each plan step
+- Manually invoked when you have a step specification ready and want parallel implementation
 
 ## Prerequisites
 
-- `$IMPL_TMP/code-spec.md` exists (output of plan-codebase)
-- `$IMPL_TMP/test-plan.md` exists (output of plan-tests)
+- A step specification is available (from `$IMPL_TMP/current-step.md`, `$IMPL_TMP/code-spec.md`, or orchestrator context)
+- Optionally, `$IMPL_TMP/test-plan.md` exists for test guidance
 
 ## The Process
 
@@ -23,10 +23,10 @@ Dispatch two parallel coding agents (Impl Coder + Test Coder) to execute Phase 2
 
 Launch 2 subagents simultaneously via the Task tool:
 
-| Agent | Reads | Writes | Prompt Template |
-|-------|-------|--------|-----------------|
-| **Impl Coder** | `$IMPL_TMP/code-spec.md` | Source files per spec | `implementer-prompt.md` |
-| **Test Coder** | `$IMPL_TMP/test-plan.md` | Test files per plan | `test-coder-prompt.md` |
+| Agent | Reads | Writes | Focus |
+|-------|-------|--------|-------|
+| **Impl Coder** | Step spec / `$IMPL_TMP/code-spec.md` | Source files per spec | Production code |
+| **Test Coder** | Step spec / `$IMPL_TMP/test-plan.md` | Test files per plan | Test code |
 
 No worktrees required -- implementation files and test files are naturally separate paths.
 
@@ -44,16 +44,9 @@ When both agents complete, gather their reports:
 - Any deviations from spec
 - Test results from the test coder
 
-### 4. Update Manifest
+### 4. Return to Orchestrator
 
-Update `$IMPL_TMP/manifest.json` with Phase 2 status:
-```json
-{"phase":2,"status":"complete","outputs":{"impl_files":["<list>"],"test_files":["<list>"]},"timestamp":"<ISO-8601>"}
-```
-
-### 5. Commit
-
-Each agent commits its own work independently. If re-dispatched for fixes (Phase 3/4), agents commit fix iterations separately.
+Return the file list and status to the orchestrator. Do NOT commit -- the orchestrator handles commits after the simplify skill runs.
 
 ## Quick Reference
 
@@ -62,8 +55,7 @@ Each agent commits its own work independently. If re-dispatched for fixes (Phase
 | 1 | Dispatch Impl Coder + Test Coder in parallel | Two running agents |
 | 2 | Handle errors (retry max 2) | Recovered or reported failures |
 | 3 | Collect reports | File lists, deviations, test results |
-| 4 | Update manifest.json | Phase 2 status recorded |
-| 5 | Commit | Independent commits per agent |
+| 4 | Return to orchestrator | Status and file lists |
 
 ## Common Mistakes
 
@@ -72,5 +64,6 @@ Each agent commits its own work independently. If re-dispatched for fixes (Phase
 | Using worktrees for file separation | Unnecessary -- source and test files have different paths |
 | Blocking on one agent's failure | Let the other continue; retry the failed one |
 | Retrying indefinitely | Cap retries at 2; report and move on |
-| Skipping manifest update | Always update manifest.json even on partial failure |
-| Merging agent commits | Each agent commits independently |
+| Committing directly | Don't commit -- orchestrator commits after simplify |
+| Implementing multiple steps at once | Implement only the current step |
+| Storing temp files in repo | Use `$IMPL_TMP` (outside repo) for all temporary artifacts |
