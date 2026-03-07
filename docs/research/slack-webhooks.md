@@ -60,6 +60,43 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
 [[ "$HTTP_STATUS" != "200" ]] && echo "notify-slack: HTTP $HTTP_STATUS" >&2
 ```
 
+## Threading via Web API
+
+Incoming webhooks cannot update messages or return the message `ts` (timestamp), so threading
+requires the Slack Web API with a bot token.
+
+### Key API Methods
+
+| Method | Purpose |
+|--------|---------|
+| `chat.postMessage` | Post a new message; returns `ts` for threading |
+| `chat.update` | Update an existing message by `ts` |
+
+### Bot Token Setup
+
+1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Under **OAuth & Permissions**, add scopes: `chat:write`
+3. Install to workspace → copy **Bot User OAuth Token** (`xoxb-...`)
+4. Invite the bot to the target channel (`/invite @BotName`)
+
+### Threading Pattern
+
+```
+Session start → chat.postMessage → save ts to /tmp/claude-slack-<session_id>
+Notification  → chat.postMessage with thread_ts = saved ts (threaded reply)
+Stop          → chat.update parent ts with final status + threaded reply
+```
+
+State is ephemeral (stored in `/tmp`). If state is lost, next event simply posts a new parent.
+
+### Required Scopes
+
+| Scope | Reason |
+|-------|--------|
+| `chat:write` | Post and update messages |
+
+No other scopes needed. The bot does not read messages or access user data.
+
 ## Alternative: Discord Webhooks
 
 Discord offers a Slack-compatible endpoint by appending `/slack` to a Discord webhook URL. Same payload format works. Consider as future enhancement.
@@ -69,3 +106,6 @@ Discord offers a Slack-compatible endpoint by appending `/slack` to a Discord we
 - [Slack: Sending messages using incoming webhooks](https://docs.slack.dev/messaging/sending-messages-using-incoming-webhooks/)
 - [Slack: Rate limits](https://docs.slack.dev/apis/web-api/rate-limits/)
 - [Slack: Security best practices](https://docs.slack.dev/authentication/best-practices-for-security/)
+- [Slack: chat.postMessage](https://api.slack.com/methods/chat.postMessage)
+- [Slack: chat.update](https://api.slack.com/methods/chat.update)
+- [Slack: Message threading](https://api.slack.com/docs/message-threading)
