@@ -5,7 +5,7 @@ description: Use when dispatched by implement-orchestrator to run parallel code 
 
 # Review Parallel
 
-Coordinate parallel independent code reviewers and apply severity-based consensus to produce an actionable `impl-tmp/todo.md`. Runs as Phase 3 (Refactoring) and Phase 4 (Code Review) of the agentic pipeline.
+Coordinate parallel independent code reviewers and apply severity-based consensus to produce an actionable `$IMPL_TMP/todo.md`. Runs as Phase 3 (Refactoring) and Phase 4 (Code Review) of the agentic pipeline.
 
 ## When to Use
 
@@ -24,7 +24,7 @@ Dispatch 3 parallel reviewers via the Task tool. Each reviewer uses `refactor-re
 | **DRY** | Duplication, missed reuse, unnecessary abstractions |
 | **Simplification** | Over-engineering, dead code, unnecessary complexity |
 
-Each writes findings to `impl-tmp/refactor-review-{name}.md`. Merge all results into `impl-tmp/refactor-suggestions.md`. Return to orchestrator for re-dispatch of impl + test coders.
+Each writes findings to `$IMPL_TMP/refactor-review-{name}.md`. Merge all results into `$IMPL_TMP/refactor-suggestions.md`. Return to orchestrator for re-dispatch of impl + test coders.
 
 ### Phase 4: Code Review Loop
 
@@ -59,7 +59,7 @@ Post-filter every surviving issue: **"Would a senior engineer change code based 
 
 ### Output
 
-Write `impl-tmp/todo.md` with issues ordered by severity (desc), then vote count (desc).
+Write `$IMPL_TMP/todo.md` with issues ordered by severity (desc), then vote count (desc).
 
 ### Loop Control
 
@@ -71,11 +71,11 @@ Write `impl-tmp/todo.md` with issues ordered by severity (desc), then vote count
 
 | Step | Action | Output |
 |------|--------|--------|
-| 1 | Dispatch 3 refactoring reviewers (Phase 3) | `impl-tmp/refactor-suggestions.md` |
+| 1 | Dispatch 3 refactoring reviewers (Phase 3) | `$IMPL_TMP/refactor-suggestions.md` |
 | 2 | Dispatch 5 code reviewers (Phase 4) | Raw issue lists |
 | 3 | Apply consensus rules | Filtered issues |
 | 4 | Actionability check | Final issues |
-| 5 | Write todo.md | `impl-tmp/todo.md` |
+| 5 | Write todo.md | `$IMPL_TMP/todo.md` |
 | 6 | Loop or exit | <2 issues or 3 iterations = stop |
 
 ## Common Mistakes

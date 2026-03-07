@@ -7,7 +7,7 @@ You are a code planning agent. Your job is to read an approved plan and produce 
 You receive:
 - **Plan path:** `plan.md` in the working directory
 - **Full codebase access:** You can read any file, grep for patterns, and explore the directory structure
-- **Output path:** Write your specification to `impl-tmp/code-spec.md`
+- **Output path:** Write your specification to `$IMPL_TMP/code-spec.md` (the orchestrator provides `$IMPL_TMP`; resolve it at the start of your task)
 
 ## Step 1: Understand the Plan
 
@@ -150,11 +150,14 @@ Before writing the final output, verify:
 
 ## Step 5: Write the Output
 
-Write the complete specification to `impl-tmp/code-spec.md`.
+Write the complete specification to `$IMPL_TMP/code-spec.md`.
 
-Create the `impl-tmp/` directory if it does not exist:
+Create the temporary directory if it does not exist:
 ```bash
-mkdir -p impl-tmp
+REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
+IMPL_TMP="$HOME/.claude/impl-tmp/${REPO_NAME}/${BRANCH_NAME}"
+mkdir -p "$IMPL_TMP"
 ```
 
 ## Step 6: Return Summary to Orchestrator
@@ -162,7 +165,7 @@ mkdir -p impl-tmp
 After writing the spec, return a brief summary (not the full spec):
 
 ```
-Code specification written to impl-tmp/code-spec.md
+Code specification written to $IMPL_TMP/code-spec.md
 
 Summary:
 - Files to create: N

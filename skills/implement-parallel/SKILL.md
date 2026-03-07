@@ -5,17 +5,17 @@ description: Use when dispatched by implement-orchestrator to execute code-spec.
 
 # Implement Parallel
 
-Dispatch two parallel coding agents (Impl Coder + Test Coder) to execute Phase 2 of the agentic pipeline. Each agent reads its spec from `impl-tmp/` and writes to naturally separate file paths -- no worktrees needed.
+Dispatch two parallel coding agents (Impl Coder + Test Coder) to execute Phase 2 of the agentic pipeline. Each agent reads its spec from `$IMPL_TMP/` and writes to naturally separate file paths -- no worktrees needed.
 
 ## When to Use
 
 - Dispatched by implement-orchestrator as Phase 2
-- Manually invoked when `impl-tmp/code-spec.md` and `impl-tmp/test-plan.md` both exist and you want parallel implementation
+- Manually invoked when `$IMPL_TMP/code-spec.md` and `$IMPL_TMP/test-plan.md` both exist and you want parallel implementation
 
 ## Prerequisites
 
-- `impl-tmp/code-spec.md` exists (output of plan-codebase)
-- `impl-tmp/test-plan.md` exists (output of plan-tests)
+- `$IMPL_TMP/code-spec.md` exists (output of plan-codebase)
+- `$IMPL_TMP/test-plan.md` exists (output of plan-tests)
 
 ## The Process
 
@@ -25,8 +25,8 @@ Launch 2 subagents simultaneously via the Task tool:
 
 | Agent | Reads | Writes | Prompt Template |
 |-------|-------|--------|-----------------|
-| **Impl Coder** | `impl-tmp/code-spec.md` | Source files per spec | `implementer-prompt.md` |
-| **Test Coder** | `impl-tmp/test-plan.md` | Test files per plan | `test-coder-prompt.md` |
+| **Impl Coder** | `$IMPL_TMP/code-spec.md` | Source files per spec | `implementer-prompt.md` |
+| **Test Coder** | `$IMPL_TMP/test-plan.md` | Test files per plan | `test-coder-prompt.md` |
 
 No worktrees required -- implementation files and test files are naturally separate paths.
 
@@ -46,7 +46,7 @@ When both agents complete, gather their reports:
 
 ### 4. Update Manifest
 
-Update `impl-tmp/manifest.json` with Phase 2 status:
+Update `$IMPL_TMP/manifest.json` with Phase 2 status:
 ```json
 {"phase":2,"status":"complete","outputs":{"impl_files":["<list>"],"test_files":["<list>"]},"timestamp":"<ISO-8601>"}
 ```

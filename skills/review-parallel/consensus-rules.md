@@ -25,7 +25,7 @@ Severity-based consensus algorithm for aggregating independent reviewer outputs.
    - YES --> keep
    - NO  --> drop (log reason)
 
-5. Write to impl-tmp/todo.md ordered by:
+5. Write to $IMPL_TMP/todo.md ordered by:
    - severity DESC (CRITICAL > MAJOR > MINOR)
    - then vote_count DESC (more reviewers = higher confidence)
 

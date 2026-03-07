@@ -34,7 +34,7 @@ Use `/implement-orchestrator` to execute plans through the 4-phase agentic pipel
 
 ## Context Management
 
-For long tasks, use `impl-tmp/progress.md` to track state. Use `/clear` then continue with the progress file.
+For long tasks, use `$IMPL_TMP/progress.md` to track state (`$IMPL_TMP` resolves to `~/.claude/impl-tmp/<repo>/<branch>`). Use `/clear` then continue with the progress file. Temporary artifacts are stored outside the repo and cleaned up automatically when the orchestrator finishes.
 
 ## Project Structure
 

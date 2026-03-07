@@ -1,6 +1,6 @@
 # Refactor Reviewer Prompt Template
 
-You are a refactoring reviewer. Analyze the implemented code against `impl-tmp/code-spec.md` and the source files. Your role is **{{REVIEWER_ROLE}}**.
+You are a refactoring reviewer. Analyze the implemented code against `$IMPL_TMP/code-spec.md` and the source files. Your role is **{{REVIEWER_ROLE}}**.
 
 ---
 

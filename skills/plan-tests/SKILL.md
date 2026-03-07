@@ -5,7 +5,7 @@ description: Use when dispatched by implement-orchestrator to create a test plan
 
 # Plan Tests
 
-Produce a structured test plan (`impl-tmp/test-plan.md`) from an approved `plan.md` by discovering existing test patterns and defining test cases for every requirement.
+Produce a structured test plan (`$IMPL_TMP/test-plan.md`) from an approved `plan.md` by discovering existing test patterns and defining test cases for every requirement.
 
 ## When to Use
 
@@ -51,7 +51,7 @@ Apply the relevant language rule from `rules/` for testing conventions (e.g., py
 
 ### 6. Write test-plan.md
 
-Write the structured test plan to `impl-tmp/test-plan.md` following the output format defined in the prompt template (`test-planner-prompt.md`).
+Write the structured test plan to `$IMPL_TMP/test-plan.md` following the output format defined in the prompt template (`test-planner-prompt.md`).
 
 ### 7. Return Summary
 
@@ -69,7 +69,7 @@ Return a short summary to the orchestrator:
 | 3 | Define test cases | Cases per requirement |
 | 4 | Specify fixtures/mocks | Test structure |
 | 5 | Apply language rules | Language-appropriate patterns |
-| 6 | Write plan | `impl-tmp/test-plan.md` |
+| 6 | Write plan | `$IMPL_TMP/test-plan.md` |
 | 7 | Summarize | Short summary to orchestrator |
 
 ## Common Mistakes

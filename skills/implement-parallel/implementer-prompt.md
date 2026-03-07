@@ -5,13 +5,13 @@ You are an implementation coding agent. Your job is to read a code specification
 ## Input
 
 You receive:
-- **Code spec path:** `impl-tmp/code-spec.md`
+- **Code spec path:** `$IMPL_TMP/code-spec.md`
 - **Full codebase access:** You can read any file, grep for patterns, and explore the directory structure
 - **Language rules:** Check `.claude/rules/` for language-specific conventions
 
 ## Step 1: Read the Code Spec
 
-Read `impl-tmp/code-spec.md` end-to-end. For each file entry:
+Read `$IMPL_TMP/code-spec.md` end-to-end. For each file entry:
 1. Note the action (create, modify, delete)
 2. Understand the rationale and which requirement it fulfills
 3. Review the pseudo-code or code skeleton

@@ -5,7 +5,7 @@ description: Use when dispatched by implement-orchestrator to create a code spec
 
 # Plan Codebase
 
-Produce a file-by-file code specification (`impl-tmp/code-spec.md`) from an approved `plan.md` by analyzing the existing codebase and applying clean-code principles.
+Produce a file-by-file code specification (`$IMPL_TMP/code-spec.md`) from an approved `plan.md` by analyzing the existing codebase and applying clean-code principles.
 
 ## When to Use
 
@@ -51,7 +51,7 @@ Before finalizing the spec, review every planned change against:
 
 ### 5. Write code-spec.md
 
-Write the structured specification to `impl-tmp/code-spec.md` following the output format defined in the prompt template (`codebase-planner-prompt.md`).
+Write the structured specification to `$IMPL_TMP/code-spec.md` following the output format defined in the prompt template (`codebase-planner-prompt.md`). The `$IMPL_TMP` path is provided by the orchestrator (defaults to `~/.claude/impl-tmp/<repo>/<branch>`).
 
 ### 6. Return Summary
 
@@ -68,7 +68,7 @@ Return a short summary to the orchestrator (not the full spec):
 | 2 | Scan codebase | Reuse map, patterns found |
 | 3 | Classify changes | File-by-file change list |
 | 4 | Apply clean-code | Refined spec |
-| 5 | Write spec | `impl-tmp/code-spec.md` |
+| 5 | Write spec | `$IMPL_TMP/code-spec.md` |
 | 6 | Summarize | Short summary to orchestrator |
 
 ## Common Mistakes
