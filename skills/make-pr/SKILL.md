@@ -16,6 +16,20 @@ Current branch with commits
   --> Phase 3: Push + PR Lifecycle (create or update PR, link issue, assign reviewers)
 ```
 
+## Prerequisites
+
+The `gh` CLI must be authenticated with the following token scopes:
+- `repo` — read/write access to repository
+- `read:project` — list projects linked to the repo
+- `project` — add issues to projects
+
+If project scopes are missing, run:
+```bash
+gh auth refresh -s read:project,project
+```
+
+The skill will still work without project scopes — it just skips the project linking step and warns the user.
+
 ## Arguments
 
 Parse arguments from the user's message. All are optional:
@@ -299,7 +313,65 @@ gh issue create --title "$ISSUE_TITLE" --body "$ISSUE_BODY"
 
 Then include `Closes #N` in the PR body to link it.
 
-### 3e. Final Output
+### 3e. Add Issue to Project
+
+Automatically detect and link the issue to a GitHub Project. No configuration needed.
+
+**Detection logic:**
+
+1. List projects linked to this repository:
+   ```bash
+   gh api graphql -f query='
+     query($owner: String!, $repo: String!) {
+       repository(owner: $owner, name: $repo) {
+         projectsV2(first: 10) {
+           nodes { id title }
+         }
+       }
+     }' -f owner="$OWNER" -f repo="$REPO" \
+     -q '.data.repository.projectsV2.nodes'
+   ```
+
+2. **If exactly 1 project** → use it
+3. **If multiple projects** → pick the one most recently used by closed issues:
+   ```bash
+   # Get the last 10 closed issues and check which project they belong to
+   gh api graphql -f query='
+     query($owner: String!, $repo: String!) {
+       repository(owner: $owner, name: $repo) {
+         issues(states: CLOSED, last: 10) {
+           nodes {
+             projectItems(first: 1) {
+               nodes {
+                 project { id title }
+               }
+             }
+           }
+         }
+       }
+     }' -f owner="$OWNER" -f repo="$REPO"
+   ```
+   Count which project appears most frequently and use that one.
+4. **If no projects** → skip, no warning needed
+5. **If token lacks `read:project` scope** → skip, warn user to run `gh auth refresh -s read:project,project`
+
+**Add issue to project:**
+```bash
+# Get issue node ID
+ISSUE_NODE_ID=$(gh api "repos/$OWNER/$REPO/issues/$ISSUE_NUMBER" -q '.node_id')
+
+# Add to project
+gh api graphql -f query='
+  mutation($projectId: ID!, $contentId: ID!) {
+    addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+      item { id }
+    }
+  }' -f projectId="$PROJECT_ID" -f contentId="$ISSUE_NODE_ID"
+```
+
+This step is best-effort — if it fails (permissions, no project), log a warning and continue. Never block PR creation over project linking.
+
+### 3f. Final Output
 
 Print to the user:
 - PR URL
