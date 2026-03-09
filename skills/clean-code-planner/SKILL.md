@@ -79,6 +79,22 @@ Produce the full Medium plan, plus assign every new component to a layer:
 
 Small changes: just answer the 3 questions inline. No full template needed unless any answer is "no."
 
+## Step 4: Save the Plan
+
+**Always** write the plan to a file so it can be referenced during implementation:
+
+```bash
+REPO_ROOT=$(git rev-parse --show-toplevel)
+PLAN_FILE="${REPO_ROOT}/plan.md"
+```
+
+Write the code plan (from Step 3) to `plan.md` at the repository root. If `plan.md` already exists, append a horizontal rule (`---`) and the new plan below the existing content.
+
+**After saving, always print the file path so the user can click it:**
+```
+Plan saved to: /absolute/path/to/plan.md
+```
+
 ## Key Principles for Planning Decisions
 
 ### SOLID
