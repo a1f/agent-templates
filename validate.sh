@@ -406,7 +406,7 @@ validate_smoke() {
 
   # --- Check skills ---
   # All skill directories with content should have SKILL.md installed
-  local expected_skills="clean-code-planner python-coding-rules implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel"
+  local expected_skills="clean-code-planner python-coding-rules implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel multi-review"
   for skill in $expected_skills; do
     if [ -f "$tmpdir/.claude/skills/$skill/SKILL.md" ]; then
       pass "skill installed: $skill/SKILL.md"
