@@ -470,7 +470,8 @@ if [ "$INSTALL_ALL" = "true" ]; then
     echo ""
     echo "  Next steps:"
     echo "    1. Set CLAUDE_SLACK_WEBHOOK_URL for Slack notifications"
-    echo "    2. Review .claude/rules/ for language-specific conventions"
+    echo "    2. Add 'Bash(gh issue:*)' to permissions for GitHub issue integration"
+    echo "    3. Review .claude/rules/ for language-specific conventions"
   fi
   echo ""
   exit 0
