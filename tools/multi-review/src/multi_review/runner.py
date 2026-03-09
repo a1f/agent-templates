@@ -117,7 +117,10 @@ def _gather_directory(*, directories: list[str]) -> str:
             continue
         for file_path in sorted(path.rglob("*")):
             if file_path.is_file() and file_path.suffix in source_extensions:
-                rel = file_path.relative_to(Path.cwd()) if file_path.is_absolute() else file_path
+                try:
+                    rel = file_path.relative_to(Path.cwd())
+                except ValueError:
+                    rel = file_path
                 content = file_path.read_text(encoding="utf-8", errors="replace")
                 parts.append(f"### {rel}\n\n```\n{content}\n```")
 

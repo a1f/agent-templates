@@ -19,7 +19,6 @@ from multi_review.reporter import format_report, print_report_rich
 from multi_review.runner import run_models
 from multi_review.types import (
     ContextType,
-    MergedFinding,
     OutputFormat,
     ReviewReport,
     TaskType,
@@ -28,15 +27,20 @@ from multi_review.types import (
 
 def _configure_logging(*, verbose: bool) -> None:
     """Set up structlog with appropriate level."""
-    log_level = "DEBUG" if verbose else "WARNING"
+    import logging
+
+    log_level = logging.DEBUG if verbose else logging.WARNING
     structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(
-            structlog.get_level_from_name(log_level)
-        ),
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
     )
 
 
-@click.group(invoke_without_command=True)
+@click.group()
+def main() -> None:
+    """Multi-model code review tool."""
+
+
+@main.command(name="run")
 @click.argument("files", nargs=-1, type=click.Path())
 @click.option(
     "-t", "--task",
@@ -59,9 +63,7 @@ def _configure_logging(*, verbose: bool) -> None:
     help="Output format.",
 )
 @click.option("-v", "--verbose", is_flag=True, default=False, help="Verbose logging.")
-@click.pass_context
-def main(
-    ctx: click.Context,
+def run_review(
     files: tuple[str, ...],
     task: str | None,
     models: str | None,
@@ -70,11 +72,8 @@ def main(
     output_format: str | None,
     verbose: bool,
 ) -> None:
-    """Multi-model code review tool."""
+    """Run multi-model code review on files or git diff."""
     _configure_logging(verbose=verbose)
-
-    if ctx.invoked_subcommand is not None:
-        return
 
     try:
         cfg = load_config(
@@ -115,11 +114,9 @@ def main(
     try:
         report = asyncio.run(
             _run_pipeline(
-                cfg=cfg,
                 models=available,
                 task=resolved_task,
                 context_type=resolved_context,
-                output_format=resolved_format,
                 files=list(files),
             )
         )
@@ -137,11 +134,9 @@ def main(
 
 async def _run_pipeline(
     *,
-    cfg: AppConfig,
     models: list,  # type: ignore[type-arg]
     task: TaskType,
     context_type: ContextType,
-    output_format: OutputFormat,
     files: list[str],
 ) -> ReviewReport:
     """Execute the full review pipeline."""
