@@ -315,7 +315,23 @@ Then include `Closes #N` in the PR body to link it.
 
 ### 3e. Add Issue to Project
 
-Automatically detect and link the issue to a GitHub Project. No configuration needed.
+**Always run this step** — for both new and existing PRs. Check if the issue is already in a project first; if so, skip. This ensures project linking happens even when updating an existing PR.
+
+**Pre-check:** Verify the issue is not already in a project:
+```bash
+gh api graphql -f query='
+  query($owner: String!, $repo: String!, $number: Int!) {
+    repository(owner: $owner, name: $repo) {
+      issue(number: $number) {
+        projectItems(first: 1) {
+          totalCount
+        }
+      }
+    }
+  }' -f owner="$OWNER" -f repo="$REPO" -F number="$ISSUE_NUMBER" \
+  -q '.data.repository.issue.projectItems.totalCount'
+```
+If totalCount > 0, the issue is already in a project — skip.
 
 **Detection logic:**
 
