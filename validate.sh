@@ -309,6 +309,35 @@ validate_hooks() {
           fail "$hook_name: should be silent without webhook URL, got output: $notify_output"
         fi
         ;;
+      check-github-issues.sh)
+        if command -v jq >/dev/null 2>&1; then
+          # Test with EnterPlanMode input — should produce systemMessage output
+          local plan_input='{"tool_name":"EnterPlanMode","tool_result":{}}'
+          local plan_output
+          plan_output=$(echo "$plan_input" | "$hook_file" 2>/dev/null) || true
+          if [ -n "$plan_output" ]; then
+            if echo "$plan_output" | jq -e '.hookSpecificOutput.systemMessage' >/dev/null 2>&1; then
+              pass "$hook_name: EnterPlanMode input produces systemMessage"
+            else
+              fail "$hook_name: output missing hookSpecificOutput.systemMessage: $plan_output"
+            fi
+          else
+            fail "$hook_name: no output for EnterPlanMode input"
+          fi
+
+          # Test with non-matching tool — should be silent
+          local other_input='{"tool_name":"Read","tool_input":{"file_path":"/tmp/test"}}'
+          local other_output
+          other_output=$(echo "$other_input" | "$hook_file" 2>/dev/null) || true
+          if [ -z "$other_output" ]; then
+            pass "$hook_name: silent for non-EnterPlanMode tool"
+          else
+            fail "$hook_name: should be silent for non-EnterPlanMode tool, got: $other_output"
+          fi
+        else
+          warn "$hook_name: jq not installed, skipping mock test"
+        fi
+        ;;
     esac
   done
   IFS="$old_ifs"
@@ -337,7 +366,7 @@ validate_settings() {
     fi
 
     # Check hook event types are from known list
-    local known_events="Notification Stop PreToolUse PostToolUse SessionStart"
+    local known_events="Notification Stop PreToolUse PostToolUse SessionStart UserPromptSubmit"
     local events
     events=$(jq -r '.hooks | keys[]' "$settings_file" 2>/dev/null) || true
 
@@ -406,7 +435,7 @@ validate_smoke() {
 
   # --- Check skills ---
   # All skill directories with content should have SKILL.md installed
-  local expected_skills="clean-code-planner python-coding-rules implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel multi-review"
+  local expected_skills="clean-code-planner python-coding-rules implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel multi-review make-pr"
   for skill in $expected_skills; do
     if [ -f "$tmpdir/.claude/skills/$skill/SKILL.md" ]; then
       pass "skill installed: $skill/SKILL.md"
@@ -416,7 +445,7 @@ validate_smoke() {
   done
 
   # --- Check hooks ---
-  local expected_hooks="auto-approve.sh notify-slack.sh"
+  local expected_hooks="auto-approve.sh check-github-issues.sh notify-slack.sh"
   for hook in $expected_hooks; do
     if [ -f "$tmpdir/.claude/hooks/$hook" ]; then
       pass "hook installed: $hook"
