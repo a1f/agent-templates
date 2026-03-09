@@ -32,6 +32,7 @@ Use `/implement-orchestrator` to execute plans step-by-step. The plan can come f
 | `/review-parallel` | Run parallel code reviews with severity-based consensus |
 | `/clean-code-planner` | Apply clean code principles before any code change |
 | `/simplify` | Review changed code for reuse, quality, and efficiency |
+| `/make-pr` | Create or update a PR — runs gates, fixes errors, links issues, assigns reviewers |
 
 ## Context Management
 

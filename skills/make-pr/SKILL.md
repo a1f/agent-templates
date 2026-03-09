@@ -1,0 +1,329 @@
+---
+name: make-pr
+description: Use when the user wants to create or update a pull request from the current branch, or invokes /make-pr. Runs repository gates, fixes errors, performs a quick review, and manages the full PR lifecycle on GitHub.
+---
+
+# Make PR
+
+Create or update a GitHub pull request from the current branch. Bootstraps gate definitions from the repo's existing CI, runs gates in a fix loop, performs a quick review, then creates or updates the PR with issue linking and reviewer assignment.
+
+```
+Current branch with commits
+  --> Phase 0: Discovery (base branch, existing PR, issue, reviewers)
+  --> Phase 0.5: Gate Bootstrap (resolve gates from gates.json / CI / language detection)
+  --> Phase 1: Gate Loop (run gates in order, fix errors, max 5 iterations)
+  --> Phase 2: Quick Review (single-pass diff review, fix CRITICAL/MAJOR, max 2 iters)
+  --> Phase 3: Push + PR Lifecycle (create or update PR, link issue, assign reviewers)
+```
+
+## Arguments
+
+Parse arguments from the user's message. All are optional:
+
+| Arg | Default | Example |
+|-----|---------|---------|
+| `--issue=N` | Auto-detect or auto-create | `--issue=42` |
+| `--reviewers=user1,user2` | Inferred from recent commit authors | `--reviewers=alice,bob` |
+| `--title="..."` | Generated from commits | `--title="Add user auth"` |
+| `--base=branch` | Repository default branch | `--base=develop` |
+| `--draft` | Not draft | `--draft` |
+
+## Phase 0: Discovery
+
+Run all of these in parallel at the start:
+
+### 0a. Branch and Diff Info
+
+```bash
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+BASE_BRANCH="${ARG_BASE:-$(gh repo view --json defaultBranchRef -q '.defaultBranchRef.name')}"
+```
+
+Verify the current branch is NOT the base branch. If it is, stop and tell the user to create a feature branch first.
+
+Verify there are commits ahead of base:
+```bash
+git log "${BASE_BRANCH}..HEAD" --oneline
+```
+If no commits, stop and tell the user there is nothing to PR.
+
+### 0b. Existing PR Check
+
+```bash
+gh pr list --head "$CURRENT_BRANCH" --json number,title,url,state --jq '.[0]'
+```
+
+If a PR exists, store its number for Phase 3 (update instead of create).
+
+### 0c. Issue Detection
+
+Priority order:
+1. `--issue=N` argument → use that
+2. Search branch name for issue number pattern (e.g., `fix-42`, `issue-42`, `feat/42-description`) → use that
+3. Search commit messages for `#N` references → use that
+4. No issue found → create one in Phase 3
+
+### 0d. Reviewer Detection
+
+If `--reviewers` is provided, use those. Otherwise, infer from recent commit history:
+
+```bash
+# Get unique authors from last 50 commits on base branch, excluding the current user
+CURRENT_USER=$(gh api user -q '.login')
+gh api "repos/{owner}/{repo}/commits?sha=${BASE_BRANCH}&per_page=50" \
+  -q '.[].author.login' | sort | uniq -c | sort -rn | head -5
+```
+
+Pick the top 2 contributors (excluding the current user) as default reviewers. If no contributors found, leave reviewers empty and warn the user.
+
+## Phase 0.5: Gate Bootstrap
+
+Resolve what gates to run. Three sources, tried in priority order:
+
+### Source 1: `.claude/gates.json` (explicit, highest priority)
+
+If `.claude/gates.json` exists, use it directly. This is the deterministic path — no guessing.
+
+Schema:
+```json
+{
+  "setup": "uv sync --frozen",
+  "gates": [
+    { "name": "format",    "run": "ruff format --check .", "fix": "ruff format ." },
+    { "name": "lint",      "run": "ruff check .",          "fix": "ruff check --fix ." },
+    { "name": "typecheck", "run": "pyright" },
+    { "name": "test",      "run": "pytest -x" }
+  ]
+}
+```
+
+| Field | Type | Required | Purpose |
+|-------|------|----------|---------|
+| `setup` | string | no | Command to install dependencies before gates run |
+| `gates` | array | yes | Ordered list of gates |
+| `gates[].name` | string | yes | Gate identifier (used in commit messages) |
+| `gates[].run` | string | yes | Check command. Exit 0 = pass. |
+| `gates[].fix` | string | no | Auto-fix command. Run before `run` if gate fails. |
+| `gates[].required` | bool | no | Default `true`. If `false`, failure is a warning, not a blocker. |
+
+Array order IS execution order.
+
+### Source 2: Existing CI workflow (parse from repo)
+
+If no `gates.json`, look for the repo's CI configuration:
+
+```
+Search order:
+1. .github/workflows/ci.yml
+2. .github/workflows/ci.yaml
+3. .github/workflows/test.yml
+4. .github/workflows/test.yaml
+5. .github/workflows/checks.yml
+6. .github/workflows/*.yml (any workflow triggered on pull_request or push)
+```
+
+Read the workflow YAML and extract gate commands from `run:` steps. Map them to gates:
+
+**Pattern matching for extraction:**
+
+| If `run:` contains | Gate name | Fix command |
+|---------------------|-----------|-------------|
+| `ruff format --check` or `ruff format` with `--check` | format | `ruff format .` |
+| `cargo fmt -- --check` | format | `cargo fmt` |
+| `biome format` or `prettier --check` | format | `biome format --write .` / `prettier --write .` |
+| `ruff check` | lint | `ruff check --fix .` |
+| `cargo clippy` | lint | (none — clippy has no auto-fix) |
+| `biome check` or `eslint` | lint | `biome check --fix .` / `eslint --fix .` |
+| `pyright` or `mypy` | typecheck | (none) |
+| `tsc --noEmit` or `tsc -noEmit` | typecheck | (none) |
+| `cargo check` | typecheck | (none) |
+| `pytest` | test | (none) |
+| `cargo nextest` or `cargo test` | test | (none) |
+| `vitest run` or `jest` | test | (none) |
+| `cargo build` or `uv build` or `npm run build` | build | (none) |
+
+Also extract the setup step — look for commands like `uv sync`, `pnpm install`, `cargo build`, `npm ci` in earlier steps of the same job.
+
+**Generate `.claude/gates.json` from the extracted commands** and commit it:
+```
+chore: add .claude/gates.json from CI config
+```
+
+This ensures the next run is deterministic (Source 1).
+
+### Source 3: Language detection (last resort)
+
+If no CI workflow exists, detect the project language and generate gates from templates:
+
+| File exists | Language | Template |
+|-------------|----------|----------|
+| `pyproject.toml` | Python | `gates/python.json` |
+| `Cargo.toml` | Rust | `gates/rust.json` |
+| `package.json` | TypeScript/JS | `gates/typescript.json` |
+| `CMakeLists.txt` | C++ | `gates/cpp.json` |
+
+Read the template from this skill's `gates/` directory. Adapt it based on what's actually in the config file (e.g., if `pyproject.toml` has `[tool.mypy]` instead of pyright, use mypy).
+
+Generate `.claude/gates.json` and commit it.
+
+### Gate Validation
+
+After resolving gates from any source, validate them before entering the fix loop:
+
+1. **Run `setup` command** if present
+   - If it fails with "command not found" (e.g., `uv: command not found`):
+     → Stop and tell the user exactly what to install
+   - If it fails with missing lockfile (e.g., `No lockfile found`):
+     → Try generating it (`uv lock`, `pnpm install`) then re-run setup
+   - If it fails with other errors:
+     → Stop and show the error
+
+2. **For each gate, check if the command is available:**
+   ```bash
+   command -v "$(echo "$GATE_RUN" | awk '{print $1}')" >/dev/null 2>&1
+   ```
+   - If not found, check if it's a dev dependency that can be installed:
+     - Python: `uv add --dev <tool>` then re-run setup
+     - Node: `pnpm add -D <tool>` then re-run setup
+     - Rust: usually available via cargo, no action needed
+   - If still not found after install attempt:
+     → Remove this gate from the run, warn the user
+   - If the gate is `required: true` and can't be made runnable:
+     → Stop and tell the user what's missing
+
+3. **Proceed with validated gates only**
+
+## Phase 1: Gate Loop
+
+Run gates in the order defined by `gates.json`. This order matters — earlier gates (format, lint) fix issues that would cause later gates (typecheck, test) to fail.
+
+**Max 5 iterations total** across all gates.
+
+For each gate:
+
+1. Run the `run` command
+2. If it passes (exit 0), move to the next gate
+3. If it fails:
+   a. If `fix` command exists, run it first
+   b. Run `run` command again
+   c. If errors remain, read the error output and fix manually using `gate-runner-prompt.md`
+   d. After fixing, restart from the first gate — fixes may introduce new issues
+   e. Stage and commit fixes: `fix: resolve {gate_name} errors`
+
+**Important:**
+- Parse error output carefully. Focus on the specific files and line numbers reported.
+- Do NOT blindly retry — if the same error appears twice, analyze it differently.
+- If a gate has no `fix` command, go straight to manual fix.
+- If a gate has `required: false` and fails, log a warning and continue to the next gate.
+
+**Exit conditions:**
+- All required gates pass → proceed to Phase 2
+- 5 iterations reached with remaining failures → warn the user with the list of unresolved errors, ask whether to proceed with PR anyway
+
+## Phase 2: Quick Review
+
+A lighter alternative to `/review-parallel`. Single-pass review focused on the diff.
+
+### 2a. Review the Diff
+
+Review `git diff ${BASE_BRANCH}...HEAD` yourself (no subagent needed). Focus on:
+
+- **CRITICAL:** Security vulnerabilities, crashes, data corruption
+- **MAJOR:** Logic errors, spec violations, race conditions
+
+Do NOT flag: style nits, minor naming, LOW-severity items. The gates already handle formatting and linting.
+
+### 2b. Fix Issues
+
+If CRITICAL or MAJOR issues found:
+1. Fix them
+2. Commit: `fix: resolve review issues`
+3. Re-run gates (Phase 1) — but only 2 more iterations max
+4. Re-review the new diff only (not the full diff again)
+
+**Max 2 review iterations.** If issues remain after 2 passes, list them in the PR body as known issues.
+
+## Phase 3: PR Lifecycle
+
+### 3a. Push
+
+```bash
+git push -u origin "$CURRENT_BRANCH"
+```
+
+### 3b. Generate PR Content
+
+Use `pr-body-prompt.md` to generate the title and body. Inputs:
+- Issue description (if linked)
+- `git log ${BASE_BRANCH}..HEAD --oneline`
+- `git diff ${BASE_BRANCH}...HEAD --stat`
+- List of gates that were run and passed
+
+### 3c. Create or Update PR
+
+**If no existing PR:**
+
+```bash
+gh pr create \
+  --base "$BASE_BRANCH" \
+  --title "$PR_TITLE" \
+  --body "$PR_BODY" \
+  --reviewer "$REVIEWERS" \
+  ${DRAFT:+--draft}
+```
+
+**If PR already exists:**
+
+```bash
+gh pr edit "$PR_NUMBER" \
+  --title "$PR_TITLE" \
+  --body "$PR_BODY"
+
+# Add a comment noting the update
+gh pr comment "$PR_NUMBER" --body "$UPDATE_COMMENT"
+```
+
+### 3d. Link Issue
+
+If creating a new PR, include `Closes #N` in the body (GitHub auto-links).
+
+If updating an existing PR, ensure the issue link is in the updated body.
+
+If no issue was found or provided, create one from the commit history:
+- **Title:** Derived from the PR title (e.g., PR title "feat: add user auth" → issue title "Add user auth")
+- **Body:** Summary of what the commits accomplish, generated from `git log ${BASE_BRANCH}..HEAD --oneline`
+
+```bash
+gh issue create --title "$ISSUE_TITLE" --body "$ISSUE_BODY"
+```
+
+Then include `Closes #N` in the PR body to link it.
+
+### 3e. Final Output
+
+Print to the user:
+- PR URL
+- Issue URL
+- Reviewers assigned
+- Gates that passed
+- Any known issues from review
+
+## State Management
+
+Minimal state — this skill is designed to be stateless and idempotent. Running `/make-pr` again on the same branch simply re-runs gates, re-reviews, and updates the existing PR.
+
+No temporary directory needed. All information comes from git, GitHub, and `.claude/gates.json`.
+
+## Common Mistakes
+
+| Mistake | Fix |
+|---------|-----|
+| Running on the base branch | Check and refuse early in Phase 0 |
+| Creating duplicate PRs | Always check for existing PR first |
+| Infinite gate loop | Hard cap at 5 iterations, then warn user |
+| Fixing style in review | Gates handle style — review only catches logic/security issues |
+| Force-pushing | Never force-push. Regular `git push` only. If push fails due to remote changes, pull and re-run gates |
+| Committing unrelated files | Only stage files that were modified by gate fixes or review fixes |
+| Generating gates.json that doesn't match CI | Parse CI commands exactly, don't guess. If unsure, include the command verbatim |
+| Installing system packages | Never run sudo/apt/brew. Tell the user what to install |
+| Suppressing lint errors with noqa/ignore | Fix the actual error. Only suppress genuine false positives with explanation |
