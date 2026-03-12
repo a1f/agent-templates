@@ -95,6 +95,48 @@ Write the code plan (from Step 3) to `plan.md` at the repository root. If `plan.
 Plan saved to: /absolute/path/to/plan.md
 ```
 
+## Step 5: Plan Review Loop
+
+After saving `plan.md`, dispatch a **plan review agent** to critique it. Iterate until the reviewer has no feedback.
+
+### Review Agent Instructions
+
+Dispatch a subagent (via the Agent tool) with the following prompt:
+
+> You are a plan reviewer. Read `plan.md` and evaluate it against these criteria:
+>
+> 1. **DRY** — Does the plan duplicate existing codebase functionality? Are there reuse opportunities it missed?
+> 2. **Dependency direction** — Do all imports point inward (stable ← volatile)? Any layer violations?
+> 3. **Single Responsibility** — Does each new file/function have exactly one reason to change?
+> 4. **YAGNI** — Does the plan introduce unnecessary abstractions, features, or configurability?
+> 5. **Naming** — Do all names reveal intent? Any implementation-leaking names?
+> 6. **Completeness** — Are there missing files, missing error handling paths, or gaps between the plan and the stated goal?
+> 7. **Simplicity** — Is there a simpler way to achieve the same result?
+>
+> Output one of:
+> - **APPROVED** — no issues found, plan is ready for implementation
+> - **FEEDBACK** — list each issue with: section of plan, problem, suggested fix
+>
+> Be strict but practical. Only flag issues that would cause real problems during implementation.
+
+### Review Loop
+
+```
+1. Save plan.md (Step 4)
+2. Dispatch plan review agent
+3. If APPROVED → done, print plan path and proceed
+4. If FEEDBACK:
+   a. Address each issue by updating plan.md
+   b. Re-dispatch the review agent on the updated plan
+   c. Repeat (max 3 iterations)
+5. If feedback remains after 3 iterations → print remaining feedback as warnings, proceed anyway
+```
+
+**After the loop completes, always print:**
+```
+Plan reviewed and saved to: /absolute/path/to/plan.md
+```
+
 ## Key Principles for Planning Decisions
 
 ### SOLID
