@@ -231,7 +231,7 @@ Increment `TOTAL_ITERATIONS`.
 ```
 [READY TO MERGE] <PR_URL>
 ```
-→ If `CONSECUTIVE_READY_COUNT < 2`: wait `INTERVAL` and re-check. This double-check avoids race conditions where checks or comments arrive between fetches.
+→ If `CONSECUTIVE_READY_COUNT < 2`: **immediately** re-fetch all data (skip the wait) and re-check. This double-check avoids race conditions where checks or comments arrive between fetches, without adding unnecessary delay.
 
 **If no changes were needed** but any check is still running (PENDING, QUEUED, IN_PROGRESS) or `mergeStateStatus` is UNSTABLE:
 → This is **not** ready — reset `CONSECUTIVE_READY_COUNT` to 0, decrement `IDLE_ROUNDS_REMAINING`, wait, and re-check next iteration. Do NOT declare `[READY TO MERGE]` while any check is still in progress, even if it's an external/non-required check.
