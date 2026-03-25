@@ -257,13 +257,25 @@ If CRITICAL or MAJOR issues found:
 
 ## Phase 3: PR Lifecycle
 
-### 3a. Push
+### 3a. Debug Marker Scan
+
+Before pushing, scan changed files for debug markers:
+
+```bash
+git diff "${BASE_BRANCH}...HEAD" --name-only | xargs grep -nE '(DEBUG|HACK|FIXME|XXX|console\.log\(|print\(.*debug|breakpoint\(\))' 2>/dev/null
+```
+
+If any markers are found, show them to the user and ask whether to remove them before pushing. Do NOT silently push code with debug markers.
+
+Exclude: `TODO` comments that are genuine task markers (not debug leftovers), and test files where `print()` may be intentional.
+
+### 3b. Push
 
 ```bash
 git push -u origin "$CURRENT_BRANCH"
 ```
 
-### 3b. Generate PR Content
+### 3c. Generate PR Content
 
 Use `pr-body-prompt.md` to generate the title and body. Inputs:
 - Issue description (if linked)
@@ -271,7 +283,7 @@ Use `pr-body-prompt.md` to generate the title and body. Inputs:
 - `git diff ${BASE_BRANCH}...HEAD --stat`
 - List of gates that were run and passed
 
-### 3c. Create or Update PR
+### 3d. Create or Update PR
 
 **If no existing PR:**
 
@@ -295,7 +307,7 @@ gh pr edit "$PR_NUMBER" \
 gh pr comment "$PR_NUMBER" --body "$UPDATE_COMMENT"
 ```
 
-### 3d. Issue Lifecycle (via `/issue-make`) — NOT OPTIONAL
+### 3e. Issue Lifecycle (via `/issue-make`) — NOT OPTIONAL
 
 **ALWAYS** invoke `issue-make` using the Skill tool. This is mandatory, not optional. Pass:
 - `--issue=N` if detected in Phase 0c
@@ -306,7 +318,7 @@ gh pr comment "$PR_NUMBER" --body "$UPDATE_COMMENT"
 
 After `/issue-make` returns, include `Closes #N` in the PR body to link it. If updating an existing PR, ensure the issue link is in the updated body.
 
-### 3f. Final Output
+### 3g. Final Output
 
 Print to the user:
 - PR URL

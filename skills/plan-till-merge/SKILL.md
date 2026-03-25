@@ -31,6 +31,27 @@ All optional. Parsed from the user's message:
 | `--interval=DURATION` | 5 | `3m` | `--interval=5m` |
 | `--max-rounds=N` | 5 | `5` | `--max-rounds=10` |
 
+## Checkpoint/Resume
+
+Before starting, check for existing state:
+
+```bash
+REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
+STATE_FILE="${TMPDIR:-/tmp}/claude-impl/${REPO_NAME}/${BRANCH_NAME}/plan-till-merge-state.json"
+```
+
+If `STATE_FILE` exists, read it:
+```json
+{"phase": 2, "issue_number": 42, "pr_number": null, "branch": "feat/my-feature"}
+```
+
+If state exists and the branch matches, ask the user: "Phases 1-N already completed. Resume from Phase N+1?" If yes, skip completed phases. If no (or branch mismatch), start fresh.
+
+After each phase completes, update the state file with the current phase number and any IDs (issue number, PR number).
+
+Clean up the state file after Phase 5 completes.
+
 ## Phase 1: Plan
 
 Use the Skill tool to invoke `clean-code-planner`. The input comes from the user's description, `improvement.md`, `plan.md`, or any context they provided.

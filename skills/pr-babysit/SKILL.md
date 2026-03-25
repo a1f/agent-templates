@@ -61,7 +61,31 @@ OWNER=$(echo "$REPO_INFO" | jq -r '.owner.login')
 REPO=$(echo "$REPO_INFO" | jq -r '.name')
 ```
 
-### 0b. Initialize State
+### 0b. Fast-Exit Check
+
+Before entering the loop, check if the PR is already ready:
+
+```bash
+CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,conclusion 2>/dev/null || echo "[]")
+MERGEABLE=$(echo "$PR_JSON" | jq -r '.mergeable')
+MERGE_STATE=$(echo "$PR_JSON" | jq -r '.mergeStateStatus')
+```
+
+If ALL of the following are true:
+- `MERGEABLE` is `"MERGEABLE"`
+- `MERGE_STATE` is `"CLEAN"`
+- Every check is in a terminal state (SUCCESS, NEUTRAL, or FAILURE) — no PENDING/QUEUED/IN_PROGRESS
+- All required checks pass
+- No review comments exist on the PR
+
+Then print and exit immediately:
+```
+[ALREADY READY TO MERGE] <PR_URL>
+```
+
+Otherwise, proceed to the loop.
+
+### 0c. Initialize State
 
 ```
 IDLE_ROUNDS_REMAINING = max-rounds (default 5)
@@ -146,8 +170,20 @@ For each new comment (from both inline comments and review bodies), categorize:
 1. **Actionable code change** — requests a specific code modification (e.g., "rename this variable", "add error handling here", "this should use X instead of Y")
 2. **Question** — asks something that needs a reply (e.g., "why did you choose this approach?", "is this tested?")
 3. **Informational / FYI** — no action needed (e.g., coverage reports, bot status messages, "LGTM", acknowledgements)
+4. **Stale bot comment** — a bot reviewed an old commit and the referenced lines have changed since
 
 Skip informational comments entirely.
+
+**Auto-dismiss stale bot comments:** For each comment from a bot (user login ends in `[bot]` or is a known bot like `github-actions`, `cursor-bugbot`, etc.), check if the referenced lines changed since the comment was posted:
+
+```bash
+# Get the commit SHA the comment refers to
+COMMENT_COMMIT=$(echo "$COMMENT" | jq -r '.commit_id // empty')
+# Check if the file at that line changed since that commit
+git diff "$COMMENT_COMMIT"..HEAD -- "$FILE_PATH" | grep -q "^@@.*$LINE_NUMBER"
+```
+
+If the lines changed, auto-reply: "This was addressed in a subsequent commit." and skip the comment. Only process bot comments on unchanged code as actionable.
 
 ### 1e. Fix All Actionable Comments
 
