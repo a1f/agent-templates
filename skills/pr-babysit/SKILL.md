@@ -70,6 +70,7 @@ TOTAL_ITERATIONS = 0
 INTERVAL = interval (default 3m)
 LAST_CHECKED = PR_CREATED_AT             # first pass processes all existing comments
 TOTAL_WAIT_MINUTES = 0
+CONSECUTIVE_READY_COUNT = 0              # must reach 2 before declaring ready
 ```
 
 Two counters prevent infinite loops:
@@ -222,18 +223,21 @@ Increment `TOTAL_ITERATIONS`.
    git push --force-with-lease
    ```
 4. **Reset `IDLE_ROUNDS_REMAINING` to `max-rounds`** — progress was made
+5. **Reset `CONSECUTIVE_READY_COUNT` to 0** — changes invalidate any previous ready verdict
 
 **If no changes were needed** AND **every** check has reached a terminal state (SUCCESS, NEUTRAL, or FAILURE — no PENDING, QUEUED, or IN_PROGRESS) AND all required checks pass AND no conflicts:
-→ Print and exit:
+→ Increment `CONSECUTIVE_READY_COUNT`
+→ If `CONSECUTIVE_READY_COUNT >= 2`: print and exit:
 ```
 [READY TO MERGE] <PR_URL>
 ```
+→ If `CONSECUTIVE_READY_COUNT < 2`: wait `INTERVAL` and re-check. This double-check avoids race conditions where checks or comments arrive between fetches.
 
 **If no changes were needed** but any check is still running (PENDING, QUEUED, IN_PROGRESS) or `mergeStateStatus` is UNSTABLE:
-→ This is **not** ready — decrement `IDLE_ROUNDS_REMAINING`, wait, and re-check next iteration. Do NOT declare `[READY TO MERGE]` while any check is still in progress, even if it's an external/non-required check.
+→ This is **not** ready — reset `CONSECUTIVE_READY_COUNT` to 0, decrement `IDLE_ROUNDS_REMAINING`, wait, and re-check next iteration. Do NOT declare `[READY TO MERGE]` while any check is still in progress, even if it's an external/non-required check.
 
 **If no changes were needed** and all checks are terminal but some required checks failed with unfixable issues:
-→ Decrement `IDLE_ROUNDS_REMAINING`
+→ Reset `CONSECUTIVE_READY_COUNT` to 0, decrement `IDLE_ROUNDS_REMAINING`
 
 ### 1i. Check Exit Conditions
 
@@ -269,5 +273,6 @@ Otherwise:
 | Guessing answers to reviewer questions | Base replies on actual code and history — read the files |
 | Running gates per-comment | Batch all comment fixes first, then run gates once |
 | Modifying code for flaky test failures | Note flaky tests but don't change code unless it's a real bug |
+| Declaring ready after one clean pass | Must get 2 consecutive ready verdicts to avoid race conditions |
 | Waiting twice in one iteration | Wait happens in exactly one place: step 1i |
 | Replying to top-level reviews via comment reply API | Top-level review bodies use `gh pr comment`, inline comments use the replies API |
