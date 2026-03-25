@@ -91,7 +91,31 @@ PR_STATE=$(gh pr view "$PR_NUMBER" --json state -q '.state')
 
 If `PR_STATE` is `MERGED` or `CLOSED`, print the PR URL and exit — no further action needed.
 
-### 1b. Fetch New Data (Parallel)
+### 1b. Run Local Gates (first iteration only)
+
+On the **first iteration only** (`TOTAL_ITERATIONS == 0`), run all gates from `.claude/gates.json` locally before checking remote CI. This catches failures immediately instead of waiting for remote CI to report them.
+
+```bash
+if [ -f .claude/gates.json ] && [ "$TOTAL_ITERATIONS" -eq 0 ]; then
+  SETUP=$(jq -r '.setup // empty' .claude/gates.json)
+  [ -n "$SETUP" ] && eval "$SETUP"
+  for gate in $(jq -c '.gates[]' .claude/gates.json); do
+    NAME=$(echo "$gate" | jq -r '.name')
+    RUN=$(echo "$gate" | jq -r '.run')
+    FIX=$(echo "$gate" | jq -r '.fix // empty')
+    [ -n "$FIX" ] && eval "$FIX"
+    if ! eval "$RUN"; then
+      # Gate failed — fix the errors before proceeding
+    fi
+  done
+fi
+```
+
+If any gate fails, fix the errors, commit, and push before continuing to 1c. This avoids a wasted wait cycle.
+
+Skip on subsequent iterations — the existing gate run in step 1d (after comment fixes) handles those.
+
+### 1c. Fetch New Data (Parallel)
 
 Kick off all data fetches in parallel at the start of each iteration:
 
@@ -115,7 +139,7 @@ MERGEABLE=$(gh pr view "$PR_NUMBER" --json mergeable,mergeStateStatus)
 
 Update `LAST_CHECKED` to current UTC timestamp after fetching.
 
-### 1c. Categorize Comments
+### 1d. Categorize Comments
 
 For each new comment (from both inline comments and review bodies), categorize:
 
@@ -125,7 +149,7 @@ For each new comment (from both inline comments and review bodies), categorize:
 
 Skip informational comments entirely.
 
-### 1d. Fix All Actionable Comments
+### 1e. Fix All Actionable Comments
 
 Process all actionable comments, then run gates once:
 
@@ -146,7 +170,7 @@ Process all actionable comments, then run gates once:
    fi
    ```
 
-### 1e. Reply to Questions
+### 1f. Reply to Questions
 
 For each question comment, reply with a concise answer. Fire all replies in parallel.
 
@@ -163,9 +187,9 @@ gh pr comment "$PR_NUMBER" --body "$REPLY_TEXT"
 
 Base replies on actual code and commit history — don't make things up.
 
-### 1f. Fix CI Failures
+### 1g. Fix CI Failures
 
-From the checks data fetched in 1b, categorize each check:
+From the checks data fetched in 1c, categorize each check:
 - **Passing** (`conclusion: "SUCCESS"` or `conclusion: "NEUTRAL"`) — no action, terminal state
 - **Failing** (`conclusion: "FAILURE"`) — needs fixing, terminal state
 - **Still running** (`state: "PENDING"`, `state: "QUEUED"`, or `state: "IN_PROGRESS"`) — not terminal, must wait. This includes external tools like Cursor Bugbot, Noa Analysis, etc. — treat them the same as any other check
@@ -180,9 +204,9 @@ If any checks are failing:
 3. Analyze the failure and apply fixes
 4. If the failure is a flaky test or infrastructure issue (not caused by code), note it but don't modify code
 
-### 1g. Resolve Merge Conflicts
+### 1h. Resolve Merge Conflicts
 
-From the mergeable data fetched in 1b, check if `mergeable` is `"CONFLICTING"` or `mergeStateStatus` is `"DIRTY"`.
+From the mergeable data fetched in 1c, check if `mergeable` is `"CONFLICTING"` or `mergeStateStatus` is `"DIRTY"`.
 
 If conflicts exist:
 
@@ -204,7 +228,7 @@ If conflicts exist:
    - Otherwise, resolve each conflict by reading both sides and choosing the correct resolution
    - Continue: `git rebase --continue`
 
-### 1h. Evaluate and Act
+### 1i. Evaluate and Act
 
 Increment `TOTAL_ITERATIONS`.
 
@@ -239,7 +263,7 @@ Increment `TOTAL_ITERATIONS`.
 **If no changes were needed** and all checks are terminal but some required checks failed with unfixable issues:
 → Reset `CONSECUTIVE_READY_COUNT` to 0, decrement `IDLE_ROUNDS_REMAINING`
 
-### 1i. Check Exit Conditions
+### 1j. Check Exit Conditions
 
 Check exit conditions before waiting:
 
@@ -274,5 +298,5 @@ Otherwise:
 | Running gates per-comment | Batch all comment fixes first, then run gates once |
 | Modifying code for flaky test failures | Note flaky tests but don't change code unless it's a real bug |
 | Declaring ready after one clean pass | Must get 2 consecutive ready verdicts to avoid race conditions |
-| Waiting twice in one iteration | Wait happens in exactly one place: step 1i |
+| Waiting twice in one iteration | Wait happens in exactly one place: step 1j |
 | Replying to top-level reviews via comment reply API | Top-level review bodies use `gh pr comment`, inline comments use the replies API |
