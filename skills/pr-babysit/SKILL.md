@@ -99,11 +99,13 @@ LAST_CHECKED = PR_CREATED_AT             # first pass processes all existing com
 TOTAL_WAIT_MINUTES = 0
 CONSECUTIVE_READY_COUNT = 0              # must reach 2 before declaring ready
 PUSHED_AT = None                         # set to current time after each push
+EXTERNAL_CHECK_PATIENCE = 10             # separate counter for external check waits
 ```
 
-Two counters prevent infinite loops:
+Three counters prevent infinite loops:
 - `IDLE_ROUNDS_REMAINING` resets when progress is made (commit & push). Exhaustion means the PR stalled.
 - `MAX_TOTAL_ITERATIONS` never resets. Exhaustion means the skill has been running too long regardless of progress.
+- `EXTERNAL_CHECK_PATIENCE` counts down only when external checks are the sole blocker. Does NOT consume `IDLE_ROUNDS_REMAINING` — the PR isn't stalled, it's waiting for an external system.
 
 ## Phase 1: The Loop
 
@@ -298,7 +300,9 @@ Increment `TOTAL_ITERATIONS`.
 
 **Post-push cooldown:** If `PUSHED_AT` is set and less than 60 seconds have elapsed since the push, do NOT evaluate readiness. Checks may not be reported yet. Reset `CONSECUTIVE_READY_COUNT` to 0 and wait for the next iteration. Also: if checks are empty and less than 2 minutes have elapsed since `PUSHED_AT`, treat this as "checks pending" not "no checks configured."
 
-**If no changes were needed** AND **at least one check exists** (not empty) AND **every** check has reached a terminal state (SUCCESS, NEUTRAL, or FAILURE — no PENDING, QUEUED, or IN_PROGRESS) AND all required checks pass AND no conflicts:
+**HARD RULE: NEVER declare `[READY TO MERGE]` when ANY check shows state "pending", "queued", or "in_progress". No exceptions. No "non-required" distinction. No "external check" bypass. If a check is registered on the PR, it MUST reach a terminal state before readiness can be evaluated. Terminal states: SUCCESS, FAILURE, NEUTRAL, SKIPPED (with duration > 0). Non-terminal: PENDING, QUEUED, IN_PROGRESS, SKIPPED (with duration 0 — still initializing).**
+
+**If no changes were needed** AND **at least one check exists** (not empty) AND **every** check has reached a terminal state AND all required checks pass AND no conflicts:
 → Increment `CONSECUTIVE_READY_COUNT`
 → If `CONSECUTIVE_READY_COUNT >= 2`: print and exit:
 ```
@@ -307,7 +311,11 @@ Increment `TOTAL_ITERATIONS`.
 → If `CONSECUTIVE_READY_COUNT < 2`: **immediately** re-fetch all data (skip the wait) and re-check. This double-check avoids race conditions where checks or comments arrive between fetches, without adding unnecessary delay.
 
 **If no changes were needed** but any check is still running (PENDING, QUEUED, IN_PROGRESS) or `mergeStateStatus` is UNSTABLE:
-→ This is **not** ready — reset `CONSECUTIVE_READY_COUNT` to 0, decrement `IDLE_ROUNDS_REMAINING`, wait, and re-check next iteration. Do NOT declare `[READY TO MERGE]` while any check is still in progress, even if it's an external/non-required check.
+→ This is **not** ready. Reset `CONSECUTIVE_READY_COUNT` to 0.
+→ Check if the ONLY blocker is pending external checks (all code CI checks pass, only external tools like Cursor Bugbot are pending):
+  - If yes: log "Waiting for external check: <name>". Decrement `EXTERNAL_CHECK_PATIENCE` (NOT `IDLE_ROUNDS_REMAINING`). The PR isn't stalled — it's waiting for an external system.
+  - If no (code CI checks are also failing/pending): decrement `IDLE_ROUNDS_REMAINING` as normal.
+→ Wait and re-check next iteration.
 
 **If no changes were needed** and all checks are terminal but some required checks failed with unfixable issues:
 → Reset `CONSECUTIVE_READY_COUNT` to 0, decrement `IDLE_ROUNDS_REMAINING`
@@ -326,6 +334,12 @@ Check exit conditions before waiting:
 → Print and exit:
 ```
 [MAX ROUNDS EXHAUSTED] waited for <TOTAL_WAIT_MINUTES> minutes. <PR_URL>
+```
+
+**External check patience exhausted** (`EXTERNAL_CHECK_PATIENCE <= 0`):
+→ Print and exit:
+```
+[MAX ROUNDS EXHAUSTED] external checks never completed after <TOTAL_WAIT_MINUTES> minutes. <PR_URL>
 ```
 
 Otherwise:
@@ -350,3 +364,6 @@ Otherwise:
 | Waiting twice in one iteration | Wait happens in exactly one place: step 1j |
 | Replying to top-level reviews via comment reply API | Top-level review bodies use `gh pr comment`, inline comments use the replies API |
 | Declaring ready when checks are empty | Empty checks after push = pending, not absent. Wait 60s minimum after push, require at least one check before declaring ready. |
+| Declaring ready with pending external checks | ALL checks must be terminal. No "non-required" exceptions. No "external check" bypass. |
+| Rationalizing around UNSTABLE merge state | UNSTABLE = not ready, period. Wait and re-check. |
+| Counting external check waits against idle rounds | Use `EXTERNAL_CHECK_PATIENCE` for external-only waits, not `IDLE_ROUNDS_REMAINING`. |
