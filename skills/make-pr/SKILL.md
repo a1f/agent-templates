@@ -161,6 +161,8 @@ chore: add .claude/gates.json from CI config
 
 This ensures the next run is deterministic (Source 1).
 
+**Validation:** After generating `gates.json`, verify it covers all gate categories present in CI. Check for each category: format, lint, typecheck, test, build. If CI has a pyright/mypy/tsc step but the extracted gates lack a `typecheck` gate, warn: "CI has typecheck but gates.json does not — add it." Same for test, build, etc. Do NOT generate a gates.json that is missing categories the CI actually checks.
+
 ### Source 3: Language detection (last resort)
 
 If no CI workflow exists, detect the project language and generate gates from templates:
@@ -293,9 +295,9 @@ gh pr edit "$PR_NUMBER" \
 gh pr comment "$PR_NUMBER" --body "$UPDATE_COMMENT"
 ```
 
-### 3d. Issue Lifecycle (via `/issue-make`)
+### 3d. Issue Lifecycle (via `/issue-make`) — NOT OPTIONAL
 
-Use the Skill tool to invoke `issue-make` with:
+**ALWAYS** invoke `issue-make` using the Skill tool. This is mandatory, not optional. Pass:
 - `--issue=N` if detected in Phase 0c
 - `--title` derived from the PR title (e.g., PR title "feat: add user auth" → issue title "Add user auth")
 - Any `--project` argument the user passed to `/make-pr`
@@ -333,3 +335,6 @@ No temporary directory needed. All information comes from git, GitHub, and `.cla
 | Generating gates.json that doesn't match CI | Parse CI commands exactly, don't guess. If unsure, include the command verbatim |
 | Installing system packages | Never run sudo/apt/brew. Tell the user what to install |
 | Suppressing lint errors with noqa/ignore | Fix the actual error. Only suppress genuine false positives with explanation |
+| Extracting only format/lint gates from CI | Extract ALL gates — compare extracted categories against CI steps, warn if typecheck/test are missing |
+| Skipping /issue-make | ALWAYS run /issue-make in Phase 3d — it ensures issue exists with planning artifacts |
+| Pushing before review completes | Phase 2 (Quick Review) MUST finish before Phase 3 (Push). Never skip review. |
