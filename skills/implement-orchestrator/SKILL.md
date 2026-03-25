@@ -66,7 +66,24 @@ Dispatch a subagent to analyze the codebase and plan the specific step:
 
 **REQUIRED SUB-SKILL:** clean-code-planner
 
-### 2b. Implement the Step
+### 2b. Data-Flow Trace
+
+**Before writing any code**, check if this step modifies a type (dataclass, Pydantic model, Protocol, TypedDict, interface, struct). If it does:
+
+1. Grep all imports of the type being modified:
+   ```bash
+   grep -rn "from.*import.*TypeName\|import.*TypeName" --include="*.py" --include="*.ts" .
+   ```
+2. Grep all attribute accesses of fields being changed:
+   ```bash
+   grep -rn "\.field_name" --include="*.py" --include="*.ts" .
+   ```
+3. List all consumer files and verify each will be updated in this step or a later step
+4. If any consumer would break and is NOT covered by a later step, expand this step to include the fix
+
+Skip this step if no types are being modified.
+
+### 2c. Implement the Step
 
 Implement the code changes for this step:
 - Write source files and test files as needed
@@ -76,7 +93,7 @@ Implement the code changes for this step:
 
 **REQUIRED SUB-SKILL:** plan-codebase (for codebase analysis)
 
-### 2c. Run the Simplify Skill
+### 2d. Run the Simplify Skill
 
 After implementation, **always** run the `simplify` skill on the changes from this step. This reviews the changed code for:
 - Reuse opportunities
@@ -87,7 +104,7 @@ Apply any fixes the simplify skill identifies before committing.
 
 **REQUIRED SKILL:** simplify
 
-### 2d. Commit the Step
+### 2e. Commit the Step
 
 Create a single commit for this step with a descriptive message:
 ```
@@ -96,9 +113,9 @@ Create a single commit for this step with a descriptive message:
 
 The commit should include all source and test changes from this step, including any fixes from the simplify skill review.
 
-### 2e. Move to Next Step
+### 2f. Move to Next Step
 
-Repeat 2a-2d for the next step. Each step builds on the committed state of previous steps.
+Repeat 2a-2e for the next step. Each step builds on the committed state of previous steps.
 
 ## State Management
 
@@ -159,6 +176,7 @@ Result: 3 clean, focused commits, each independently reviewed for quality.
 | Accept plan | Read from context, file, or conversation | Plan text |
 | Extract steps | Break plan into ordered steps | `$IMPL_TMP/steps.md` |
 | Per step: Plan | Analyze codebase for this step | Implementation approach |
+| Per step: Data-flow trace | Grep consumers of modified types | Consumer file list |
 | Per step: Implement | Write code and tests | Source + test files |
 | Per step: Simplify | Run simplify skill | Quality-reviewed code |
 | Per step: Commit | Commit all changes | One focused commit |
@@ -174,3 +192,4 @@ Result: 3 clean, focused commits, each independently reviewed for quality.
 | Steps that depend on later steps | Order steps by dependency — earlier steps are independent |
 | Huge steps | Break into smaller, independently committable units |
 | Storing temp files in repo | Use `$IMPL_TMP` (outside repo) for all temporary artifacts |
+| Modifying a type without checking consumers | ALWAYS run data-flow trace (step 2b) when changing types — grep imports and attribute accesses |
