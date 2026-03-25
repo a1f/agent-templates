@@ -77,6 +77,14 @@ Produce the full Medium plan, plus assign every new component to a layer:
 ### Naming Decisions
 - [non-obvious names and reasoning]
 
+### Data Flow (when applicable)
+If the change affects data that flows through multiple processing phases (e.g., content that is transformed, committed, then validated again), map the flow:
+```
+- `data` flows: phase_1 → transform_a → phase_2 → transform_b → phase_3
+- **All phases must produce consistent results**
+```
+Skip this section if the change is self-contained within a single processing path.
+
 Small changes: just answer the 3 questions inline. No full template needed unless any answer is "no."
 
 ## Step 4: Save the Plan
