@@ -115,24 +115,13 @@ Skip if `--attach-md=false`.
 
 ### 3a. Find Planning Artifacts
 
-Glob for `*.md` files at the repository root:
+Use the helper script to find planning `.md` files at repo root (excludes README, CHANGELOG, LICENSE, CONTRIBUTING, CODE_OF_CONDUCT, CLAUDE):
+
 ```bash
-REPO_ROOT=$(git rev-parse --show-toplevel)
-ls "$REPO_ROOT"/*.md 2>/dev/null
+MD_FILES=$(bash "$HOME/.claude/scripts/find-planning-md.sh")
 ```
 
-**Exclude** standard repo docs (not planning artifacts):
-- `README.md`
-- `CHANGELOG.md`
-- `LICENSE.md`
-- `CONTRIBUTING.md`
-- `CODE_OF_CONDUCT.md`
-- `CLAUDE.md`
-
-**Include** everything else — these are planning artifacts:
-- `plan.md`, `issues.md`, `improvements.md`, `spec.md`, `design.md`, etc.
-
-If no planning `.md` files found, skip this phase.
+If no files returned, skip this phase.
 
 ### 3b. Check for Existing Gist Comment
 

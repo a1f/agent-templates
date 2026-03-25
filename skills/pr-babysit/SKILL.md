@@ -133,15 +133,12 @@ Process all actionable comments, then run gates once:
    - Read the referenced file at the referenced line
    - Understand the reviewer's request in context
    - Apply the fix
-2. After **all** comment fixes are applied, run quick gates once:
+2. After **all** comment fixes are applied, run quick gates (fix-only) once:
    ```bash
-   # Run format + lint gates from gates.json if it exists
+   # Run each gate with --fix-first using the helper script
    if [ -f .claude/gates.json ]; then
-     SETUP=$(jq -r '.setup // empty' .claude/gates.json)
-     [ -n "$SETUP" ] && eval "$SETUP"
-     # Run all gates that have a fix command (typically format and lint)
-     for fix_cmd in $(jq -r '.gates[] | select(.fix != null) | .fix' .claude/gates.json); do
-       eval "$fix_cmd"
+     for gate_name in $(jq -r '.gates[] | select(.fix != null) | .name' .claude/gates.json); do
+       bash "$HOME/.claude/scripts/run-gate.sh" --gate="$gate_name" --fix-first || true
      done
    fi
    ```
