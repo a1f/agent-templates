@@ -197,6 +197,12 @@ Process all actionable comments, then run gates once:
    - Read the referenced file at the referenced line
    - Understand the reviewer's request in context
    - Apply the fix
+   - **Reply to the comment** confirming it was addressed:
+     ```bash
+     gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" \
+       -f body="Fixed — <brief description of what was changed>."
+     ```
+     This lets the reviewer know the feedback was acted on without having to re-read the diff.
 2. After **all** comment fixes are applied, run quick gates once:
    ```bash
    # Run format + lint gates from gates.json if it exists
