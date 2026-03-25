@@ -29,7 +29,7 @@ All temporary artifacts are stored outside the repository to keep the workspace 
 ```bash
 REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
 BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
-IMPL_TMP="$HOME/.claude/impl-tmp/${REPO_NAME}/${BRANCH_NAME}"
+IMPL_TMP="${TMPDIR:-/tmp}/claude-impl/${REPO_NAME}/${BRANCH_NAME}"
 mkdir -p "$IMPL_TMP"
 ```
 
@@ -104,7 +104,7 @@ Repeat 2a-2d for the next step. Each step builds on the committed state of previ
 
 All state lives in `$IMPL_TMP/` (outside the repository):
 ```
-~/.claude/impl-tmp/<repo>/<branch>/
+${TMPDIR}/claude-impl/<repo>/<branch>/
   steps.md              # Extracted plan steps
   current-step.md       # Current step being implemented (for recovery)
   manifest.json         # Step tracking and progress

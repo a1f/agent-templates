@@ -51,7 +51,7 @@ Before finalizing the spec, review every planned change against:
 
 ### 5. Write code-spec.md
 
-Write the structured specification to `$IMPL_TMP/code-spec.md` following the output format defined in the prompt template (`codebase-planner-prompt.md`). The `$IMPL_TMP` path is provided by the orchestrator (defaults to `~/.claude/impl-tmp/<repo>/<branch>`).
+Write the structured specification to `$IMPL_TMP/code-spec.md` following the output format defined in the prompt template (`codebase-planner-prompt.md`). The `$IMPL_TMP` path is provided by the orchestrator (defaults to `$TMPDIR/claude-impl/<repo>/<branch>`).
 
 ### 6. Return Summary
 
