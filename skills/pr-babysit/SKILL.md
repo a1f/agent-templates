@@ -74,6 +74,7 @@ MERGE_STATE=$(echo "$PR_JSON" | jq -r '.mergeStateStatus')
 If ALL of the following are true:
 - `MERGEABLE` is `"MERGEABLE"`
 - `MERGE_STATE` is `"CLEAN"`
+- **At least one check exists** (CHECKS is not empty) — OR the PR was created more than 5 minutes ago (checks genuinely absent, not just slow to register)
 - Every check is in a terminal state (SUCCESS, NEUTRAL, or FAILURE) — no PENDING/QUEUED/IN_PROGRESS
 - All required checks pass
 - No review comments exist on the PR
@@ -82,6 +83,8 @@ Then print and exit immediately:
 ```
 [ALREADY READY TO MERGE] <PR_URL>
 ```
+
+If CHECKS is empty and the PR was created less than 5 minutes ago, do NOT fast-exit — wait for checks to be reported. Empty checks shortly after creation means GitHub hasn't registered them yet, not that CI is absent.
 
 Otherwise, proceed to the loop.
 
@@ -95,6 +98,7 @@ INTERVAL = interval (default 3m)
 LAST_CHECKED = PR_CREATED_AT             # first pass processes all existing comments
 TOTAL_WAIT_MINUTES = 0
 CONSECUTIVE_READY_COUNT = 0              # must reach 2 before declaring ready
+PUSHED_AT = None                         # set to current time after each push
 ```
 
 Two counters prevent infinite loops:
@@ -284,8 +288,11 @@ Increment `TOTAL_ITERATIONS`.
    ```
 4. **Reset `IDLE_ROUNDS_REMAINING` to `max-rounds`** — progress was made
 5. **Reset `CONSECUTIVE_READY_COUNT` to 0** — changes invalidate any previous ready verdict
+6. **Set `PUSHED_AT` to current time** — starts the post-push cooldown
 
-**If no changes were needed** AND **every** check has reached a terminal state (SUCCESS, NEUTRAL, or FAILURE — no PENDING, QUEUED, or IN_PROGRESS) AND all required checks pass AND no conflicts:
+**Post-push cooldown:** If `PUSHED_AT` is set and less than 60 seconds have elapsed since the push, do NOT evaluate readiness. Checks may not be reported yet. Reset `CONSECUTIVE_READY_COUNT` to 0 and wait for the next iteration. Also: if checks are empty and less than 2 minutes have elapsed since `PUSHED_AT`, treat this as "checks pending" not "no checks configured."
+
+**If no changes were needed** AND **at least one check exists** (not empty) AND **every** check has reached a terminal state (SUCCESS, NEUTRAL, or FAILURE — no PENDING, QUEUED, or IN_PROGRESS) AND all required checks pass AND no conflicts:
 → Increment `CONSECUTIVE_READY_COUNT`
 → If `CONSECUTIVE_READY_COUNT >= 2`: print and exit:
 ```
@@ -336,3 +343,4 @@ Otherwise:
 | Declaring ready after one clean pass | Must get 2 consecutive ready verdicts to avoid race conditions |
 | Waiting twice in one iteration | Wait happens in exactly one place: step 1j |
 | Replying to top-level reviews via comment reply API | Top-level review bodies use `gh pr comment`, inline comments use the replies API |
+| Declaring ready when checks are empty | Empty checks after push = pending, not absent. Wait 60s minimum after push, require at least one check before declaring ready. |
