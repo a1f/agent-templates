@@ -165,9 +165,9 @@ Base replies on actual code and commit history — don't make things up.
 ### 1f. Fix CI Failures
 
 From the checks data fetched in 1b, categorize each check:
-- **Passing** (`conclusion: "SUCCESS"`) — no action
-- **Failing** (`conclusion: "FAILURE"`) — needs fixing
-- **Pending** (`state: "PENDING"` or `state: "QUEUED"`) — skip, will check next iteration
+- **Passing** (`conclusion: "SUCCESS"` or `conclusion: "NEUTRAL"`) — no action, terminal state
+- **Failing** (`conclusion: "FAILURE"`) — needs fixing, terminal state
+- **Still running** (`state: "PENDING"`, `state: "QUEUED"`, or `state: "IN_PROGRESS"`) — not terminal, must wait. This includes external tools like Cursor Bugbot, Noa Analysis, etc. — treat them the same as any other check
 
 If any checks are failing:
 
@@ -223,13 +223,16 @@ Increment `TOTAL_ITERATIONS`.
    ```
 4. **Reset `IDLE_ROUNDS_REMAINING` to `max-rounds`** — progress was made
 
-**If no changes were needed** AND all CI checks pass (none pending, none failing) AND no conflicts:
+**If no changes were needed** AND **every** check has reached a terminal state (SUCCESS, NEUTRAL, or FAILURE — no PENDING, QUEUED, or IN_PROGRESS) AND all required checks pass AND no conflicts:
 → Print and exit:
 ```
 [READY TO MERGE] <PR_URL>
 ```
 
-**If no changes were needed** (CI pending, or unfixable failures, or waiting for new reviews):
+**If no changes were needed** but any check is still running (PENDING, QUEUED, IN_PROGRESS) or `mergeStateStatus` is UNSTABLE:
+→ This is **not** ready — decrement `IDLE_ROUNDS_REMAINING`, wait, and re-check next iteration. Do NOT declare `[READY TO MERGE]` while any check is still in progress, even if it's an external/non-required check.
+
+**If no changes were needed** and all checks are terminal but some required checks failed with unfixable issues:
 → Decrement `IDLE_ROUNDS_REMAINING`
 
 ### 1i. Check Exit Conditions
