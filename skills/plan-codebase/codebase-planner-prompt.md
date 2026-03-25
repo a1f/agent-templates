@@ -156,7 +156,7 @@ Create the temporary directory if it does not exist:
 ```bash
 REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
 BRANCH_NAME=$(git rev-parse --abbrev-ref HEAD | tr '/' '-')
-IMPL_TMP="$HOME/.claude/impl-tmp/${REPO_NAME}/${BRANCH_NAME}"
+IMPL_TMP="${TMPDIR:-/tmp}/claude-impl/${REPO_NAME}/${BRANCH_NAME}"
 mkdir -p "$IMPL_TMP"
 ```
 
