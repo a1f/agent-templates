@@ -392,6 +392,7 @@ This step is best-effort — if it fails (permissions, no project), log a warnin
 Print to the user:
 - PR URL
 - Issue URL
+- Project linked (name, or "none")
 - Reviewers assigned
 - Gates that passed
 - Any known issues from review
