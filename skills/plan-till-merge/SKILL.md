@@ -5,30 +5,82 @@ description: Use when the user wants to plan, implement, and take it all the way
 
 # Plan Till Merge
 
-Plan with clean code principles, implement the plan, create a PR, and babysit it through review/CI until ready to merge.
+Plan with clean code principles, implement the plan, create a PR, and babysit it through review/CI until ready to merge. Runs all phases directly in sequence — no nested skill dispatch.
 
 ```
 /plan-till-merge [description or context] [make-pr args...] [--interval 3m] [--max-rounds 5]
 
-  1. /clean-code-planner — create a plan with clean code principles
-  2. /implement-till-merge — implement, create PR, babysit until ready to merge
+Phase 1: /clean-code-planner → plan.md
+Phase 2: /implement-orchestrator → committed code
+Phase 3: /issue-make → GitHub issue with artifacts
+Phase 4: /make-pr → gates + review + push + create PR
+Phase 5: /pr-babysit → poll until [READY TO MERGE]
 ```
 
-## Execution
+## Arguments
 
-### Step 1: Create the Plan
+All optional. Parsed from the user's message:
 
-Use the Skill tool to invoke `clean-code-planner`. The input comes from the user's description in the conversation or any context they've provided.
+| Arg | Phase | Default | Example |
+|-----|-------|---------|---------|
+| `--issue=N` | 3, 4 | Auto-detect | `--issue=42` |
+| `--reviewers=u1,u2` | 4 | Auto-detect | `--reviewers=alice` |
+| `--title="..."` | 3, 4 | From plan | `--title="Add auth"` |
+| `--base=branch` | 4 | Default branch | `--base=develop` |
+| `--draft` | 4 | Not draft | `--draft` |
+| `--interval=DURATION` | 5 | `3m` | `--interval=5m` |
+| `--max-rounds=N` | 5 | `5` | `--max-rounds=10` |
 
-Wait for `/clean-code-planner` to complete. It will produce `plan.md`.
+## Phase 1: Plan
 
-### Step 2: Implement Through to Merge
+Use the Skill tool to invoke `clean-code-planner`. The input comes from the user's description, `improvement.md`, `plan.md`, or any context they provided.
 
-Use the Skill tool to invoke `implement-till-merge` with any PR-related and babysit-related arguments the user provided. It will read `plan.md` and execute the full pipeline.
+Wait for it to complete. It produces `plan.md`.
+
+## Phase 2: Implement
+
+Use the Skill tool to invoke `implement-orchestrator`. It reads `plan.md` and implements each step with commit-per-step.
+
+Wait for it to complete. All steps should be committed.
+
+## Phase 3: Issue
+
+Use the Skill tool to invoke `issue-make` with:
+- `--title` derived from `plan.md` first heading
+- `--issue=N` if the user provided one
+- `--attach-md` (default true — attaches planning artifacts)
+
+This creates/updates the GitHub issue and attaches planning `.md` files as a gist.
+
+## Phase 4: PR
+
+Use the Skill tool to invoke `make-pr` with:
+- `--issue=N` from Phase 3 result
+- `--reviewers`, `--title`, `--base`, `--draft` if the user provided them
+
+This runs gates, quick review, pushes, and creates the PR.
+
+## Phase 5: Babysit
+
+Use the Skill tool to invoke `pr-babysit` with:
+- `--interval` and `--max-rounds` if the user provided them
+
+This polls until `[READY TO MERGE]` or `[MAX ROUNDS EXHAUSTED]`.
+
+## Error Handling
+
+If any phase fails:
+- **Phase 1 (Plan):** Stop and report — the user needs to clarify requirements
+- **Phase 2 (Implement):** Stop and report — committed steps are safe checkpoints
+- **Phase 3 (Issue):** Warn but continue — issue creation is best-effort
+- **Phase 4 (PR):** Stop and report — gate failures or push errors need attention
+- **Phase 5 (Babysit):** Report final status — `[READY TO MERGE]` or `[MAX ROUNDS EXHAUSTED]`
 
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
-| Starting implementation before plan is done | /clean-code-planner must finish and save plan.md first |
-| Skipping the planning phase | Always run /clean-code-planner — it ensures clean code principles |
+| Starting Phase 2 before Phase 1 completes | Each phase depends on the previous one completing |
+| Skipping Phase 3 (issue-make) | ALWAYS create/update the issue — it provides traceability |
+| Nesting skill calls (skill → skill → skill) | Each phase invokes its skill directly — no intermediary skills |
+| Dropping user arguments | Forward each argument to the correct phase |
