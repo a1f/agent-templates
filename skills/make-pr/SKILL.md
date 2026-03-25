@@ -71,11 +71,7 @@ If a PR exists, store its number for Phase 3 (update instead of create).
 
 ### 0c. Issue Detection
 
-Priority order:
-1. `--issue=N` argument → use that
-2. Search branch name for issue number pattern (e.g., `fix-42`, `issue-42`, `feat/42-description`) → use that
-3. Search commit messages for `#N` references → use that
-4. No issue found → create one in Phase 3
+Issue detection and creation is handled by `/issue-make`. Pass `--issue=N` if the user provided one; otherwise `/issue-make` will auto-detect from the branch name or commit messages, or create a new issue.
 
 ### 0d. Reviewer Detection
 
@@ -297,95 +293,16 @@ gh pr edit "$PR_NUMBER" \
 gh pr comment "$PR_NUMBER" --body "$UPDATE_COMMENT"
 ```
 
-### 3d. Link Issue
+### 3d. Issue Lifecycle (via `/issue-make`)
 
-If creating a new PR, include `Closes #N` in the body (GitHub auto-links).
+Use the Skill tool to invoke `issue-make` with:
+- `--issue=N` if detected in Phase 0c
+- `--title` derived from the PR title (e.g., PR title "feat: add user auth" → issue title "Add user auth")
+- Any `--project` argument the user passed to `/make-pr`
 
-If updating an existing PR, ensure the issue link is in the updated body.
+`/issue-make` handles: finding or creating the issue, linking to a project, and attaching planning `.md` files as a gist.
 
-If no issue was found or provided, create one from the commit history:
-- **Title:** Derived from the PR title (e.g., PR title "feat: add user auth" → issue title "Add user auth")
-- **Body:** Summary of what the commits accomplish, generated from `git log ${BASE_BRANCH}..HEAD --oneline`
-
-```bash
-gh issue create --title "$ISSUE_TITLE" --body "$ISSUE_BODY"
-```
-
-Then include `Closes #N` in the PR body to link it.
-
-### 3e. Add Issue to Project
-
-**Always run this step** — for both new and existing PRs. Check if the issue is already in a project first; if so, skip. This ensures project linking happens even when updating an existing PR.
-
-**Pre-check:** Verify the issue is not already in a project:
-```bash
-gh api graphql -f query='
-  query($owner: String!, $repo: String!, $number: Int!) {
-    repository(owner: $owner, name: $repo) {
-      issue(number: $number) {
-        projectItems(first: 1) {
-          totalCount
-        }
-      }
-    }
-  }' -f owner="$OWNER" -f repo="$REPO" -F number="$ISSUE_NUMBER" \
-  -q '.data.repository.issue.projectItems.totalCount'
-```
-If totalCount > 0, the issue is already in a project — skip.
-
-**Detection logic:**
-
-1. List projects linked to this repository:
-   ```bash
-   gh api graphql -f query='
-     query($owner: String!, $repo: String!) {
-       repository(owner: $owner, name: $repo) {
-         projectsV2(first: 10) {
-           nodes { id title }
-         }
-       }
-     }' -f owner="$OWNER" -f repo="$REPO" \
-     -q '.data.repository.projectsV2.nodes'
-   ```
-
-2. **If exactly 1 project** → use it
-3. **If multiple projects** → pick the one most recently used by closed issues:
-   ```bash
-   # Get the last 10 closed issues and check which project they belong to
-   gh api graphql -f query='
-     query($owner: String!, $repo: String!) {
-       repository(owner: $owner, name: $repo) {
-         issues(states: CLOSED, last: 10) {
-           nodes {
-             projectItems(first: 1) {
-               nodes {
-                 project { id title }
-               }
-             }
-           }
-         }
-       }
-     }' -f owner="$OWNER" -f repo="$REPO"
-   ```
-   Count which project appears most frequently and use that one.
-4. **If no projects** → skip, no warning needed
-5. **If token lacks `read:project` scope** → skip, warn user to run `gh auth refresh -s read:project,project`
-
-**Add issue to project:**
-```bash
-# Get issue node ID
-ISSUE_NODE_ID=$(gh api "repos/$OWNER/$REPO/issues/$ISSUE_NUMBER" -q '.node_id')
-
-# Add to project
-gh api graphql -f query='
-  mutation($projectId: ID!, $contentId: ID!) {
-    addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
-      item { id }
-    }
-  }' -f projectId="$PROJECT_ID" -f contentId="$ISSUE_NODE_ID"
-```
-
-This step is best-effort — if it fails (permissions, no project), log a warning and continue. Never block PR creation over project linking.
+After `/issue-make` returns, include `Closes #N` in the PR body to link it. If updating an existing PR, ensure the issue link is in the updated body.
 
 ### 3f. Final Output
 
