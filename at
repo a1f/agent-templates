@@ -386,6 +386,38 @@ install_skills() {
   fi
 }
 
+install_scripts() {
+  local scripts_src="${SCRIPT_DIR}/scripts"
+  local scripts_dst="${HOME}/.claude/scripts"
+
+  echo ""
+  printf "${BOLD}Installing Scripts${RESET}\n"
+  echo "  Source: $scripts_src"
+  echo "  Target: $scripts_dst"
+  echo ""
+
+  if [ ! -d "$scripts_src" ]; then
+    warn "Scripts source directory not found: $scripts_src"
+    return 0
+  fi
+
+  if [ "$DRY_RUN" = "true" ]; then
+    dry "Would create directory: $scripts_dst"
+  else
+    if [ ! -d "$scripts_dst" ]; then
+      mkdir -p "$scripts_dst"
+      info "Created directory: $scripts_dst"
+    fi
+  fi
+
+  for script_file in "$scripts_src"/*.sh; do
+    [ -f "$script_file" ] || continue
+    local filename
+    filename="$(basename "$script_file")"
+    install_file_executable "$script_file" "${scripts_dst}/${filename}"
+  done
+}
+
 install_hooks() {
   local hooks_src="${SCRIPT_DIR}/hooks"
   local hooks_dst="${HOME}/.claude/hooks"
@@ -518,6 +550,53 @@ validate_skills() {
     fi
   done
   IFS="$old_ifs"
+}
+
+validate_scripts() {
+  section "Scripts"
+
+  local scripts_dir="${SCRIPT_DIR}/scripts"
+
+  if [ ! -d "$scripts_dir" ]; then
+    warn "No scripts directory found"
+    return
+  fi
+
+  for script_file in "$scripts_dir"/*.sh; do
+    [ -f "$script_file" ] || continue
+    local fname
+    fname="$(basename "$script_file")"
+
+    # Check shebang
+    local first_line
+    first_line="$(head -1 "$script_file")"
+    case "$first_line" in
+      "#!/usr/bin/env bash"|"#!/bin/bash")
+        pass "$fname: has correct shebang"
+        ;;
+      *)
+        fail "$fname: missing or incorrect shebang (got: $first_line)"
+        ;;
+    esac
+
+    # Check set -euo pipefail
+    if grep -q "set -euo pipefail" "$script_file"; then
+      pass "$fname: has strict mode (set -euo pipefail)"
+    else
+      fail "$fname: missing 'set -euo pipefail'"
+    fi
+
+    # Shellcheck if available
+    if command -v shellcheck >/dev/null 2>&1; then
+      if shellcheck -S warning "$script_file" >/dev/null 2>&1; then
+        pass "$fname: passes shellcheck"
+      else
+        fail "$fname: shellcheck warnings found"
+      fi
+    else
+      warn "$fname: shellcheck not installed, skipping lint"
+    fi
+  done
 }
 
 validate_rules() {
@@ -876,6 +955,7 @@ cmd_install() {
   if [ "$INSTALL_ALL" = "true" ]; then
     install_rules
     install_skills
+    install_scripts
     install_hooks
     did_rules="true"
     did_skills="true"
@@ -911,8 +991,9 @@ cmd_install() {
     echo ""
     echo "    [1] Language Rules (python, typescript, rust, cpp)"
     echo "    [2] Skills (agentic workflow pipeline)"
-    echo "    [3] Hooks (Slack notifications, auto-approve)"
-    echo "    [4] Everything"
+    echo "    [3] Scripts (deterministic helpers for skills)"
+    echo "    [4] Hooks (Slack notifications, auto-approve)"
+    echo "    [5] Everything"
     echo "    [0] Exit"
     echo ""
     printf "  Select options (comma-separated): "
@@ -944,12 +1025,16 @@ cmd_install() {
           did_skills="true"
           ;;
         3)
+          install_scripts
+          ;;
+        4)
           install_hooks
           did_hooks="true"
           ;;
-        4)
+        5)
           install_rules
           install_skills
+          install_scripts
           install_hooks
           did_rules="true"
           did_skills="true"
@@ -1096,6 +1181,11 @@ cmd_update() {
     install_skills
   fi
 
+  # Always install scripts when skills are installed
+  if [ "$comp_skills" = "true" ]; then
+    install_scripts
+  fi
+
   if [ "$comp_hooks" = "true" ]; then
     install_hooks
   fi
@@ -1218,6 +1308,7 @@ cmd_uninstall() {
 cmd_validate() {
   local v_skills=false
   local v_rules=false
+  local v_scripts=false
   local v_hooks=false
   local v_smoke=false
   local v_settings=false
@@ -1226,6 +1317,7 @@ cmd_validate() {
     case "$arg" in
       --skills)   v_skills=true ;;
       --rules)    v_rules=true ;;
+      --scripts)  v_scripts=true ;;
       --hooks)    v_hooks=true ;;
       --smoke)    v_smoke=true ;;
       --settings) v_settings=true ;;
@@ -1252,10 +1344,11 @@ cmd_validate() {
 
   # Default: everything except smoke
   if [ "$v_skills" = false ] && [ "$v_rules" = false ] && \
-     [ "$v_hooks" = false ] && [ "$v_smoke" = false ] && \
-     [ "$v_settings" = false ]; then
+     [ "$v_scripts" = false ] && [ "$v_hooks" = false ] && \
+     [ "$v_smoke" = false ] && [ "$v_settings" = false ]; then
     v_skills=true
     v_rules=true
+    v_scripts=true
     v_hooks=true
     v_settings=true
   fi
@@ -1271,6 +1364,10 @@ cmd_validate() {
 
   if [ "$v_rules" = true ]; then
     validate_rules
+  fi
+
+  if [ "$v_scripts" = true ]; then
+    validate_scripts
   fi
 
   if [ "$v_hooks" = true ]; then
