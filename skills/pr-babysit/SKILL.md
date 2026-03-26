@@ -300,9 +300,20 @@ Increment `TOTAL_ITERATIONS`.
 
 **Post-push cooldown:** If `PUSHED_AT` is set and less than 60 seconds have elapsed since the push, do NOT evaluate readiness. Checks may not be reported yet. Reset `CONSECUTIVE_READY_COUNT` to 0 and wait for the next iteration. Also: if checks are empty and less than 2 minutes have elapsed since `PUSHED_AT`, treat this as "checks pending" not "no checks configured."
 
+**Unreplied comments check:** Before evaluating readiness, fetch ALL review comments on the PR (not just new ones) and check if any actionable comments have no reply. An unreplied actionable comment is a blocking issue — it means feedback was not addressed.
+
+```bash
+# Fetch all review comments and check for unreplied ones
+ALL_COMMENTS=$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments" --paginate)
+# A comment is "unreplied" if it has no replies (check via in_reply_to_id)
+# Exclude: bot comments, informational comments, comments authored by the current user
+```
+
+If unreplied actionable comments exist: fix them (step 1e), reply confirming the fix, then re-evaluate.
+
 **HARD RULE: NEVER declare `[READY TO MERGE]` when ANY check shows state "pending", "queued", or "in_progress". No exceptions. No "non-required" distinction. No "external check" bypass. If a check is registered on the PR, it MUST reach a terminal state before readiness can be evaluated. Terminal states: SUCCESS, FAILURE, NEUTRAL, SKIPPED (with duration > 0). Non-terminal: PENDING, QUEUED, IN_PROGRESS, SKIPPED (with duration 0 — still initializing).**
 
-**If no changes were needed** AND **at least one check exists** (not empty) AND **every** check has reached a terminal state AND all required checks pass AND no conflicts:
+**If no changes were needed** AND **no unreplied comments exist** AND **at least one check exists** (not empty) AND **every** check has reached a terminal state AND all required checks pass AND no conflicts:
 → Increment `CONSECUTIVE_READY_COUNT`
 → If `CONSECUTIVE_READY_COUNT >= 2`: print and exit:
 ```
@@ -367,3 +378,4 @@ Otherwise:
 | Declaring ready with pending external checks | ALL checks must be terminal. No "non-required" exceptions. No "external check" bypass. |
 | Rationalizing around UNSTABLE merge state | UNSTABLE = not ready, period. Wait and re-check. |
 | Counting external check waits against idle rounds | Use `EXTERNAL_CHECK_PATIENCE` for external-only waits, not `IDLE_ROUNDS_REMAINING`. |
+| Declaring ready with unreplied comments | ALL actionable comments must be addressed and replied to before declaring ready. |
