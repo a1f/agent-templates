@@ -61,6 +61,11 @@ OWNER=$(echo "$REPO_INFO" | jq -r '.owner.login')
 REPO=$(echo "$REPO_INFO" | jq -r '.name')
 ```
 
+**After setup, always print the PR link so the user can click it:**
+```
+Babysitting PR: <PR_URL>
+```
+
 ### 0b. Fast-Exit Check
 
 Before entering the loop, check if the PR is already ready:
@@ -110,6 +115,11 @@ Three counters prevent infinite loops:
 ## Phase 1: The Loop
 
 Each iteration runs these phases in order. Evaluate exit conditions at the end.
+
+**At the start of each iteration, print a status line:**
+```
+Round <TOTAL_ITERATIONS + 1> — <PR_URL>
+```
 
 ### 1a. Check PR State
 
