@@ -160,28 +160,38 @@ Skip on subsequent iterations — the existing gate run in step 1d (after commen
 Kick off all data fetches in parallel at the start of each iteration:
 
 ```bash
-# All three in parallel:
+# All four in parallel:
 
-# 1. Review comments (inline code comments)
+# 1. Review comments (inline code comments on specific lines)
 COMMENTS=$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments" \
   --paginate \
   -q '[.[] | select(.created_at > "'"$LAST_CHECKED"'") | {id, path, line, body, user: .user.login}]')
 
-# 2. Review bodies (top-level review comments)
+# 2. Review bodies (top-level review comments submitted with a review)
 REVIEWS=$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/reviews" \
   --paginate \
   -q '[.[] | select(.submitted_at > "'"$LAST_CHECKED"'" and .body != "") | {id, body, user: .user.login, state}]')
 
-# 3. CI status + mergeable status
+# 3. Issue-level comments (top-level PR comments from bots and reviewers)
+# IMPORTANT: GitHub bot comments (e.g., GitHub Actions, Cursor Bugbot) are posted
+# to the issues endpoint, NOT the pulls/comments endpoint. Missing this means
+# missing bot feedback entirely.
+ISSUE_COMMENTS=$(gh api "repos/$OWNER/$REPO/issues/$PR_NUMBER/comments" \
+  --paginate \
+  -q '[.[] | select(.created_at > "'"$LAST_CHECKED"'") | {id, body, user: .user.login}]')
+
+# 4. CI status + mergeable status
 CHECKS=$(gh pr checks "$PR_NUMBER" --json name,state,conclusion,detailsUrl)
 MERGEABLE=$(gh pr view "$PR_NUMBER" --json mergeable,mergeStateStatus)
 ```
+
+**IMPORTANT:** You MUST fetch from all three comment endpoints. `pulls/N/comments` has inline review comments, `pulls/N/reviews` has review bodies, and `issues/N/comments` has top-level PR comments including bot feedback. Missing any endpoint means missing feedback.
 
 Update `LAST_CHECKED` to current UTC timestamp after fetching.
 
 ### 1d. Categorize Comments
 
-For each new comment (from both inline comments and review bodies), categorize:
+For each new comment (from inline comments, review bodies, AND issue-level comments), categorize:
 
 1. **Actionable code change** — requests a specific code modification (e.g., "rename this variable", "add error handling here", "this should use X instead of Y")
 2. **Question** — asks something that needs a reply (e.g., "why did you choose this approach?", "is this tested?")
@@ -389,3 +399,4 @@ Otherwise:
 | Rationalizing around UNSTABLE merge state | UNSTABLE = not ready, period. Wait and re-check. |
 | Counting external check waits against idle rounds | Use `EXTERNAL_CHECK_PATIENCE` for external-only waits, not `IDLE_ROUNDS_REMAINING`. |
 | Declaring ready with unreplied comments | ALL actionable comments must be addressed and replied to before declaring ready. |
+| Only fetching pulls/N/comments | MUST also fetch issues/N/comments — bot comments (GitHub Actions, Cursor Bugbot) are posted there, not on the review endpoint. |
