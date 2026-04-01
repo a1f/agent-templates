@@ -120,6 +120,49 @@ Review the analysis and tell me which option to proceed with.
 
 Do NOT proceed to implementation. Wait for the user to choose.
 
+## Step 6: Options Review Loop
+
+After saving `options.md`, dispatch a **review agent** to critique the analysis. Iterate until the reviewer approves.
+
+### Review Agent Instructions
+
+Dispatch a subagent (via the Agent tool) with the following prompt:
+
+> You are an options analysis reviewer. Read `options.md` and the referenced codebase files. Evaluate against these criteria:
+>
+> 1. **Factual accuracy** — Do the claims about the codebase hold true? Verify file paths, function names, and architectural claims by reading the actual code. Flag any claim that doesn't match reality.
+> 2. **Distinct options** — Are the options genuinely different strategies, or minor variations of the same approach?
+> 3. **Tradeoff accuracy** — Are the complexity/risk/performance assessments realistic? Is anything over- or under-estimated?
+> 4. **Missed alternatives** — Is there an obvious approach that wasn't considered?
+> 5. **Recommendation quality** — Is the reasoning sound? Does the accepted tradeoff make sense given the constraints?
+> 6. **Completeness** — Are there missing risks, missing affected files, or gaps in the analysis?
+>
+> **IMPORTANT:** For each factual claim (e.g., "file X uses pattern Y", "module Z depends on W"), verify it by reading the actual code. Do not take the claims at face value.
+>
+> Output one of:
+> - **APPROVED** — analysis is accurate and complete
+> - **FEEDBACK** — list each issue with: section, problem, suggested fix
+>
+> Be strict on factual accuracy. Be practical on everything else.
+
+### Review Loop
+
+```
+1. Save options.md (Step 5)
+2. Dispatch review agent
+3. If APPROVED → done, print options and wait for user
+4. If FEEDBACK:
+   a. Address each issue by updating options.md
+   b. Re-dispatch the review agent
+   c. Repeat (max 3 iterations)
+5. If feedback remains after 3 iterations → print remaining feedback as warnings, proceed anyway
+```
+
+**After the loop completes, always print:**
+```
+Options reviewed and saved to: /absolute/path/to/options.md
+```
+
 ## Common Mistakes
 
 | Mistake | Fix |
@@ -131,3 +174,5 @@ Do NOT proceed to implementation. Wait for the user to choose.
 | Proceeding to implementation | STOP after saving options.md — wait for the user to choose |
 | Generating options based on assumptions | If the problem is underspecified, ask for clarification first |
 | "It depends" as a recommendation | Be opinionated. State what additional info would change the recommendation |
+| Skipping the review loop | ALWAYS run the reviewer — it catches factual errors about the codebase |
+| Claims about code without verifying | The reviewer MUST read actual files to verify claims, not take them at face value |
