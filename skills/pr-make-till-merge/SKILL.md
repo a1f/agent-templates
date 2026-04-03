@@ -10,7 +10,7 @@ Create a PR and babysit it through the review/CI cycle until it's ready to merge
 ```
 /pr-make-till-merge [make-pr args...] [--interval 3m] [--max-rounds 5]
 
-  1. /make-pr — create or update the PR (gates, review, push)
+  1. /make-pr — create or update the PR (gates, review, /review-and-fix, push)
   2. /pr-babysit — poll for comments, fix CI, resolve conflicts, loop until ready
 ```
 
