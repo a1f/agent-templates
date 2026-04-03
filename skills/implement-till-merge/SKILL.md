@@ -11,7 +11,7 @@ Implement a plan, create a PR, and babysit it through review/CI until ready to m
 /implement-till-merge [plan source] [make-pr args...] [--interval 3m] [--max-rounds 5]
 
   1. /implement-orchestrator — implement the plan step by step
-  2. /pr-make-till-merge — create PR and babysit until ready to merge
+  2. /pr-make-till-merge — create PR (/review-and-fix included) and babysit until ready to merge
 ```
 
 ## Execution

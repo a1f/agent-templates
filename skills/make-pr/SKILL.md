@@ -255,6 +255,10 @@ If CRITICAL or MAJOR issues found:
 
 **Max 2 review iterations.** If issues remain after 2 passes, list them in the PR body as known issues.
 
+## Phase 2.5: Review and Fix
+
+After the quick review, invoke `/review-and-fix` for a deeper pass. Use the Skill tool to invoke `review-and-fix` with `--base=$BASE_BRANCH`. This catches issues the quick review may have missed. If `/review-and-fix` makes changes, it commits them — re-run gates (Phase 1) with max 2 more iterations before proceeding.
+
 ## Phase 3: PR Lifecycle
 
 ### 3a. Debug Marker Scan

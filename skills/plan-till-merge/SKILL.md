@@ -79,7 +79,7 @@ Use the Skill tool to invoke `make-pr` with:
 - `--issue=N` from Phase 3 result
 - `--reviewers`, `--title`, `--base`, `--draft` if the user provided them
 
-This runs gates, quick review, pushes, and creates the PR.
+This runs gates, quick review, `/review-and-fix`, pushes, and creates the PR. (`/make-pr` invokes `/review-and-fix` internally as Phase 2.5.)
 
 ## Phase 5: Babysit
 
