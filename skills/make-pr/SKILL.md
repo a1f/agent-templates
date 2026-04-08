@@ -12,7 +12,9 @@ Current branch with commits
   --> Phase 0: Discovery (base branch, existing PR, issue, reviewers)
   --> Phase 0.5: Gate Bootstrap (resolve gates from gates.json / CI / language detection)
   --> Phase 1: Gate Loop (run gates in order, fix errors, max 5 iterations)
+  --> Phase 1.5: Simplify (reuse, quality, efficiency review via /simplify)
   --> Phase 2: Quick Review (single-pass diff review, fix CRITICAL/MAJOR, max 2 iters)
+  --> Phase 2.5: Review and Fix (deeper review via /review-and-fix)
   --> Phase 3: Push + PR Lifecycle (create or update PR, link issue, assign reviewers)
 ```
 
@@ -231,6 +233,10 @@ For each gate:
 **Exit conditions:**
 - All required gates pass → proceed to Phase 2
 - 5 iterations reached with remaining failures → warn the user with the list of unresolved errors, ask whether to proceed with PR anyway
+
+## Phase 1.5: Simplify
+
+Before reviewing, run `/simplify` on the changes. Use the Skill tool to invoke `simplify`. This reviews the changed code for reuse opportunities, code quality issues, and efficiency improvements. If `/simplify` makes changes, commit them and re-run gates (Phase 1) with max 2 more iterations.
 
 ## Phase 2: Quick Review
 
