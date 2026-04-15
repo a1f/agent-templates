@@ -34,8 +34,20 @@ checkout, often gigabytes) for the caller to clean up. A prior incident accumula
 of stale worktrees across 18 runs and filled the user's disk.
 
 If a future change introduces `isolation: "worktree"` to any Agent call dispatched from
-this pipeline, that change **must** invoke `/cleanup-worktrees` as its final step (even
-on the error path) to remove the spawned worktree. See the final "Cleanup" section below.
+this pipeline, that change **must** follow the explicit-paths cleanup contract:
+
+1. **Capture the returned path.** The Agent tool returns `worktreePath` (and `worktreeBranch`)
+   in its result when an isolated agent makes file changes. Record each returned path in
+   a session-scoped file, e.g. `$IMPL_TMP/agent-worktrees.txt` (one path per line).
+2. **Clean by exact path, not by glob.** At pipeline end — and on every error path —
+   invoke `/cleanup-worktrees --paths="$(paste -sd, $IMPL_TMP/agent-worktrees.txt)"`.
+   Do **not** rely on the default glob mode for orchestrator-driven cleanup: two
+   concurrent sessions in the same repo would race on each other's worktrees, and the
+   `git status --porcelain` safety guard can false-negative during quiescent moments.
+3. **Glob mode remains the manual-recovery path.** Users invoke bare `/cleanup-worktrees`
+   (no `--paths`) after an interrupt to sweep truly orphaned worktrees from crashed runs.
+
+See the final "Cleanup" section below for the mechanics.
 
 ## Temporary Directory Setup
 
@@ -175,16 +187,26 @@ relevant phase.
 
 ### Cleanup 2: Remove any agent worktrees
 
-Invoke the `cleanup-worktrees` skill to remove stale `.claude/worktrees/agent-*/` entries
+Invoke the `cleanup-worktrees` skill to remove `.claude/worktrees/agent-*/` entries
 created by isolation-worktree subagents (see "Worktree Isolation Policy" above). With the
 current design this is a no-op, but it is load-bearing once any step here adopts
-`isolation: "worktree"`, and it also catches worktrees left behind by previous interrupted
-runs.
+`isolation: "worktree"`.
 
 **REQUIRED SKILL:** cleanup-worktrees
 
-Do not pass `--force` — the skill's uncommitted-changes guard preserves in-flight work
-from other active sessions.
+Two call patterns, pick the one that matches what the pipeline actually did:
+
+- **Nothing in this pipeline passed `isolation: "worktree"`** (current state): skip this
+  step. There is nothing for the pipeline to clean up. Users can invoke bare
+  `/cleanup-worktrees` manually to sweep orphans from prior crashed runs.
+- **One or more steps passed `isolation: "worktree"`** and captured returned paths to
+  `$IMPL_TMP/agent-worktrees.txt`: invoke
+  `/cleanup-worktrees --paths="$(paste -sd, $IMPL_TMP/agent-worktrees.txt)"`. Exact paths
+  only — no globbing — to avoid racing concurrent sessions in the same repo.
+
+Do not pass `--force` in either case — the skill's uncommitted-changes guard preserves
+in-flight work. If the guard blocks removal of a path this pipeline owns, that's a
+signal the agent's changes were not merged back; report rather than force-delete.
 
 ## Error Recovery
 

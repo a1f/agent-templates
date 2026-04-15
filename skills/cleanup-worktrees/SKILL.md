@@ -1,6 +1,6 @@
 ---
 name: cleanup-worktrees
-description: Use when the user wants to remove stale agent worktrees under .claude/worktrees/ in the current repo, or invokes /cleanup-worktrees. Safely skips worktrees with uncommitted changes unless --force is passed.
+description: Use when the user wants to remove stale agent worktrees under .claude/worktrees/ in the current repo, or invokes /cleanup-worktrees. Safely skips worktrees with uncommitted changes unless --force is passed. Orchestrators should pass --paths with the exact worktree paths they own to avoid racing peer sessions.
 ---
 
 # Cleanup Agent Worktrees
@@ -18,15 +18,30 @@ handlers, so if an orchestrator is interrupted (Ctrl+C, crash) before its final 
 runs, re-invoke `/cleanup-worktrees` manually to reclaim disk space.
 
 ```
-/cleanup-worktrees [--force] [--dry-run]
+/cleanup-worktrees [--paths=<csv>] [--force] [--dry-run]
 ```
 
 ## Arguments
 
 | Arg | Default | Effect |
 |-----|---------|--------|
+| `--paths=<csv>` | unset (glob mode) | Comma-separated list of exact worktree paths to clean. Skips the `agent-*/` glob; only the listed paths are considered. Use this from orchestrators to avoid racing other parallel sessions. |
 | `--force` | off | Remove worktrees even if they contain uncommitted changes or untracked files (destructive; opt-in) |
 | `--dry-run` | off | Print what would be removed, make no changes |
+
+## Mode Selection
+
+Two modes, chosen by the presence of `--paths`:
+
+- **Glob mode (default, manual recovery):** enumerates `$WORKTREES_DIR/agent-*/` and
+  applies the uncommitted-changes safety guard to each candidate. Use when running the
+  skill manually after an interrupt or periodically as housekeeping.
+- **Paths mode (orchestrator-driven):** cleans only the explicitly listed paths. Use
+  from an orchestrator that captured each worktree path from the Agent tool's return
+  value (the harness returns `worktreePath` when the isolated agent made changes). Same
+  safety guard applies. Exact paths avoid the race in glob mode where a peer session's
+  active worktree could show momentarily "clean" under `git status` and be wrongly
+  removed.
 
 ## Execution
 
@@ -41,15 +56,31 @@ If `$WORKTREES_DIR` does not exist, print `nothing to clean` and exit 0.
 
 ### 2. Enumerate candidates
 
-Match only `$WORKTREES_DIR/agent-*/` — do not touch sibling subdirectories the user may
-have created for other purposes.
+**Paths mode** (if `--paths=<csv>` is set): split on commas and use each entry directly.
+Validate each path is under `$WORKTREES_DIR/` — reject any path that resolves outside
+(guards against misuse or malicious orchestrator input). Non-existent paths are a no-op
+(report as skipped with reason `not found`, exit 0 for that entry).
+
+```bash
+IFS=',' read -ra candidates <<< "$PATHS_CSV"
+for dir in "${candidates[@]}"; do
+  # Reject if $dir is not under $WORKTREES_DIR
+  case "$(cd "$dir" 2>/dev/null && pwd -P)" in
+    "$WORKTREES_DIR"/*) : ;;  # OK
+    *) echo "refusing: $dir is not under $WORKTREES_DIR"; continue ;;
+  esac
+done
+```
+
+**Glob mode** (default): match only `$WORKTREES_DIR/agent-*/` — do not touch sibling
+subdirectories the user may have created for other purposes.
 
 ```bash
 shopt -s nullglob
 candidates=("$WORKTREES_DIR"/agent-*/)
 ```
 
-If the list is empty, print `nothing to clean` and exit 0.
+If the candidate list is empty (either mode), print `nothing to clean` and exit 0.
 
 ### 3. Safety guard
 
@@ -106,9 +137,11 @@ Include the per-entry paths so the user can audit.
 ## When to Invoke
 
 - **As a final step of an orchestrator pipeline** (`implement-orchestrator`,
-  `implement-till-merge`) — mandatory, runs even on the error path.
-- **Manually after an interrupt** — Ctrl+C'd a long-running pipeline? Run this to reclaim
-  the disk space the harness left behind.
+  `implement-till-merge`) — mandatory, runs even on the error path. Orchestrators that
+  dispatched isolated agents should pass `--paths=<csv>` with the paths returned by the
+  Agent tool so peer sessions' worktrees are never touched.
+- **Manually after an interrupt** — Ctrl+C'd a long-running pipeline? Run this (glob
+  mode, no `--paths`) to reclaim the disk space the harness left behind.
 - **Periodically** — if you regularly use skills that launch isolated agents, run it as
   housekeeping.
 
@@ -120,3 +153,5 @@ Include the per-entry paths so the user can audit.
 | Targeting the user-global `~/.claude/skills/cleanup/` | That skill is for sibling worktrees in `~/dev/<repo>-<branch>/`. This skill is for per-agent worktrees *inside* a single repo. Different scope, both needed. |
 | Removing `$WORKTREES_DIR` itself | Only remove `agent-*/` children. The parent dir is harmless and may be recreated by future agents. |
 | Skipping `worktree prune` | Git keeps dangling registrations in `.git/worktrees/` even after the directory is gone. Always prune. |
+| Orchestrator uses glob mode in a multi-session repo | Orchestrators MUST pass `--paths=<csv>` with the paths captured from the Agent tool's return value. Glob mode can falsely match a peer session's active worktree during a quiescent moment. |
+| Passing paths outside `$WORKTREES_DIR` | The skill rejects paths whose realpath is not under `.claude/worktrees/`. Orchestrators should only ever pass paths returned by the Agent tool. |
