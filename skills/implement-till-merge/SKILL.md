@@ -26,9 +26,20 @@ Wait for `/implement-orchestrator` to complete. All steps should be committed.
 
 Use the Skill tool to invoke `pr-make-till-merge` with any PR-related and babysit-related arguments the user provided.
 
+### Step 3: Cleanup agent worktrees
+
+After the PR reaches the merge-ready state (or the babysit loop exhausts its rounds),
+invoke `cleanup-worktrees` to remove any stale `.claude/worktrees/agent-*/` entries the
+pipeline may have left behind. Mandatory — runs even when Step 1 or Step 2 fails.
+
+**REQUIRED SKILL:** cleanup-worktrees
+
+Do not pass `--force` — the skill's uncommitted-changes guard preserves in-flight work.
+
 ## Common Mistakes
 
 | Mistake | Fix |
 |---------|-----|
 | Starting PR before implementation is done | /implement-orchestrator must finish and commit all steps first |
 | Skipping implementation when plan exists | Always run /implement-orchestrator — it handles the plan |
+| Skipping Step 3 cleanup on pipeline failure | Cleanup is mandatory on every exit path, including errors — agent worktrees accumulate otherwise |

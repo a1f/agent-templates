@@ -30,6 +30,10 @@ Launch 2 subagents simultaneously via the Task tool:
 
 No worktrees required -- implementation files and test files are naturally separate paths.
 
+**Policy:** do not pass `isolation: "worktree"` to the Task tool. If a future change needs
+it, that change must invoke `/cleanup-worktrees` before returning to the orchestrator —
+otherwise `.claude/worktrees/agent-*/` dirs (≈full repo checkout each) accumulate.
+
 ### 2. Monitor and Handle Errors
 
 If one agent fails:
