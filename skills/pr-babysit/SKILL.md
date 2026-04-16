@@ -12,14 +12,15 @@ Automate the post-PR feedback loop. Polls for new review comments, fixes them, c
 
 Loop:
   1. Fetch PR comments & reviews + CI status + mergeable status (parallel)
-  2. Filter for unresolved/new comments since last check
-  3. Fix all actionable comments, then run quick gates once
-  4. Reply to question comments (parallel)
-  5. If CI failing → read logs, fix failures
-  6. If conflicts → rebase/merge main and resolve conflicts
-  7. If changes were made → commit & push, reset idle counter
-  8. If nothing left to fix AND CI green AND no conflicts → [READY TO MERGE]
-  9. Otherwise → wait interval, repeat
+  2. Filter for unresolved/new comments since last check, split by human vs bot
+  3. Human comments → trade-off assessment + user decision gate (AskUserQuestion or worksheet)
+  4. Fix all actionable comments per gate decisions (bot: auto; human: per decision), run quick gates once
+  5. Reply to question comments (bot: auto; human: only approved reply, in parallel)
+  6. If CI failing → read logs, fix failures
+  7. If conflicts → rebase/merge main and resolve conflicts
+  8. If changes were made → commit & push, reset idle counter
+  9. If nothing left to fix AND CI green AND no conflicts AND no undecided human comments → [READY TO MERGE]
+ 10. Otherwise → wait interval, repeat
 ```
 
 ## Prerequisites
@@ -105,7 +106,10 @@ TOTAL_WAIT_MINUTES = 0
 CONSECUTIVE_READY_COUNT = 0              # must reach 2 before declaring ready
 PUSHED_AT = None                         # set to current time after each push
 EXTERNAL_CHECK_PATIENCE = 10             # separate counter for external check waits
+DECISIONS = load_decisions(PR_NUMBER)    # comment_id → {decision, drafted_reply?, custom?} — persisted across iterations and skill runs
 ```
+
+`DECISIONS` persists at `.claude/pr-babysit/<PR_NUMBER>/decisions.json`. Load on startup (create empty if missing), write after every human gate decision. This survives Ctrl-C, re-invocations, and worksheet round-trips so the user is never asked twice about the same comment.
 
 Three counters prevent infinite loops:
 - `IDLE_ROUNDS_REMAINING` resets when progress is made (commit & push). Exhaustion means the PR stalled.
@@ -153,7 +157,7 @@ fi
 
 If any gate fails, fix the errors, commit, and push before continuing to 1c. This avoids a wasted wait cycle.
 
-Skip on subsequent iterations — the existing gate run in step 1d (after comment fixes) handles those.
+Skip on subsequent iterations — the existing gate run in step 1f (after comment fixes) handles those.
 
 ### 1c. Fetch New Data (Parallel)
 
@@ -191,16 +195,21 @@ Update `LAST_CHECKED` to current UTC timestamp after fetching.
 
 ### 1d. Categorize Comments
 
-For each new comment (from inline comments, review bodies, AND issue-level comments), categorize:
+For each new comment (from inline comments, review bodies, AND issue-level comments), tag both the **author type** and the **category**.
 
+**Author type:**
+- **Bot** — `user.type == "Bot"` OR login ends in `[bot]` OR login is in the known-bot allowlist: `github-actions`, `cursor-bugbot`, `codecov`, `coderabbitai`, `renovate-bot`, `sonarcloud`. Belt-and-suspenders: check all three, not just one.
+- **Human** — everything else.
+
+**Category:**
 1. **Actionable code change** — requests a specific code modification (e.g., "rename this variable", "add error handling here", "this should use X instead of Y")
 2. **Question** — asks something that needs a reply (e.g., "why did you choose this approach?", "is this tested?")
 3. **Informational / FYI** — no action needed (e.g., coverage reports, bot status messages, "LGTM", acknowledgements)
 4. **Stale bot comment** — a bot reviewed an old commit and the referenced lines have changed since
 
-Skip informational comments entirely.
+Skip informational comments entirely. **Bot comments flow automatically through 1f/1g. Human comments MUST go through the 1e gate first — never auto-fix or auto-reply to a human.**
 
-**Auto-dismiss stale bot comments:** For each comment from a bot (user login ends in `[bot]` or is a known bot like `github-actions`, `cursor-bugbot`, etc.), check if the referenced lines changed since the comment was posted:
+**Auto-dismiss stale bot comments:** For each bot comment, check if the referenced lines changed since the comment was posted:
 
 ```bash
 # Get the commit SHA the comment refers to
@@ -211,21 +220,86 @@ git diff "$COMMENT_COMMIT"..HEAD -- "$FILE_PATH" | grep -q "^@@.*$LINE_NUMBER"
 
 If the lines changed, auto-reply: "This was addressed in a subsequent commit." and skip the comment. Only process bot comments on unchanged code as actionable.
 
-### 1e. Fix All Actionable Comments
+### 1e. Human Comment Gate
 
-Process all actionable comments, then run gates once:
+Human comments (actionable + question) require an explicit user decision before any code change or reply is posted. Bot comments do not enter this gate.
 
-1. For each actionable comment:
-   - Read the referenced file at the referenced line
-   - Understand the reviewer's request in context
-   - Apply the fix
-   - **Reply to the comment** confirming it was addressed:
-     ```bash
-     gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" \
-       -f body="Fixed — <brief description of what was changed>."
-     ```
-     This lets the reviewer know the feedback was acted on without having to re-read the diff.
-2. After **all** comment fixes are applied, run quick gates once:
+**1. Filter already-decided comments.** For each new human comment, look up `DECISIONS[comment_id]`:
+- Decision `apply`, `push-back`, `dismiss` — skip (terminal, already handled or explicitly waived).
+- Decision `defer` or no entry — include in the gate batch.
+- If the comment body changed since the decision was recorded — include, re-present.
+
+**2. Build a trade-off assessment per batched comment.** For each, READ the referenced file AND run `git blame` on the referenced line BEFORE drafting the assessment. Skipping this step makes the gate empty ceremony. Each assessment contains:
+
+- **What's asked** — one-sentence paraphrase of the reviewer's request
+- **Current code** — the referenced lines as they are now (actual snippet, not a description)
+- **Proposed change** — what applying the comment would do, concretely
+- **Pros / Cons** — factual tradeoffs
+- **Blast radius** — files and call-sites affected
+- **Effort** — rough time estimate
+- **Drafted push-back** — a respectful reply the user can post if they disagree, grounded in the actual code
+
+**3. Present assessments and collect decisions.**
+
+**Fast path (≤ 5 human comments):** emit a single `AskUserQuestion` tool call with one question per comment (questions in parallel). Each question's `header` is `<author>@<path>:<line>`, `question` text is a terse 1-2 line summary of the ask, and the full assessment goes in the option descriptions where relevant. Offer these four options per comment:
+- `Apply` — accept the feedback. For **actionable** comments: 1f applies the proposed change and posts `Fixed — <summary>`. For **questions**: 1g posts the drafted answer.
+- `Push back` — reject the feedback. For **actionable**: no code change; 1g posts the drafted push-back reply. For **questions**: 1g posts a counter-argument drafted during the gate.
+- `Defer` — no action this iteration. The comment will be re-presented next round (blocks readiness).
+- `Dismiss` — no action, no reply. Treated as resolved locally (does NOT block readiness). Use when the user deems the comment not applicable.
+
+**Slow path (> 5 human comments):** write all assessments to `.claude/pr-babysit/<PR_NUMBER>/decisions.md` with a `Decision:` field per comment (default `defer`). Print:
+
+```
+<N> human comments need decisions — edit .claude/pr-babysit/<PR_NUMBER>/decisions.md and re-invoke /pr-babysit to continue.
+```
+
+Then exit the skill (do NOT sleep and loop — the user may take hours to review). On the next invocation, Phase 0 detects the worksheet, parses `Decision:` lines into `DECISIONS`, archives the file to `decisions.md.done`, and resumes normal flow.
+
+Worksheet format per comment:
+
+```markdown
+## <N>. @<author> — <path>:<line>
+> <comment body>
+
+**Current code:**
+```<lang>
+<snippet>
+```
+
+**Proposed change:** <...>
+**Pros / Cons:** <...>
+**Blast radius:** <...>
+**Effort:** <...>
+**Drafted push-back:** <...>
+
+**Decision:** defer    <!-- one of: apply | push-back | defer | dismiss -->
+```
+
+**4. Persist `DECISIONS` to disk.** After every decision (AskUserQuestion response or worksheet parse), write `DECISIONS` to `.claude/pr-babysit/<PR_NUMBER>/decisions.json`. Schema: `{<comment_id>: {decision, drafted_reply?, custom?, comment_body_sha256, decided_at}}`. The `comment_body_sha256` lets step 1 above detect when the reviewer edited the comment.
+
+**5. Gate-level readiness rule.** If any human comment lacks a terminal decision (`apply` / `push-back` / `dismiss`) after the gate runs, the PR is NOT ready this iteration — even if all other conditions are green.
+
+### 1f. Fix All Actionable Comments
+
+Process actionable comments, then run gates once.
+
+**1. Bot actionable comments** (auto-flow, no gate):
+- Read the referenced file at the referenced line
+- Understand the reviewer's request in context
+- Apply the fix
+- Reply on the thread:
+  ```bash
+  gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments/$COMMENT_ID/replies" \
+    -f body="Fixed — <brief description of what was changed>."
+  ```
+
+**2. Human actionable comments** — consult `DECISIONS[comment_id].decision`:
+- `apply` — apply the change described in the assessment's "Proposed change", then post `Fixed — <summary>` reply (same API call as above).
+- `push-back` — do NOT change code. The drafted push-back reply is posted in 1g, not here.
+- `defer` — skip entirely this iteration. Do not change code, do not reply. Comment will be re-presented next round.
+- `dismiss` — skip entirely. Do not change code, do not reply. Decision persists so this won't re-appear.
+
+**3. After all fixes are applied**, run quick gates once:
    ```bash
    # Run format + lint gates from gates.json if it exists
    if [ -f .claude/gates.json ]; then
@@ -238,9 +312,17 @@ Process all actionable comments, then run gates once:
    fi
    ```
 
-### 1f. Reply to Questions
+### 1g. Reply to Questions
 
-For each question comment, reply with a concise answer. Fire all replies in parallel.
+Fire replies in parallel.
+
+**Bot questions** (rare): auto-reply with a concise, code-grounded answer.
+
+**Human questions AND human push-backs from 1f:** post ONLY the reply approved in the gate. Look up `DECISIONS[comment_id].decision`:
+- `apply` / `push-back` — post the drafted reply stored in `DECISIONS[comment_id].drafted_reply`. For `apply` the drafted reply is `Fixed — <summary>` (posted in 1f if the comment was actionable; posted here if it was a question). For `push-back` it's the rebuttal drafted during the gate.
+- `defer` / `dismiss` — no reply this iteration.
+
+Never write a human reply that wasn't approved in 1e.
 
 For **inline review comments**, reply in the review thread:
 ```bash
@@ -255,7 +337,7 @@ gh pr comment "$PR_NUMBER" --body "$REPLY_TEXT"
 
 Base replies on actual code and commit history — don't make things up.
 
-### 1g. Fix CI Failures
+### 1h. Fix CI Failures
 
 From the checks data fetched in 1c, categorize each check:
 - **Passing** (`conclusion: "SUCCESS"` or `conclusion: "NEUTRAL"`) — no action, terminal state
@@ -272,7 +354,7 @@ If any checks are failing:
 3. Analyze the failure and apply fixes
 4. If the failure is a flaky test or infrastructure issue (not caused by code), note it but don't modify code
 
-### 1h. Resolve Merge Conflicts
+### 1i. Resolve Merge Conflicts
 
 From the mergeable data fetched in 1c, check if `mergeable` is `"CONFLICTING"` or `mergeStateStatus` is `"DIRTY"`.
 
@@ -296,7 +378,7 @@ If conflicts exist:
    - Otherwise, resolve each conflict by reading both sides and choosing the correct resolution
    - Continue: `git rebase --continue`
 
-### 1i. Evaluate and Act
+### 1j. Evaluate and Act
 
 Increment `TOTAL_ITERATIONS`.
 
@@ -329,7 +411,11 @@ ALL_COMMENTS=$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments" --paginate)
 # Exclude: bot comments, informational comments, comments authored by the current user
 ```
 
-If unreplied actionable comments exist: fix them (step 1e), reply confirming the fix, then re-evaluate.
+Treat unreplied comments by author type:
+- **Unreplied bot comments** — route to step 1f and fix them, reply confirming the fix, then re-evaluate.
+- **Unreplied human comments with a terminal decision** (`apply` / `push-back`) — route to 1f/1g to execute the approved action. Don't re-gate.
+- **Unreplied human comments with `dismiss`** — do not block readiness. User waived the reply.
+- **Unreplied human comments with `defer` or no cached decision** — route back to the 1e gate this iteration. These DO block readiness.
 
 **HARD RULE: NEVER declare `[READY TO MERGE]` when ANY check shows state "pending", "queued", or "in_progress". No exceptions. No "non-required" distinction. No "external check" bypass. If a check is registered on the PR, it MUST reach a terminal state before readiness can be evaluated. Terminal states: SUCCESS, FAILURE, NEUTRAL, SKIPPED (with duration > 0). Non-terminal: PENDING, QUEUED, IN_PROGRESS, SKIPPED (with duration 0 — still initializing).**
 
@@ -351,7 +437,7 @@ If unreplied actionable comments exist: fix them (step 1e), reply confirming the
 **If no changes were needed** and all checks are terminal but some required checks failed with unfixable issues:
 → Reset `CONSECUTIVE_READY_COUNT` to 0, decrement `IDLE_ROUNDS_REMAINING`
 
-### 1j. Check Exit Conditions
+### 1k. Check Exit Conditions
 
 Check exit conditions before waiting:
 
@@ -392,7 +478,7 @@ Otherwise:
 | Running gates per-comment | Batch all comment fixes first, then run gates once |
 | Modifying code for flaky test failures | Note flaky tests but don't change code unless it's a real bug |
 | Declaring ready after one clean pass | Must get 2 consecutive ready verdicts to avoid race conditions |
-| Waiting twice in one iteration | Wait happens in exactly one place: step 1j |
+| Waiting twice in one iteration | Wait happens in exactly one place: step 1k |
 | Replying to top-level reviews via comment reply API | Top-level review bodies use `gh pr comment`, inline comments use the replies API |
 | Declaring ready when checks are empty | Empty checks after push = pending, not absent. Wait 60s minimum after push, require at least one check before declaring ready. |
 | Declaring ready with pending external checks | ALL checks must be terminal. No "non-required" exceptions. No "external check" bypass. |
@@ -400,3 +486,9 @@ Otherwise:
 | Counting external check waits against idle rounds | Use `EXTERNAL_CHECK_PATIENCE` for external-only waits, not `IDLE_ROUNDS_REMAINING`. |
 | Declaring ready with unreplied comments | ALL actionable comments must be addressed and replied to before declaring ready. |
 | Only fetching pulls/N/comments | MUST also fetch issues/N/comments — bot comments (GitHub Actions, Cursor Bugbot) are posted there, not on the review endpoint. |
+| Auto-fixing or auto-replying to a human comment | Human comments (actionable or question) MUST go through the 1e gate. Never post a reply or change code for a human without a cached `apply` / `push-back` decision. |
+| Asking the user twice about the same comment | Check `DECISIONS[comment_id]` in 1e; skip any comment with a terminal decision. Re-present only when body changed or decision was `defer`. |
+| Skipping the read-and-blame step before drafting the assessment | Empty ceremony. Always read the referenced file and run `git blame` on the line before writing the assessment — otherwise the gate adds friction without value. |
+| Detecting bots by login suffix only | Check all three: `user.type == "Bot"`, login ends in `[bot]`, login in the known-bot allowlist. Bots like `cursor-bugbot` don't have the `[bot]` suffix. |
+| Sleeping/looping while waiting for the worksheet | When >5 human comments trigger the slow path, exit the skill — do NOT sleep indefinitely. User re-invokes after editing the file. |
+| Declaring ready while a human comment is `defer` | `defer` is explicitly "decide later" — it blocks readiness. Only `apply` / `push-back` / `dismiss` (and bot completion) clear the readiness check. |
