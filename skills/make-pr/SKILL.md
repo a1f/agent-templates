@@ -15,6 +15,7 @@ Current branch with commits
   --> Phase 1.5: Simplify (reuse, quality, efficiency review via /simplify)
   --> Phase 2: Quick Review (single-pass diff review, fix CRITICAL/MAJOR, max 2 iters)
   --> Phase 2.5: Review and Fix (deeper review via /review-and-fix)
+  --> Phase 2.7: Agent Review (comprehensive specialized-agent review via /pr-review-toolkit:review-pr)
   --> Phase 3: Push + PR Lifecycle (create or update PR, link issue, assign reviewers)
 ```
 
@@ -43,6 +44,7 @@ Parse arguments from the user's message. All are optional:
 | `--title="..."` | Generated from commits | `--title="Add user auth"` |
 | `--base=branch` | Repository default branch | `--base=develop` |
 | `--draft` | Not draft | `--draft` |
+| `--no-agent-review` | Agent review enabled | `--no-agent-review` |
 
 ## Phase 0: Discovery
 
@@ -265,6 +267,48 @@ If CRITICAL or MAJOR issues found:
 
 After the quick review, invoke `/review-and-fix` for a deeper pass. Use the Skill tool to invoke `review-and-fix` with `--base=$BASE_BRANCH`. This catches issues the quick review may have missed. If `/review-and-fix` makes changes, it commits them — re-run gates (Phase 1) with max 2 more iterations before proceeding.
 
+## Phase 2.7: Agent Review
+
+Run the comprehensive multi-agent review via the `pr-review-toolkit` plugin. Use the Skill tool to invoke `pr-review-toolkit:review-pr` with argument `all parallel` so all applicable specialized agents run concurrently.
+
+The toolkit auto-selects agents based on what changed in the diff:
+
+- **code-reviewer** — general quality and CLAUDE.md compliance (always)
+- **pr-test-analyzer** — behavioral test coverage (if test files changed)
+- **silent-failure-hunter** — error handling and fallback logic (if error paths changed)
+- **comment-analyzer** — comment accuracy (if comments/docs added)
+- **type-design-analyzer** — type encapsulation and invariants (if new types added)
+
+### 2.7a. Apply Findings
+
+The toolkit returns an aggregated report with findings bucketed by severity. Treat them as follows:
+
+| Toolkit severity | Action |
+|------------------|--------|
+| **Critical Issues** | Fix immediately |
+| **Important Issues** | Fix immediately |
+| **Suggestions** | Skip — not blocking for PR creation |
+
+Read each referenced file at the flagged `file:line`, understand context, then apply the fix. Don't blindly apply — if a finding is a false positive, note it in the PR body instead of fixing.
+
+### 2.7b. Commit and Re-gate
+
+If fixes were applied:
+
+1. Stage only the files modified by fixes
+2. Commit: `fix: address agent review findings — <summary>`
+3. Re-run gates (Phase 1) with max 2 more iterations
+
+**Max 2 iterations of Phase 2.7.** If Critical/Important issues persist after 2 passes, list them in the PR body under a `## Known Issues` section and proceed to Phase 3.
+
+### 2.7c. Skip Conditions
+
+Skip Phase 2.7 if any of the following hold (record the reason in the final output):
+
+- Diff is under 20 lines changed — the earlier phases already cover it
+- `.claude/gates.json` has `"skip_agent_review": true`
+- User passed `--no-agent-review` flag
+
 ## Phase 3: PR Lifecycle
 
 ### 3a. Debug Marker Scan
@@ -360,3 +404,6 @@ No temporary directory needed. All information comes from git, GitHub, and `.cla
 | Extracting only format/lint gates from CI | Extract ALL gates — compare extracted categories against CI steps, warn if typecheck/test are missing |
 | Skipping /issue-make | ALWAYS run /issue-make in Phase 3d — it ensures issue exists with planning artifacts |
 | Pushing before review completes | Phase 2 (Quick Review) MUST finish before Phase 3 (Push). Never skip review. |
+| Fixing Suggestions from agent review | Phase 2.7 fixes only Critical/Important. Suggestions go in the PR body or are skipped entirely. |
+| Looping Phase 2.7 until every finding is gone | Cap at 2 iterations. Persistent Critical/Important findings go under `## Known Issues` in the PR body. |
+| Running agent review on trivial diffs | Skip Phase 2.7 when the diff is under 20 lines — earlier phases already cover it. |
