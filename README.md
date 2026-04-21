@@ -4,11 +4,21 @@ A shareable collection of Claude Code skills, hooks, language rules, and templat
 
 ## Getting Started
 
+Clone the repo and run `install.sh` twice — once to install the global pieces
+(skills, hooks, settings) and once per project to install the per-project
+language rules:
+
 ```bash
-git clone https://github.com/anthropics/agent-templates.git
+git clone <your-repo-url> agent-templates
 cd agent-templates
-./install.sh      # install everything (rules + skills + hooks)
-./uninstall.sh    # remove everything (restores backups)
+./install.sh                 # installs skills + hooks + settings into ~/.claude/
+                             # (rules are skipped here with a warning — see step 2)
+
+cd ~/your-project
+~/path/to/agent-templates/install.sh   # installs rules into this project's .claude/rules/
+                                       # (skills/hooks/settings are already global, idempotent)
+
+./uninstall.sh                         # remove everything (restores backups)
 ```
 
 Re-run `./install.sh` to reinstall (picks up local changes). To sync with upstream: `git pull && ./install.sh`.
@@ -19,10 +29,42 @@ For interactive component picking, dry-runs, or installing into a specific proje
 
 ### Prerequisites
 
-- `gh` CLI authenticated (`gh auth login`) with `repo` scope; for project linking via `/make-pr` and `/issue-make`, also run `gh auth refresh -s read:project,project`
-- `jq` installed
-- Claude Code CLI installed
-- Verify the install with `./validate.sh`
+| Tool | Required by | Install (macOS) | Install (Debian/Ubuntu) |
+|------|-------------|-----------------|--------------------------|
+| `git` ≥ 2.5 | Worktree skills (`wt-create`, `cleanup-worktrees`) | `brew install git` | `apt install git` |
+| `jq` | Installer (`at`), several hooks and skills | `brew install jq` | `apt install jq` |
+| `curl` | `notify-slack.sh` | preinstalled | `apt install curl` |
+| `gh` | `make-pr`, `issue-make`, `check-github-issues.sh`, `pr-babysit` | `brew install gh` | `apt install gh` |
+| `tmux` | `wt-create` (session commands) | `brew install tmux` | `apt install tmux` |
+| `uv` | `tools/multi-review` | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `shellcheck` (optional) | `./validate.sh` hook linting | `brew install shellcheck` | `apt install shellcheck` |
+| `claude` CLI | All skills (the runtime) | Claude Code installer | Claude Code installer |
+| `codex` CLI (optional) | `/multi-review` (second reviewer) | vendor installer | vendor installer |
+
+Verify the installation with `./validate.sh`.
+
+### Per-teammate credential setup
+
+Every teammate runs this once after cloning:
+
+1. **GitHub CLI** — authenticate with the scopes required by `make-pr` and `issue-make`:
+
+   ```bash
+   gh auth login -s repo,read:project,project
+   ```
+
+   Already logged in? Refresh scopes: `gh auth refresh -s read:project,project`.
+
+2. **Slack notifications** (optional, per-project opt-in) — set the credentials and the allow-list alongside them, preferably via direnv or a project-local shell rc rather than `~/.zshrc`:
+
+   ```bash
+   export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+   export CLAUDE_SLACK_REPOS="project-one,project-two"
+   ```
+
+   `CLAUDE_SLACK_REPOS` is required for the hook to fire in any project — see [Slack Notification Hook](#slack-notification-hook-hooksnotify-slacksh) below for the two delivery modes (webhook vs Bot API).
+
+3. **Multi-model review CLIs** (optional, only for `/multi-review`) — authenticate `claude` (always available if you have Claude Code installed) and `codex` if you want a second reviewer. See each vendor's docs.
 
 ### Mental model
 
@@ -163,9 +205,21 @@ Rules are installed per-project into `.claude/rules/` by `./install.sh`. Each `r
 
 ### Slack Notification Hook (`hooks/notify-slack.sh`)
 
-Sends a Slack message when Claude Code needs input (`Notification`) or finishes a task (`Stop`). Messages include the user's original task, notification context, repo name, and branch. Silently no-ops if no Slack credentials are set. Never blocks Claude -- always exits 0.
+Sends a Slack message when Claude Code needs input (`Notification`) or finishes a task (`Stop`). Messages include the user's original task, notification context, repo name, and branch. Silently no-ops if no Slack credentials are set or if the current repo isn't on the opt-in list. Never blocks Claude -- always exits 0.
 
-Two modes are supported:
+#### Per-project opt-in: `CLAUDE_SLACK_REPOS` (required)
+
+The hook is installed globally into `~/.claude/hooks/` and fires on every Claude Code session. To prevent credentials exported once in `~/.zshrc` from posting messages about personal or client projects, the hook **requires an explicit per-project opt-in**: set `CLAUDE_SLACK_REPOS` to a comma-separated list of repo basenames where notifications should fire. Unmatched repos exit silently even with credentials set.
+
+```bash
+export CLAUDE_SLACK_REPOS="my-team-repo,another-team-repo"
+```
+
+Matching is on the output of `basename $(git rev-parse --show-toplevel)` — the directory name, not the full path. Prefer setting `CLAUDE_SLACK_REPOS` (and the credential vars below) via per-project tooling such as direnv or a project-local shell rc, rather than globally in `~/.zshrc`.
+
+#### Delivery modes
+
+Two delivery modes are supported:
 
 | Mode | Variables | Threading | Message Updates |
 |------|-----------|-----------|-----------------|
@@ -180,13 +234,14 @@ Bot API mode groups all events from the same Claude Code session into a single S
 2. Name it (e.g. "Claude Code Notifications"), pick your workspace
 3. Left sidebar: **Incoming Webhooks** → toggle **On**
 4. Click **Add New Webhook to Workspace** → pick a channel
-5. Copy the webhook URL and add to your shell profile (`~/.zshrc` or `~/.bashrc`):
+5. Set the webhook URL and the per-project allow-list (prefer direnv or a project-local rc over `~/.zshrc` for both):
 
 ```bash
 export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../xxx"
+export CLAUDE_SLACK_REPOS="my-team-repo"
 ```
 
-6. Verify with `./validate.sh --hooks` — it will confirm the variable is set.
+6. Verify with `./validate.sh --hooks` — it will confirm the variables are set.
 
 #### Bot API Setup (threading)
 
@@ -195,18 +250,25 @@ export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../xxx"
 3. **Install to Workspace** → copy the **Bot User OAuth Token** (`xoxb-...`)
 4. Invite the bot to your channel: `/invite @YourBotName`
 5. Get the channel ID (right-click channel name → **View channel details** → copy ID)
-6. Add to your shell profile:
+6. Set the credentials and the per-project allow-list:
 
 ```bash
 export CLAUDE_SLACK_BOT_TOKEN="xoxb-..."
 export CLAUDE_SLACK_CHANNEL="C0123456789"
+export CLAUDE_SLACK_REPOS="my-team-repo"
 ```
 
-Both modes can be configured simultaneously — bot API takes priority when available.
+Both delivery modes can be configured simultaneously — bot API takes priority when available. `CLAUDE_SLACK_REPOS` is required for either mode to fire.
 
 ### Auto-Approve Hook (`hooks/auto-approve.sh`)
 
 Runs on `PreToolUse` and auto-approves safe, read-only tools (Read, Glob, Grep, LS, WebSearch, WebFetch, NotebookRead). Reduces permission prompts during agentic runs. Fails open if `jq` is not installed.
+
+### GitHub Issue Integration Hook (`hooks/check-github-issues.sh`)
+
+Runs on `PostToolUse` with matcher `EnterPlanMode`. When Claude enters plan mode, the hook injects a `systemMessage` asking Claude to check for related GitHub issues (`gh issue list`) before planning, and optionally link or create a tracking issue for the plan.
+
+Short-circuits silently when any of these are true: `jq` not installed, `gh` not installed, `gh auth status` fails, or the current repo has no `github.com` remote. Teammates on GitLab, internal Git servers, or hosts without `gh` are unaffected.
 
 ### Installation
 
@@ -287,6 +349,29 @@ Background research used during development. These documents are not installed a
 3. Run `./validate.sh` to ensure all checks pass.
 4. Run `./validate.sh --smoke` to verify the installer still works end-to-end.
 5. Open a pull request with a clear description of the change.
+
+### Authoring a new skill
+
+1. Copy `skills/wt-create/` as the minimal template — it has a single `SKILL.md` with the right frontmatter shape and no supporting files.
+2. `SKILL.md` frontmatter requires two keys: `name` and `description`. The description **must** start with the literal string `"Use when"` — the validator fails otherwise (see `validate_skills` in `at`).
+3. Fill in the skill body below the frontmatter. Claude Code loads the body when the user types `/your-skill-name`.
+4. Run `./validate.sh --skills` to check the frontmatter, then `./validate.sh --smoke` to dry-run the installer end-to-end.
+
+### Authoring a rule
+
+Rules are per-project coding standards that load on matching file edits.
+
+1. Create `rules/<language>.md`.
+2. Frontmatter must include `paths:` as a **comma-separated quoted string** — not a YAML array. Example: `paths: "*.py, *.pyi"`. The validator rejects the `[...]` array form.
+3. Run `./validate.sh --rules`.
+
+### Authoring a hook
+
+1. Create `hooks/<name>.sh` with the shebang exactly `#!/usr/bin/env bash` — the validator compares for equality.
+2. `chmod +x hooks/<name>.sh`.
+3. Register the hook in `templates/settings-hooks.json` under the correct event (`PreToolUse`, `PostToolUse`, `Notification`, `Stop`) with an appropriate `matcher` (tool-name pattern, or empty for all tools).
+4. Run `./validate.sh --hooks` — `shellcheck --severity=warning` runs against every hook if installed.
+5. Run `./validate.sh --smoke` to verify the settings-template merge still produces a valid `~/.claude/settings.json`.
 
 ## License
 

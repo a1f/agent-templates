@@ -35,15 +35,6 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "mkdir -p /tmp/claude-steps && echo \"$(date -Iseconds)|${CLAUDE_PROJECT_DIR:-$(pwd)}|CHANGED\" >> /tmp/claude-steps/changes.log"
-          }
-        ]
-      },
-      {
         "matcher": "EnterPlanMode",
         "hooks": [
           {
