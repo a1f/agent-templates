@@ -15,7 +15,7 @@ Re-run `./install.sh` to reinstall (picks up local changes). To sync with upstre
 
 For interactive component picking, dry-runs, or installing into a specific project, see [Advanced: `at` CLI](#advanced-at-cli) below.
 
-## Getting Started
+## Using the Skills
 
 ### Prerequisites
 
