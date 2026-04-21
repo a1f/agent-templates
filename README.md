@@ -4,11 +4,21 @@ A shareable collection of Claude Code skills, hooks, language rules, and templat
 
 ## Getting Started
 
+Clone the repo and run `install.sh` twice — once to install the global pieces
+(skills, hooks, settings) and once per project to install the per-project
+language rules:
+
 ```bash
-git clone https://github.com/anthropics/agent-templates.git
+git clone <your-repo-url> agent-templates
 cd agent-templates
-./install.sh      # install everything (rules + skills + hooks)
-./uninstall.sh    # remove everything (restores backups)
+./install.sh                 # installs skills + hooks + settings into ~/.claude/
+                             # (rules are skipped here with a warning — see step 2)
+
+cd ~/your-project
+~/path/to/agent-templates/install.sh   # installs rules into this project's .claude/rules/
+                                       # (skills/hooks/settings are already global, idempotent)
+
+./uninstall.sh                         # remove everything (restores backups)
 ```
 
 Re-run `./install.sh` to reinstall (picks up local changes). To sync with upstream: `git pull && ./install.sh`.

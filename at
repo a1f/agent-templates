@@ -286,6 +286,18 @@ install_rules() {
   echo "  Target: $rules_dst"
   echo ""
 
+  # Refuse to install rules into the template repo itself. Rules are
+  # per-project; installing them into agent-templates/.claude/rules/ is
+  # always a mistake (the teammate's actual project gets nothing).
+  if [ "$TARGET_DIR" = "$SCRIPT_DIR" ]; then
+    warn "Refusing to install rules into the template repo (TARGET_DIR == SCRIPT_DIR)."
+    echo "  Rules are per-project. To install them, run from your project directory:"
+    echo "    cd <your-project> && $SCRIPT_DIR/install.sh"
+    echo "  or pass --target:"
+    echo "    $SCRIPT_DIR/at install --target=/path/to/your/project --non-interactive --all"
+    return 0
+  fi
+
   if [ ! -d "$rules_src" ]; then
     warn "Rules source directory not found: $rules_src"
     return 0
