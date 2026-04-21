@@ -23,7 +23,7 @@ Or install everything non-interactively:
 
 ### Prerequisites
 
-- `gh` CLI authenticated (`gh auth login`) with repo scope
+- `gh` CLI authenticated (`gh auth login`) with `repo` scope; for project linking via `/make-pr` and `/issue-make`, also run `gh auth refresh -s read:project,project`
 - `jq` installed
 - Claude Code CLI installed
 - Verify the install with `./validate.sh`
@@ -113,7 +113,7 @@ Top-level skills that run full workflows by composing lower-level skills.
 | Skill | Command | Purpose |
 |-------|---------|---------|
 | **plan-till-merge** | `/plan-till-merge` | Plan -> implement -> PR -> babysit. Composes: clean-code-planner -> implement-orchestrator -> issue-make -> make-pr -> pr-babysit |
-| **implement-till-merge** | `/implement-till-merge` | Implement a plan -> PR -> babysit. Composes: implement-orchestrator -> make-pr -> pr-babysit |
+| **implement-till-merge** | `/implement-till-merge` | Implement a plan -> PR -> babysit -> cleanup. Composes: implement-orchestrator -> pr-make-till-merge -> cleanup-worktrees |
 | **pr-make-till-merge** | `/pr-make-till-merge` | Create PR from current branch -> babysit. Composes: make-pr -> pr-babysit |
 
 #### Building blocks -- you invoke directly
@@ -137,7 +137,7 @@ Top-level skills that run full workflows by composing lower-level skills.
 
 #### Dispatched internally -- don't invoke directly
 
-These are called by `/implement-orchestrator`; invoking them directly is not the intended use.
+These skills are internal sub-components for orchestrator pipelines. Most users shouldn't invoke them directly.
 
 | Skill | Purpose |
 |-------|---------|
