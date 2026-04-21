@@ -2,24 +2,20 @@
 
 A shareable collection of Claude Code skills, hooks, language rules, and templates -- centered around a multi-phase agentic implementation workflow.
 
-## Quick Start
+## Getting Started
 
 ```bash
 git clone https://github.com/anthropics/agent-templates.git
 cd agent-templates
-./install.sh          # Interactive: pick components to install
+./install.sh      # install everything (rules + skills + hooks)
+./uninstall.sh    # remove everything (restores backups)
 ```
 
-Or install everything non-interactively:
+Re-run `./install.sh` to reinstall (picks up local changes). To sync with upstream: `git pull && ./install.sh`.
 
-```bash
-./install.sh --non-interactive --all
-./install.sh --target=/path/to/project --all   # Install to a specific project
-./install.sh --dry-run --all                   # Preview without changes
-./install.sh --uninstall                       # Restore from backups
-```
+For interactive component picking, dry-runs, or installing into a specific project, see [Advanced: `at` CLI](#advanced-at-cli) below.
 
-## Getting Started
+## Using the Skills
 
 ### Prerequisites
 
@@ -161,13 +157,7 @@ Opinionated, per-language coding standards that load automatically when editing 
 
 ### Installation
 
-Rules are installed per-project into `.claude/rules/`:
-
-```bash
-./install.sh   # Select [1] Language Rules
-```
-
-This copies each `rules/*.md` file to `<project>/.claude/rules/`, where Claude Code picks them up automatically based on the file type being edited.
+Rules are installed per-project into `.claude/rules/` by `./install.sh`. Each `rules/*.md` file is copied to `<project>/.claude/rules/`, where Claude Code picks them up automatically based on the file type being edited.
 
 ## Hooks
 
@@ -220,19 +210,24 @@ Runs on `PreToolUse` and auto-approves safe, read-only tools (Read, Glob, Grep, 
 
 ### Installation
 
-Hooks are installed globally to `~/.claude/hooks/` and registered in `~/.claude/settings.json`:
-
-```bash
-./install.sh   # Select [3] Hooks
-```
-
-The installer merges hook configuration from `templates/settings-hooks.json` into your existing `settings.json` using `jq`. If `jq` is not available, it prints the JSON for manual merging.
+Hooks are installed globally to `~/.claude/hooks/` and registered in `~/.claude/settings.json` by `./install.sh`. The installer merges hook configuration from `templates/settings-hooks.json` into your existing `settings.json` using `jq`. If `jq` is not available, it prints the JSON for manual merging.
 
 ## Templates
 
 ### Settings Hook Template (`templates/settings-hooks.json`)
 
 Pre-configured `settings.json` fragment that registers the Slack notification and auto-approve hooks on the correct event types (`Notification`, `Stop`, `PreToolUse`). The settings template is merged automatically when installing hooks.
+
+## Advanced: `at` CLI
+
+The two scripts above cover the common case. For anything more specific, use the `at` CLI directly:
+
+- `./at install` — interactive component picker (rules / skills / hooks / everything)
+- `./at install --all --dry-run` — preview a full install without writing
+- `./at install --all --target=/path/to/project` — install into a specific project
+- `./at uninstall --deep` — uninstall and also remove generated artifacts (`plans/`, `impl-temp/`, `code-spec.md`, `test-plan.md`)
+- `./at status` — show installation dashboard (what's installed, where, and when)
+- `./at --help` — full command reference
 
 ## Installation Details
 
@@ -243,7 +238,7 @@ Pre-configured `settings.json` fragment that registers the Slack notification an
 | Hooks | `~/.claude/hooks/*.sh` | Global (all projects) |
 | Settings | `~/.claude/settings.json` | Global (all projects) |
 
-The installer creates timestamped backups (`.bak.<timestamp>`) of any file it overwrites and records them in `.claude/.install-backup-manifest`. Run `./install.sh --uninstall` to restore all backups.
+The installer creates timestamped backups (`.bak.<timestamp>`) of any file it overwrites and records them in `.claude/.install-backup-manifest`. Run `./uninstall.sh` to restore all backups.
 
 ## Validation
 
