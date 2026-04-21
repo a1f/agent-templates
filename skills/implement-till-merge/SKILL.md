@@ -24,7 +24,7 @@ Wait for `/implement-orchestrator` to complete. All steps should be committed.
 
 ### Step 2: PR and Babysit
 
-Use the Skill tool to invoke `pr-make-till-merge` with any PR-related and babysit-related arguments the user provided.
+Use the Skill tool to invoke `pr-make-till-merge` with any PR-related and babysit-related arguments the user provided (`--issue`, `--reviewers`, `--no-reviewers`, `--title`, `--base`, `--draft`, `--no-agent-review`, `--interval`, `--max-rounds`).
 
 ### Step 3: Cleanup agent worktrees
 

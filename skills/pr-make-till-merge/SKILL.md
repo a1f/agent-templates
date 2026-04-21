@@ -18,7 +18,7 @@ Create a PR and babysit it through the review/CI cycle until it's ready to merge
 
 ### Step 1: Create/Update PR
 
-Use the Skill tool to invoke `make-pr` with all arguments the user provided that match `/make-pr` arguments (`--issue`, `--reviewers`, `--title`, `--base`, `--draft`).
+Use the Skill tool to invoke `make-pr` with all arguments the user provided that match `/make-pr` arguments (`--issue`, `--reviewers`, `--no-reviewers`, `--title`, `--base`, `--draft`, `--no-agent-review`).
 
 Wait for `/make-pr` to complete. If it fails (e.g., no commits, on base branch), stop and report the error.
 

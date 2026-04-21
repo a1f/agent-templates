@@ -41,6 +41,7 @@ Parse arguments from the user's message. All are optional:
 |-----|---------|---------|
 | `--issue=N` | Auto-detect or auto-create | `--issue=42` |
 | `--reviewers=user1,user2` | Inferred from recent commit authors | `--reviewers=alice,bob` |
+| `--no-reviewers` | Reviewers are added | `--no-reviewers` |
 | `--title="..."` | Generated from commits | `--title="Add user auth"` |
 | `--base=branch` | Repository default branch | `--base=develop` |
 | `--draft` | Not draft | `--draft` |
@@ -78,6 +79,8 @@ If a PR exists, store its number for Phase 3 (update instead of create).
 Issue detection and creation is handled by `/issue-make`. Pass `--issue=N` if the user provided one; otherwise `/issue-make` will auto-detect from the branch name or commit messages, or create a new issue.
 
 ### 0d. Reviewer Detection
+
+If `--no-reviewers` is passed, skip this step entirely — create the PR without any reviewers.
 
 If `--reviewers` is provided, use those. Otherwise, infer from recent commit history:
 
@@ -346,9 +349,11 @@ gh pr create \
   --base "$BASE_BRANCH" \
   --title "$PR_TITLE" \
   --body "$PR_BODY" \
-  --reviewer "$REVIEWERS" \
+  ${REVIEWERS:+--reviewer "$REVIEWERS"} \
   ${DRAFT:+--draft}
 ```
+
+When `--no-reviewers` is passed, `$REVIEWERS` is empty and the `--reviewer` flag is omitted entirely.
 
 **If PR already exists:**
 
