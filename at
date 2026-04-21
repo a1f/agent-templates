@@ -428,10 +428,26 @@ install_hooks() {
     if command -v jq >/dev/null 2>&1; then
       if [ -f "$settings_dst" ]; then
         backup_file "$settings_dst"
+        # Merge preserves all top-level keys from the destination and
+        # concatenates per-event hook arrays instead of replacing them.
+        # Dedup keys on (matcher, hooks) so re-installs stay idempotent.
         local merged
-        merged="$(jq -s '.[0] * .[1]' "$settings_dst" "$settings_src")"
+        merged="$(jq -s '
+          .[0] as $dst | .[1] as $srcV |
+          $dst | .hooks = (
+            ($dst.hooks // {}) as $dh |
+            ($srcV.hooks // {}) as $sh |
+            ((($dh | keys) + ($sh | keys)) | unique) as $events |
+            reduce $events[] as $e ({};
+              .[$e] = (
+                (($dh[$e] // []) + ($sh[$e] // []))
+                | unique_by({matcher: (.matcher // ""), hooks: .hooks})
+              )
+            )
+          )
+        ' "$settings_dst" "$settings_src")"
         echo "$merged" > "$settings_dst"
-        info "Deep-merged hook config into existing settings.json"
+        info "Merged hook config into existing settings.json (existing hook arrays preserved)"
       else
         local settings_dir
         settings_dir="$(dirname "$settings_dst")"
@@ -740,6 +756,13 @@ validate_smoke() {
   # shellcheck disable=SC2064
   trap "rm -rf '$tmpdir'" EXIT
 
+  # Pre-seed a sentinel settings.json to exercise the merge path (fresh tmpdir
+  # would otherwise hit only the "create new" branch and never test the merge).
+  mkdir -p "$tmpdir/.claude"
+  cat > "$tmpdir/.claude/settings.json" <<'EOF'
+{"hooks":{"Notification":[{"matcher":"","hooks":[{"type":"command","command":"ECHO_PRESERVED"}]}]}}
+EOF
+
   printf "  Running installer into temp dir: %s\n" "$tmpdir"
   local install_output
   if install_output=$(HOME="$tmpdir" "$SCRIPT_DIR/at" install --target="$tmpdir" --non-interactive --all 2>&1); then
@@ -790,6 +813,33 @@ validate_smoke() {
         pass "settings.json is valid JSON"
       else
         fail "settings.json is not valid JSON"
+      fi
+
+      # Merge-path assertions: the pre-seeded sentinel (ECHO_PRESERVED) must
+      # coexist with the template's Slack hook after the merge.
+      if jq -e '[.hooks.Notification[].hooks[] | select(.command == "ECHO_PRESERVED")] | length > 0' \
+           "$tmpdir/.claude/settings.json" >/dev/null 2>&1; then
+        pass "settings merge: existing Notification hook preserved"
+      else
+        fail "settings merge: existing Notification hook was lost (merge replaced the array)"
+      fi
+
+      if jq -e '[.hooks.Notification[].hooks[] | select(.command | test("notify-slack"))] | length > 0' \
+           "$tmpdir/.claude/settings.json" >/dev/null 2>&1; then
+        pass "settings merge: template notify-slack hook is present"
+      else
+        fail "settings merge: template notify-slack hook is missing"
+      fi
+
+      # Idempotency: re-running the installer must not duplicate the sentinel.
+      HOME="$tmpdir" "$SCRIPT_DIR/at" install --target="$tmpdir" --non-interactive --all >/dev/null 2>&1 || true
+      local preserved_count
+      preserved_count=$(jq '[.hooks.Notification[].hooks[] | select(.command == "ECHO_PRESERVED")] | length' \
+                           "$tmpdir/.claude/settings.json" 2>/dev/null || echo "0")
+      if [ "$preserved_count" = "1" ]; then
+        pass "settings merge: idempotent re-install keeps sentinel exactly once"
+      else
+        fail "settings merge: re-install produced $preserved_count sentinel entries (expected 1)"
       fi
     else
       warn "jq not installed, skipping JSON validation of settings.json"
