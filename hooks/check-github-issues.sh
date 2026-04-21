@@ -12,6 +12,14 @@ if ! command -v jq &>/dev/null; then
   exit 0
 fi
 
+# Short-circuit when this environment cannot act on GitHub issues. Teammates
+# on GitLab, internal Git servers, or hosts without gh installed should not
+# see the GitHub-specific planning playbook on every EnterPlanMode event.
+command -v gh >/dev/null 2>&1 || exit 0
+gh auth status >/dev/null 2>&1 || exit 0
+git rev-parse --show-toplevel >/dev/null 2>&1 || exit 0
+git remote -v 2>/dev/null | grep -q 'github\.com' || exit 0
+
 # Read hook input from stdin
 input=$(cat)
 

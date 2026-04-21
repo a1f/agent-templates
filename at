@@ -681,19 +681,31 @@ validate_hooks() {
         ;;
       check-github-issues.sh)
         if command -v jq >/dev/null 2>&1; then
-          local plan_input='{"tool_name":"EnterPlanMode","tool_result":{}}'
-          local plan_output
-          plan_output=$(echo "$plan_input" | "$hook_file" 2>/dev/null) || true
-          if [ -n "$plan_output" ]; then
-            if echo "$plan_output" | jq -e '.hookSpecificOutput.systemMessage' >/dev/null 2>&1; then
-              pass "$hook_name: EnterPlanMode input produces systemMessage"
-            else
-              fail "$hook_name: output missing hookSpecificOutput.systemMessage: $plan_output"
-            fi
+          # The hook short-circuits when the environment cannot act on GitHub
+          # issues (no gh, no gh auth, or no github.com remote). Skip the
+          # EnterPlanMode output assertion in that case — otherwise the
+          # validator fails on exactly the hosts the guard exists to help.
+          if ! command -v gh >/dev/null 2>&1 \
+             || ! gh auth status >/dev/null 2>&1 \
+             || ! git -C "$SCRIPT_DIR" remote -v 2>/dev/null | grep -q 'github\.com'; then
+            warn "$hook_name: gh/github remote unavailable, skipping EnterPlanMode mock test"
           else
-            fail "$hook_name: no output for EnterPlanMode input"
+            local plan_input='{"tool_name":"EnterPlanMode","tool_result":{}}'
+            local plan_output
+            plan_output=$(echo "$plan_input" | "$hook_file" 2>/dev/null) || true
+            if [ -n "$plan_output" ]; then
+              if echo "$plan_output" | jq -e '.hookSpecificOutput.systemMessage' >/dev/null 2>&1; then
+                pass "$hook_name: EnterPlanMode input produces systemMessage"
+              else
+                fail "$hook_name: output missing hookSpecificOutput.systemMessage: $plan_output"
+              fi
+            else
+              fail "$hook_name: no output for EnterPlanMode input"
+            fi
           fi
 
+          # Non-EnterPlanMode input must always produce no output — the new
+          # guard exits before the tool_name check so this remains silent.
           local other_input='{"tool_name":"Read","tool_input":{"file_path":"/tmp/test"}}'
           local other_output
           other_output=$(echo "$other_input" | "$hook_file" 2>/dev/null) || true

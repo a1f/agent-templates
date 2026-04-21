@@ -232,6 +232,12 @@ Both delivery modes can be configured simultaneously — bot API takes priority 
 
 Runs on `PreToolUse` and auto-approves safe, read-only tools (Read, Glob, Grep, LS, WebSearch, WebFetch, NotebookRead). Reduces permission prompts during agentic runs. Fails open if `jq` is not installed.
 
+### GitHub Issue Integration Hook (`hooks/check-github-issues.sh`)
+
+Runs on `PostToolUse` with matcher `EnterPlanMode`. When Claude enters plan mode, the hook injects a `systemMessage` asking Claude to check for related GitHub issues (`gh issue list`) before planning, and optionally link or create a tracking issue for the plan.
+
+Short-circuits silently when any of these are true: `jq` not installed, `gh` not installed, `gh auth status` fails, or the current repo has no `github.com` remote. Teammates on GitLab, internal Git servers, or hosts without `gh` are unaffected.
+
 ### Installation
 
 Hooks are installed globally to `~/.claude/hooks/` and registered in `~/.claude/settings.json` by `./install.sh`. The installer merges hook configuration from `templates/settings-hooks.json` into your existing `settings.json` using `jq`. If `jq` is not available, it prints the JSON for manual merging.
