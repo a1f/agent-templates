@@ -1,14 +1,14 @@
 ---
-name: review-that
-description: Use when the user wants a plan or technical document critiqued by multiple independent perspectives and the critiques addressed, or invokes /review-that. Inspects the target, selects 5 applicable reviewers from a lens palette, aggregates their feedback, addresses each comment, and returns a summary.
+name: review-and-fix-that
+description: Use when the user wants a plan or technical document critiqued by multiple independent perspectives and the critiques addressed, or invokes /review-and-fix-that. Inspects the target, selects 5 applicable reviewers from a lens palette, aggregates their feedback, addresses each comment, and returns a summary.
 ---
 
-# Review That
+# Review And Fix That
 
 Critique a plan or technical document (`plan.md`, `architecture.md`, `options.md`, design doc, README, tutorial, API reference, PR description, …) by inspecting the target, dispatching **5 fully independent reviewers in parallel** with lenses that fit the target, then addressing each comment and reporting a summary.
 
 ```
-/review-that [path | description of the target]
+/review-and-fix-that [path | description of the target]
 
   1. Resolve the target and select 5 applicable reviewers
   2. Dispatch the 5 reviewers in parallel
@@ -23,7 +23,7 @@ Critique a plan or technical document (`plan.md`, `architecture.md`, `options.md
 
 Determine what is being reviewed. In order of preference:
 
-1. An explicit path the user gave (`/review-that plan.md`, `/review-that docs/auth.md`)
+1. An explicit path the user gave (`/review-and-fix-that plan.md`, `/review-and-fix-that docs/auth.md`)
 2. A standard planning file at the repo root (`plan.md`, `architecture.md`, `options.md`) — if exactly one exists and the user did not name one, use it
 3. A document referenced in the conversation — confirm the path with the user before proceeding
 4. Free-form content from the conversation — write it to a temporary file at `$(git rev-parse --show-toplevel)/review-target.md` before reviewing, so reviewers have a stable artifact to read
@@ -212,7 +212,7 @@ Independence is the whole point of dispatching 5 reviewers — if you compromise
 - Dispatch all 5 reviewers in **one message with 5 parallel `Agent` tool calls**. Do not dispatch sequentially; do not share outputs between them.
 - Do not tell any reviewer what the others were asked to look at beyond their own lens.
 - Do not pre-filter the target before handing it off — every reviewer sees the same text.
-- When addressing comments in Step 4, do not re-dispatch reviewers on the updated document. One pass is the contract of this skill. If the user wants iteration, they can invoke `/review-that` again on the updated target.
+- When addressing comments in Step 4, do not re-dispatch reviewers on the updated document. One pass is the contract of this skill. If the user wants iteration, they can invoke `/review-and-fix-that` again on the updated target.
 
 ## Quick Reference
 
