@@ -350,6 +350,29 @@ Background research used during development. These documents are not installed a
 4. Run `./validate.sh --smoke` to verify the installer still works end-to-end.
 5. Open a pull request with a clear description of the change.
 
+### Authoring a new skill
+
+1. Copy `skills/wt-create/` as the minimal template — it has a single `SKILL.md` with the right frontmatter shape and no supporting files.
+2. `SKILL.md` frontmatter requires two keys: `name` and `description`. The description **must** start with the literal string `"Use when"` — the validator fails otherwise (see `validate_skills` in `at`).
+3. Fill in the skill body below the frontmatter. Claude Code loads the body when the user types `/your-skill-name`.
+4. Run `./validate.sh --skills` to check the frontmatter, then `./validate.sh --smoke` to dry-run the installer end-to-end.
+
+### Authoring a rule
+
+Rules are per-project coding standards that load on matching file edits.
+
+1. Create `rules/<language>.md`.
+2. Frontmatter must include `paths:` as a **comma-separated quoted string** — not a YAML array. Example: `paths: "*.py, *.pyi"`. The validator rejects the `[...]` array form.
+3. Run `./validate.sh --rules`.
+
+### Authoring a hook
+
+1. Create `hooks/<name>.sh` with the shebang exactly `#!/usr/bin/env bash` — the validator compares for equality.
+2. `chmod +x hooks/<name>.sh`.
+3. Register the hook in `templates/settings-hooks.json` under the correct event (`PreToolUse`, `PostToolUse`, `Notification`, `Stop`) with an appropriate `matcher` (tool-name pattern, or empty for all tools).
+4. Run `./validate.sh --hooks` — `shellcheck --severity=warning` runs against every hook if installed.
+5. Run `./validate.sh --smoke` to verify the settings-template merge still produces a valid `~/.claude/settings.json`.
+
 ## License
 
 MIT -- see [LICENSE](LICENSE).
