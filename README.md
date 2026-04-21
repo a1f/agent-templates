@@ -104,15 +104,49 @@ Each plan step produces one focused commit, independently reviewed for quality v
 
 ### Skills Reference
 
+Organized by who invokes the skill. Skills in the first two groups are meant to be typed directly; skills in the third group are called internally by the orchestrator.
+
+#### End-to-end pipelines
+
+Top-level skills that run full workflows by composing lower-level skills.
+
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| **implement-orchestrator** | `/implement-orchestrator` | Run the step-by-step pipeline from any plan source |
-| **plan-codebase** | `/plan-codebase` | Analyze codebase and produce implementation spec for a step |
-| **plan-tests** | `/plan-tests` | Discover test patterns and produce test plan for a step |
-| **implement-parallel** | `/implement-parallel` | Dispatch parallel Impl Coder and Test Coder for a step |
-| **review-parallel** | `/review-parallel` | Run parallel reviewers with severity-based consensus |
-| **clean-code-planner** | `/clean-code-planner` | Produce a code plan before any code change (any size) |
-| **python-coding-rules** | `/python-coding-rules` | Apply Python 3.12+ coding standards interactively |
+| **plan-till-merge** | `/plan-till-merge` | Plan -> implement -> PR -> babysit. Composes: clean-code-planner -> implement-orchestrator -> issue-make -> make-pr -> pr-babysit |
+| **implement-till-merge** | `/implement-till-merge` | Implement a plan -> PR -> babysit. Composes: implement-orchestrator -> make-pr -> pr-babysit |
+| **pr-make-till-merge** | `/pr-make-till-merge` | Create PR from current branch -> babysit. Composes: make-pr -> pr-babysit |
+
+#### Building blocks -- you invoke directly
+
+| Skill | Command | Purpose |
+|-------|---------|---------|
+| **plan-arch** | `/plan-arch` | Architecture design doc for a chosen approach |
+| **plan-options** | `/plan-options` | Evaluate multiple approaches with tradeoffs |
+| **clean-code-planner** | `/clean-code-planner` | Produce a code plan before any code change |
+| **implement-orchestrator** | `/implement-orchestrator` | Step-by-step agentic implementation from a plan |
+| **make-pr** | `/make-pr` | Run gates, review, push, create PR |
+| **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
+| **review-and-fix** | `/review-and-fix` | Review current diff, fix CRITICAL and MAJOR issues |
+| **multi-review** | `/multi-review` | Multi-model code review via external AI CLIs |
+| **issue-make** | `/issue-make` | Create or update a GitHub issue with planning artifacts |
+| **wt-create** | `/wt-create` | Create a git worktree for parallel work |
+| **cleanup-worktrees** | `/cleanup-worktrees` | Remove stale agent-generated worktrees under `.claude/worktrees/agent-*/` |
+| **latest-update** | `/latest-update` | Pull main, clean up merged branches, validate, install |
+| **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
+| **python-coding-rules** | `/python-coding-rules` | Apply Python 3.12+ coding standards (TypeScript / Rust / C++ rules load automatically via `rules/` when editing matching files) |
+
+#### Dispatched internally -- don't invoke directly
+
+These are called by `/implement-orchestrator`; invoking them directly is not the intended use.
+
+| Skill | Purpose |
+|-------|---------|
+| **plan-codebase** | Analyze codebase, produce implementation spec for a step |
+| **plan-tests** | Discover test patterns, produce test plan for a step |
+| **implement-parallel** | Dispatch parallel Impl Coder and Test Coder for a step |
+| **review-parallel** | Run parallel reviewers with severity-based consensus |
+
+**Aliases** (same arguments, alternate slash name): `/plan-code` -> `/clean-code-planner`, `/pr-make` -> `/make-pr`.
 
 ## Language Rules
 
