@@ -29,10 +29,42 @@ For interactive component picking, dry-runs, or installing into a specific proje
 
 ### Prerequisites
 
-- `gh` CLI authenticated (`gh auth login`) with `repo` scope; for project linking via `/make-pr` and `/issue-make`, also run `gh auth refresh -s read:project,project`
-- `jq` installed
-- Claude Code CLI installed
-- Verify the install with `./validate.sh`
+| Tool | Required by | Install (macOS) | Install (Debian/Ubuntu) |
+|------|-------------|-----------------|--------------------------|
+| `git` ≥ 2.5 | Worktree skills (`wt-create`, `cleanup-worktrees`) | `brew install git` | `apt install git` |
+| `jq` | Installer (`at`), several hooks and skills | `brew install jq` | `apt install jq` |
+| `curl` | `notify-slack.sh` | preinstalled | `apt install curl` |
+| `gh` | `make-pr`, `issue-make`, `check-github-issues.sh`, `pr-babysit` | `brew install gh` | `apt install gh` |
+| `tmux` | `wt-create` (session commands) | `brew install tmux` | `apt install tmux` |
+| `uv` | `tools/multi-review` | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `shellcheck` (optional) | `./validate.sh` hook linting | `brew install shellcheck` | `apt install shellcheck` |
+| `claude` CLI | All skills (the runtime) | Claude Code installer | Claude Code installer |
+| `codex` CLI (optional) | `/multi-review` (second reviewer) | vendor installer | vendor installer |
+
+Verify the installation with `./validate.sh`.
+
+### Per-teammate credential setup
+
+Every teammate runs this once after cloning:
+
+1. **GitHub CLI** — authenticate with the scopes required by `make-pr` and `issue-make`:
+
+   ```bash
+   gh auth login -s repo,read:project,project
+   ```
+
+   Already logged in? Refresh scopes: `gh auth refresh -s read:project,project`.
+
+2. **Slack notifications** (optional, per-project opt-in) — set the credentials and the allow-list alongside them, preferably via direnv or a project-local shell rc rather than `~/.zshrc`:
+
+   ```bash
+   export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+   export CLAUDE_SLACK_REPOS="project-one,project-two"
+   ```
+
+   `CLAUDE_SLACK_REPOS` is required for the hook to fire in any project — see [Slack Notification Hook](#slack-notification-hook-hooksnotify-slacksh) below for the two delivery modes (webhook vs Bot API).
+
+3. **Multi-model review CLIs** (optional, only for `/multi-review`) — authenticate `claude` (always available if you have Claude Code installed) and `codex` if you want a second reviewer. See each vendor's docs.
 
 ### Mental model
 
