@@ -25,6 +25,7 @@ All optional. Parsed from the user's message:
 |-----|-------|---------|---------|
 | `--issue=N` | 3, 4 | Auto-detect | `--issue=42` |
 | `--reviewers=u1,u2` | 4 | Auto-detect | `--reviewers=alice` |
+| `--no-reviewers` | 4 | Reviewers added | `--no-reviewers` |
 | `--title="..."` | 3, 4 | From plan | `--title="Add auth"` |
 | `--base=branch` | 4 | Default branch | `--base=develop` |
 | `--draft` | 4 | Not draft | `--draft` |
@@ -77,7 +78,7 @@ This creates/updates the GitHub issue and attaches planning `.md` files as a gis
 
 Use the Skill tool to invoke `make-pr` with:
 - `--issue=N` from Phase 3 result
-- `--reviewers`, `--title`, `--base`, `--draft` if the user provided them
+- `--reviewers`, `--no-reviewers`, `--title`, `--base`, `--draft`, `--no-agent-review` if the user provided them
 
 This runs gates, quick review, `/review-and-fix`, pushes, and creates the PR. (`/make-pr` invokes `/review-and-fix` internally as Phase 2.5.)
 
