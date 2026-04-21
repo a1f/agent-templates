@@ -173,9 +173,21 @@ Rules are installed per-project into `.claude/rules/` by `./install.sh`. Each `r
 
 ### Slack Notification Hook (`hooks/notify-slack.sh`)
 
-Sends a Slack message when Claude Code needs input (`Notification`) or finishes a task (`Stop`). Messages include the user's original task, notification context, repo name, and branch. Silently no-ops if no Slack credentials are set. Never blocks Claude -- always exits 0.
+Sends a Slack message when Claude Code needs input (`Notification`) or finishes a task (`Stop`). Messages include the user's original task, notification context, repo name, and branch. Silently no-ops if no Slack credentials are set or if the current repo isn't on the opt-in list. Never blocks Claude -- always exits 0.
 
-Two modes are supported:
+#### Per-project opt-in: `CLAUDE_SLACK_REPOS` (required)
+
+The hook is installed globally into `~/.claude/hooks/` and fires on every Claude Code session. To prevent credentials exported once in `~/.zshrc` from posting messages about personal or client projects, the hook **requires an explicit per-project opt-in**: set `CLAUDE_SLACK_REPOS` to a comma-separated list of repo basenames where notifications should fire. Unmatched repos exit silently even with credentials set.
+
+```bash
+export CLAUDE_SLACK_REPOS="my-team-repo,another-team-repo"
+```
+
+Matching is on the output of `basename $(git rev-parse --show-toplevel)` — the directory name, not the full path. Prefer setting `CLAUDE_SLACK_REPOS` (and the credential vars below) via per-project tooling such as direnv or a project-local shell rc, rather than globally in `~/.zshrc`.
+
+#### Delivery modes
+
+Two delivery modes are supported:
 
 | Mode | Variables | Threading | Message Updates |
 |------|-----------|-----------|-----------------|
@@ -190,13 +202,14 @@ Bot API mode groups all events from the same Claude Code session into a single S
 2. Name it (e.g. "Claude Code Notifications"), pick your workspace
 3. Left sidebar: **Incoming Webhooks** → toggle **On**
 4. Click **Add New Webhook to Workspace** → pick a channel
-5. Copy the webhook URL and add to your shell profile (`~/.zshrc` or `~/.bashrc`):
+5. Set the webhook URL and the per-project allow-list (prefer direnv or a project-local rc over `~/.zshrc` for both):
 
 ```bash
 export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../xxx"
+export CLAUDE_SLACK_REPOS="my-team-repo"
 ```
 
-6. Verify with `./validate.sh --hooks` — it will confirm the variable is set.
+6. Verify with `./validate.sh --hooks` — it will confirm the variables are set.
 
 #### Bot API Setup (threading)
 
@@ -205,14 +218,15 @@ export CLAUDE_SLACK_WEBHOOK_URL="https://hooks.slack.com/services/T.../B.../xxx"
 3. **Install to Workspace** → copy the **Bot User OAuth Token** (`xoxb-...`)
 4. Invite the bot to your channel: `/invite @YourBotName`
 5. Get the channel ID (right-click channel name → **View channel details** → copy ID)
-6. Add to your shell profile:
+6. Set the credentials and the per-project allow-list:
 
 ```bash
 export CLAUDE_SLACK_BOT_TOKEN="xoxb-..."
 export CLAUDE_SLACK_CHANNEL="C0123456789"
+export CLAUDE_SLACK_REPOS="my-team-repo"
 ```
 
-Both modes can be configured simultaneously — bot API takes priority when available.
+Both delivery modes can be configured simultaneously — bot API takes priority when available. `CLAUDE_SLACK_REPOS` is required for either mode to fire.
 
 ### Auto-Approve Hook (`hooks/auto-approve.sh`)
 

@@ -31,6 +31,25 @@ CHANNEL="${CLAUDE_SLACK_CHANNEL:-}"
 # Need at least one delivery method configured
 [[ -z "$WEBHOOK_URL" && -z "$BOT_TOKEN" ]] && exit 0
 
+# Per-project opt-in gate. The hook is installed globally in ~/.claude, so
+# without this check credentials exported once in ~/.zshrc would fire on
+# every Claude Code session — including personal or client projects unrelated
+# to the team. When CLAUDE_SLACK_REPOS is unset, the hook is considered
+# not-opted-in for this shell and exits silently even with credentials set.
+# When set, the hook fires only for repos whose basename matches a
+# comma-separated entry (case-sensitive, exact match after whitespace trim).
+ALLOWED_REPOS="${CLAUDE_SLACK_REPOS:-}"
+[[ -z "$ALLOWED_REPOS" ]] && exit 0
+
+CURRENT_REPO="$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")"
+MATCHED=0
+IFS=',' read -ra _REPOS <<< "$ALLOWED_REPOS"
+for r in "${_REPOS[@]}"; do
+  trimmed="$(printf '%s' "$r" | tr -d ' ')"
+  [[ "$trimmed" == "$CURRENT_REPO" ]] && MATCHED=1 && break
+done
+[[ "$MATCHED" -ne 1 ]] && exit 0
+
 # ---------- Parse stdin JSON ----------
 INPUT=""
 if ! read -t 0.5 -r -d '' INPUT 2>/dev/null; then
