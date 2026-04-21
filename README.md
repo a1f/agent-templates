@@ -19,6 +19,54 @@ Or install everything non-interactively:
 ./install.sh --uninstall                       # Restore from backups
 ```
 
+## Getting Started
+
+### Prerequisites
+
+- `gh` CLI authenticated (`gh auth login`) with repo scope
+- `jq` installed
+- Claude Code CLI installed
+- Verify the install with `./validate.sh`
+
+### Mental model
+
+A skill is a named procedure invoked by typing `/skill-name` in a Claude Code session. Some skills are aliases that dispatch to another skill with identical arguments -- for example, `/pr-make` dispatches to `/make-pr`, and `/plan-code` dispatches to `/clean-code-planner`. The Agentic Workflow diagram below shows how `/implement-orchestrator` chains lower-level skills together.
+
+### Your first run
+
+Try the lowest-risk skill to verify everything works:
+
+```
+/wt-create scratch
+```
+
+This creates a sibling worktree at `../<repo>-scratch/`, a branch `scratch`, and prints the `cd` / `tmux` commands to enter it.
+
+Clean up when done:
+
+```bash
+git worktree remove ../<repo>-scratch
+git branch -D scratch
+```
+
+### Decision tree -- "I have X, I want Y"
+
+| What you have | What you want | Skill |
+|---|---|---|
+| An idea | A merged PR | `/plan-till-merge` |
+| A `plan.md` file | A merged PR | `/implement-till-merge` |
+| A finished branch (committed work) | A merged PR | `/pr-make-till-merge` |
+| An open PR | A merged PR | `/pr-babysit` |
+
+### Other daily tasks
+
+- Sync main: `/latest-update`
+- Rebase onto main: `/latest-rebase`
+- Review the current diff: `/review-and-fix` or `/multi-review`
+- Open a GitHub issue: `/issue-make`
+- Create a worktree for parallel work: `/wt-create`
+- Remove stale agent-generated worktrees (under `.claude/worktrees/agent-*/`): `/cleanup-worktrees`
+
 ## Components Overview
 
 | Component | Location | Description |
