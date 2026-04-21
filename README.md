@@ -225,8 +225,8 @@ The two scripts above cover the common case. For anything more specific, use the
 - `./at install` — interactive component picker (rules / skills / hooks / everything)
 - `./at install --all --dry-run` — preview a full install without writing
 - `./at install --all --target=/path/to/project` — install into a specific project
+- `./at uninstall --deep` — uninstall and also remove generated artifacts (`plans/`, `impl-temp/`, `code-spec.md`, `test-plan.md`)
 - `./at status` — show installation dashboard (what's installed, where, and when)
-- `./at update --all` — pull latest and reinstall tracked components
 - `./at --help` — full command reference
 
 ## Installation Details
