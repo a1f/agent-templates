@@ -52,8 +52,10 @@ the list — if the code is clean, say so.
 
 ## Return
 
-Return exactly one JSON object, with no markdown fence and no prose. Use the object shape
-below, replace placeholders with real values, and choose one value for each enum field. Use
+Return exactly one JSON object, with no markdown fence and no prose — **fill this exact shape:
+do not add, rename, or drop keys.** The authoritative schema is `v1/schemas/reviewer.schema.json`
+(the architect validates your return against it); the block below is the same shape for quick
+reference. Replace placeholders with real values and choose one value for each enum field. Use
 an empty `findings` array when clean, and set `has_critical` to `true` if any finding is
 CRITICAL.
 
