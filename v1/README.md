@@ -28,8 +28,8 @@ architect (skill, the driver)
 
 `architect` is a **skill** invoked explicitly in the main loop (`disable-model-invocation:
 true`, so it never auto-triggers), which lets it orchestrate, collect results, and loop.
-`coder`, `tdd-runner`, `reviewer`, `critic` are **agents** (isolated, scope-locked workers it
-dispatches via the Agent tool).
+`worker-coder` (the GREEN/REFACTOR/non-behavioral coder), `tdd-runner`, `reviewer`, `critic`
+are **agents** (isolated, scope-locked workers it dispatches via the Agent tool).
 
 ## Layout
 
@@ -42,10 +42,16 @@ v1/
 │   ├── python.md               #   language idiom + tooling (copied from repo root)
 │   └── typescript.md           #   "
 ├── agents/
-│   ├── coder.md                # GREEN: minimal code to pass, commit; scope-locked
+│   ├── coder.md                # worker-coder: GREEN / REFACTOR / non-behavioral; commits; scope-locked
 │   ├── tdd-runner.md           # RED: one failing test, right reason; no production code
 │   ├── reviewer.md             # quality / bugs / security; reports, doesn't fix
 │   └── critic.md               # goal-fit score + verdict
+├── schemas/                    # authoritative return-shape contracts (architect validates against these)
+│   ├── _defs.schema.json       #   shared schema_version + command def ($ref'd by the others)
+│   └── {coder,tdd-runner,reviewer,critic}.schema.json
+├── scripts/                    # stdlib-only helpers — no third-party deps
+│   ├── validate_return.py      #   validate one agent return against its schema (used by architect)
+│   └── check_prompt_schemas.py #   anti-drift: prompt examples vs schemas (at validate --v1)
 ├── skills/
 │   └── architect/SKILL.md      # the driver + JSONL logging contract + decision rules
 ├── gates/                      # declarative hard gates (reuses make-pr gate format)
@@ -61,6 +67,16 @@ v1/
 2. **Rules the agents read** (`rules/*.md`) — judgment the tools can't enforce: design
    (deep modules, information hiding), readability (naming, comments), and test quality
    (behavior through public interfaces). The reviewer holds the line on these.
+
+## Return contracts
+
+Every agent returns one JSON object whose authoritative shape lives in `schemas/`. Each schema
+pins `role` as a `const`, requires every field, and sets `additionalProperties: false`, so a
+return must be **filled literally, not improvised**. The architect validates each return with
+`scripts/validate_return.py` (stdlib-only — required keys, enums, `const`s, no extra keys) and
+treats a failure as a malformed return. The ` ```json ` block shown in each agent prompt is the
+same shape for the model to read; `scripts/check_prompt_schemas.py` (run by `at validate --v1`)
+keeps those examples in lockstep with the schemas so a prompt edit can't silently drift.
 
 ## Gate contract
 

@@ -1289,12 +1289,34 @@ cmd_uninstall() {
 # Subcommand: validate
 # =============================================================================
 
+validate_v1() {
+  section "v1 schemas"
+
+  if [ ! -d "$SCRIPT_DIR/v1/schemas" ]; then
+    warn "No v1/schemas directory found"
+    return
+  fi
+  if ! command -v python3 >/dev/null 2>&1; then
+    warn "python3 not found — skipping v1 schema checks"
+    return
+  fi
+
+  local output
+  if output=$(python3 "$SCRIPT_DIR/v1/scripts/check_prompt_schemas.py" 2>&1); then
+    pass "agent prompts match their return schemas"
+  else
+    fail "agent prompt(s) drifted from their return schemas"
+    printf '%s\n' "$output" | sed 's/^/    /'
+  fi
+}
+
 cmd_validate() {
   local v_skills=false
   local v_rules=false
   local v_hooks=false
   local v_smoke=false
   local v_settings=false
+  local v_v1=false
 
   for arg in "$@"; do
     case "$arg" in
@@ -1303,6 +1325,7 @@ cmd_validate() {
       --hooks)    v_hooks=true ;;
       --smoke)    v_smoke=true ;;
       --settings) v_settings=true ;;
+      --v1)       v_v1=true ;;
       --help|-h)
         echo "Usage: at validate [OPTIONS]"
         echo ""
@@ -1313,6 +1336,7 @@ cmd_validate() {
         echo "  --rules      Validate rule files"
         echo "  --hooks      Validate hook scripts"
         echo "  --settings   Validate settings template"
+        echo "  --v1         Validate v1 schemas + agent prompt shapes"
         echo "  --smoke      Run smoke tests (installs into temp dir)"
         echo "  -h, --help   Show this help message"
         return 0
@@ -1327,11 +1351,12 @@ cmd_validate() {
   # Default: everything except smoke
   if [ "$v_skills" = false ] && [ "$v_rules" = false ] && \
      [ "$v_hooks" = false ] && [ "$v_smoke" = false ] && \
-     [ "$v_settings" = false ]; then
+     [ "$v_settings" = false ] && [ "$v_v1" = false ]; then
     v_skills=true
     v_rules=true
     v_hooks=true
     v_settings=true
+    v_v1=true
   fi
 
   PASS_COUNT=0
@@ -1353,6 +1378,10 @@ cmd_validate() {
 
   if [ "$v_settings" = true ]; then
     validate_settings
+  fi
+
+  if [ "$v_v1" = true ]; then
+    validate_v1
   fi
 
   if [ "$v_smoke" = true ]; then
