@@ -13,3 +13,7 @@ plan.md
 # Skill-generated work dirs
 impl-tmp/
 impl-temp/
+
+# Python (v1/scripts)
+__pycache__/
+*.pyc
