@@ -1,0 +1,97 @@
+---
+paths: "**/*_test.py", "**/test_*.py", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/tests/**"
+---
+
+# TDD Rules
+
+How tests get written in this codebase: red → green → refactor, in vertical slices.
+Adapted from the test-first discipline of *Growing Object-Oriented Software* and Matt
+Pocock's TDD skill. The `coder` and `tdd-runner` agents follow this; the `architect`
+enforces the loop.
+
+## Core principle
+
+**Tests verify behavior through public interfaces, never implementation details.**
+
+A good test reads like a specification of what the system does for a user. It survives any
+internal refactor that preserves behavior. The defining smell of a bad test: it breaks when
+you refactor even though behavior did not change.
+
+- Do **not** mock internal collaborators, test private methods, or assert on internal state.
+- Mock only true external boundaries (network, clock, filesystem, third-party APIs).
+- If a behavior is only reachable by poking internals, the design is wrong — fix the design,
+  not the test (see `design-principles.md`).
+
+## Anti-pattern: horizontal slices
+
+Never write all the tests up front and then all the implementation. Tests written against
+imagined behavior assert the shape of data structures rather than user-facing capability,
+and go stale the moment the implementation teaches you something. **Always vertical slices:
+one test → one implementation → repeat (tracer bullets).**
+
+## The loop
+
+For each behavior, in order:
+
+1. **RED** — Write exactly one test for one behavior. Run it. Watch it fail **for the right
+   reason** (assertion failure, not an import error or typo). A test that has never failed
+   proves nothing.
+2. **GREEN** — Write the *minimum* code to make that test pass. No speculative features, no
+   handling of cases no test demands yet.
+3. **REFACTOR** — Only once green. Remove duplication, improve names, deepen modules per
+   `design-principles.md`. Re-run tests; they must stay green. **Never refactor while red.**
+
+Rules that hold every cycle:
+- One test at a time.
+- Only enough production code to pass the current test.
+- No anticipatory generality, no "while I'm here" additions.
+
+## Planning a change (before the first RED)
+
+- Confirm the public interface with the user / task spec.
+- List the **behaviors** to cover (user-facing outcomes), not implementation steps.
+- Order them so each slice is a thin end-to-end path.
+- Get agreement on the behavior list before writing code.
+
+## When TDD is mandatory
+
+TDD is required for any change with **behavior or logic**: new functions, branching,
+parsing, state changes, bug fixes (the bug becomes a failing test first).
+
+It may be **skipped** only for changes with no behavior to assert: pure config, dependency
+bumps, docs, comments, formatting, and mechanical renames. When skipped, the `architect`
+logs the skip with a reason in the run log. When in doubt, do TDD.
+
+A bug fix **always** starts with a failing test that reproduces the bug.
+
+## Per-cycle checklist
+
+- [ ] Test names a behavior, not a method (`returns_empty_cart_total_as_zero`, not `test_total`).
+- [ ] Test uses only the public interface.
+- [ ] Test was seen to fail for the right reason before any production code.
+- [ ] Production code is minimal for the current test.
+- [ ] No speculative feature was added.
+- [ ] After refactor, all tests still green.
+
+## Tooling
+
+- **Python** — `pytest`; `pytest-asyncio` for async; **`hypothesis`** for property-based
+  tests of pure functions (prefer a property over a handful of examples when the rule is
+  general). Measure **branch** coverage, not just line. See `python.md`.
+- **TypeScript** — `vitest`. Co-locate `foo.test.ts` next to `foo.ts`. See `typescript.md`.
+
+## What a good test looks like
+
+```python
+# GOOD — behavior through the public interface
+def test_discount_applies_to_subtotal():
+    cart = Cart(items=[Item(price=100), Item(price=50)])
+    assert cart.total(discount=Percent(10)) == 135
+
+# BAD — couples to implementation; breaks on harmless refactor
+def test_discount_calls_internal_multiplier():
+    cart = Cart(items=[Item(price=100)])
+    cart._apply_discount = Mock()
+    cart.total(discount=Percent(10))
+    cart._apply_discount.assert_called_once()
+```
