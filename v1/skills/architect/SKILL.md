@@ -1,6 +1,6 @@
 ---
 name: architect
-description: Drives one already-scoped, single-module coding task/PR to done via a deterministic TDD loop — plans behavior slices, dispatches the tdd-runner/coder/reviewer/critic agents, runs the v1 language gates, and logs every subagent call to a per-run JSONL for validation. Use when explicitly asked to run the v1 architect workflow on a scoped PR. Not for feature decomposition, direct coding, exploratory fixes, or multi-module planning.
+description: Drives one already-scoped, single-module coding task/PR to done via a deterministic TDD loop — plans behavior slices, dispatches the tdd-runner/worker-coder/reviewer/critic agents, runs the v1 language gates, and logs every subagent call to a per-run JSONL for validation. Use when explicitly asked to run the v1 architect workflow on a scoped PR. Not for feature decomposition, direct coding, exploratory fixes, or multi-module planning.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Agent, TodoWrite
@@ -23,20 +23,27 @@ structured returns, and decide the next step.
 | Agent | When | Job |
 |-------|------|-----|
 | `tdd-runner` | RED, once per behavior | write ONE failing test, prove it fails for the right reason |
-| `coder` | GREEN, once per behavior | minimal code to pass that test; commit |
+| `worker-coder` | GREEN & REFACTOR (per behavior); non-behavioral edits | minimal code to pass the test, a behavior-preserving refactor, or an exact non-behavioral change; commit |
 | `reviewer` | after all behaviors green | quality + bugs + security on the diff |
 | `critic` | after review | goal-fit: did the PR achieve the task? |
 
 Give each agent the **task context + the exact files/base it needs + the absolute rule
-paths** (resolve `v1/rules/...` to absolute — see Runtime resolution). Keep each dispatch
-prompt tight and scoped to one job. Require each agent to return exactly the JSON object
-defined in its prompt. Treat a missing or unparsable required field as a malformed return:
-re-dispatch once with schema feedback, and if it is still malformed, escalate to the human.
-This schema retry is separate from the behavior-level retry budgets in the loop below.
+paths** (resolve `v1/rules/...` to absolute — see Runtime resolution), and give `worker-coder`
+its **`mode`** (`green` | `refactor` | `non_behavioral`). Keep each dispatch prompt tight and
+scoped to one job. Require each agent to return exactly the JSON object defined in its prompt,
+and **validate that return against `v1/schemas/<role>.schema.json`** (keyed by the `role` field
+in the return) with `python3 v1/scripts/validate_return.py <schema> <return-file>` (stdlib-only:
+checks required keys, no extra keys, enums, and `const`s). Treat a validation failure, a missing
+field, or an unparsable return as malformed: re-dispatch once with the validator's feedback, and
+if it is still malformed, escalate to the human. This schema retry is separate from the
+behavior-level retry budgets in the loop below.
 
 A tight RED dispatch reads, e.g.: "Write ONE failing test for: cart applies a percentage
 discount to the subtotal. Public interface: `Cart.total(discount: Percent)`. Base: <base>.
-Rules (absolute paths): <abs>/tdd.md, <abs>/design-principles.md, <abs>/python.md."
+Rules (absolute paths): <abs>/tdd.md, <abs>/design-principles.md, <abs>/python.md." The matching
+GREEN dispatch adds the mode and the failing test: "Make <test_file> pass with minimal
+production code. mode: green. Base: <base>. Rules: <abs>/design-principles.md, <abs>/python.md,
+<abs>/tdd.md."
 
 ## Runtime resolution
 
@@ -58,9 +65,10 @@ Resolve these values before the first dispatch:
 ## Tool boundaries
 
 - Use `Write`/`Edit` only for `v1/runs/<run-id>.jsonl`. Do not edit production source, tests,
-  rules, or gates directly while acting as architect; route every code or test change to `coder`.
-- Use `Bash` only for `git`, `date`, JSONL validation, and the selected gate `setup`/`run`
-  commands. Do not run gate `fix` commands directly; route fixes to `coder`.
+  rules, or gates directly while acting as architect; route every code or test change to `worker-coder`.
+- Use `Bash` only for `git`, `date`, JSONL validation, the schema validator
+  (`v1/scripts/validate_return.py`), and the selected gate `setup`/`run` commands. Do not run
+  gate `fix` commands directly; route fixes to `worker-coder`.
 - Before **Done**, validate that the JSONL file parses and that logged rows match the
   subagent calls, skips, and gate runs you performed.
 
@@ -71,25 +79,29 @@ Resolve these values before the first dispatch:
 2. **Plan behaviors.** Per `tdd.md`, list the user-facing **behaviors** (not impl steps),
    ordered as thin vertical slices. Decide per task whether it is **behavioral** (TDD
    required) or **non-behavioral** (config/docs/rename — TDD skipped, log the skip + reason).
+   A non-behavioral change is dispatched to `worker-coder` with `mode: non_behavioral` (no RED/GREEN).
 3. **Per behavior, in order:**
    a. **RED** → dispatch `tdd-runner`. Require `"status":"red"` and `"right_reason":true`. If not,
       re-dispatch with feedback (max 3 RED dispatches for this behavior — each dispatch may
       re-run the test internally — then escalate to the human).
-   b. **GREEN** → dispatch `coder` with the failing test. Require `status: done` and observed
-      passing verification (at least one `commands[].outcome` is `pass`). If `blocked`, read the reason and decide (re-scope the slice,
-      re-dispatch, or stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
-   c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `coder` with a
-      refactor task; tests must stay green.
+   b. **GREEN** → dispatch `worker-coder` with `mode: green` and the failing test. Require
+      `status: done` and observed passing verification (at least one `commands[].outcome` is
+      `pass`). If `blocked`, read the reason and decide (re-scope the slice, re-dispatch, or
+      stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
+   c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `worker-coder`
+      with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).
 4. **Review** → dispatch `reviewer` on `git diff <base>...HEAD`. If `has_critical: true`,
-   route each CRITICAL back to `coder` as a fix task, then re-review. MAJOR/MINOR: decide
+   route each CRITICAL back to `worker-coder` as a fix task (a behavioral fix goes RED→GREEN;
+   a mechanical one is `mode: non_behavioral`), then re-review. MAJOR/MINOR: decide
    fix-now vs note-as-follow-up.
 5. **Critic** → dispatch `critic` with the task spec + diff. If `verdict: not_achieved` or
    `partial`, address the gaps (back to step 3) before proceeding.
 6. **Gate** → run the language gates from `v1/gates/<lang>.json`. Each gate file is
    `{"setup": <cmd>, "gates": [{"name","run","fix"}]}`: run `setup` once, then each
-   `gates[].run` in order. All must pass. On failure, route the fix to `coder` and re-run;
-   keep gates green rather than marking done on a red gate. Run `setup`/`run` only, never `fix`.
+   `gates[].run` in order. All must pass. On failure, route the fix to `worker-coder`
+   (`mode: non_behavioral` for format/lint/type fixes) and re-run; keep gates green rather than
+   marking done on a red gate. Run `setup`/`run` only, never `fix`.
 7. **Done** → only when: all behaviors green, no CRITICAL review findings, critic
    `achieved`, and all gates green. Summarize and hand back.
 
@@ -110,12 +122,14 @@ so branch names cannot create nested paths. Schema:
 Get the timestamp with `date -u +%Y-%m-%dT%H:%M:%SZ` (you don't have a clock primitive). One
 JSON object per line, no pretty-printing. JSON-escape prompts and results; do not hand-build
 strings that contain raw newlines or quotes. A skipped TDD step is logged with
-`"step":"RED","verdict":"skip","note":"non-behavioral: <reason>"`.
+`"step":"RED","verdict":"skip","note":"non-behavioral: <reason>"`. The `worker-coder` agent is
+logged with `role: coder` — its stable pipeline role, which is also the key for its return
+schema (`coder.schema.json`).
 
 Example rows — a GREEN dispatch and a non-behavioral skip:
 
 ```json
-{"ts":"2026-06-01T14:32:07Z","run":"feat_cart-discount","step":"GREEN","role":"coder","prompt":"Make tests/test_cart.py::test_discount_applies_to_subtotal pass. Base: <merge-base>. Touch only cart.py. Rules: <abs>/design-principles.md, <abs>/python.md.","result":"{\"status\":\"done\",\"commit\":{\"sha\":\"a1b2c3d\"}}","verdict":"pass","files":["cart.py"],"note":"GREEN attempt 1"}
+{"ts":"2026-06-01T14:32:07Z","run":"feat_cart-discount","step":"GREEN","role":"coder","prompt":"Make tests/test_cart.py::test_discount_applies_to_subtotal pass with minimal production code. mode: green. Base: <merge-base>. Touch only cart.py. Rules: <abs>/design-principles.md, <abs>/python.md.","result":"{\"status\":\"done\",\"mode\":\"green\",\"commit\":{\"sha\":\"a1b2c3d\"}}","verdict":"pass","files":["cart.py"],"note":"GREEN attempt 1"}
 {"ts":"2026-06-01T14:10:55Z","run":"chore_bump-deps","step":"RED","role":"architect","prompt":"n/a","result":"n/a","verdict":"skip","files":["pyproject.toml"],"note":"non-behavioral: dependency bump"}
 ```
 
@@ -129,7 +143,7 @@ of truth for status.
 
 After review + critic you choose one:
 - **done** — all gates green, no CRITICAL, critic `achieved`.
-- **fix** — route specific findings/gaps back to `coder`, then re-verify.
+- **fix** — route specific findings/gaps back to `worker-coder`, then re-verify.
 - **stop / re-scope** — task is mis-scoped, blocked, or spans modules; report up with why.
 
 You ask the human to confirm a **done** or a **stop**; you do not push or open PRs yourself
