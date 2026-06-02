@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "coder.schema.json",
+  "title": "Coder agent return",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role",
+    "mode",
+    "status",
+    "commit",
+    "files_changed",
+    "files_staged",
+    "commands",
+    "scope_notes",
+    "new_dependencies",
+    "blocked_reason"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
+    "role": { "const": "coder" },
+    "mode": { "enum": ["green", "refactor", "non_behavioral"] },
+    "status": { "enum": ["done", "blocked"] },
+    "commit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha", "subject"],
+      "properties": {
+        "sha": { "type": "string" },
+        "subject": { "type": "string" }
+      }
+    },
+    "files_changed": { "type": "array", "items": { "type": "string" } },
+    "files_staged": { "type": "array", "items": { "type": "string" } },
+    "commands": {
+      "type": "array",
+      "items": { "$ref": "_defs.schema.json#/$defs/command" }
+    },
+    "scope_notes": { "type": "string" },
+    "new_dependencies": { "type": "array", "items": { "type": "string" } },
+    "blocked_reason": { "type": "string" }
+  }
+}

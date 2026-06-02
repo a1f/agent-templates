@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reviewer.schema.json",
+  "title": "Reviewer agent return",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "role", "summary", "has_critical", "findings"],
+  "properties": {
+    "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
+    "role": { "const": "reviewer" },
+    "summary": { "type": "string" },
+    "has_critical": { "type": "boolean" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "lens", "location", "issue", "fix"],
+        "properties": {
+          "severity": { "enum": ["CRITICAL", "MAJOR", "MINOR"] },
+          "lens": { "enum": ["quality", "bug", "security", "test"] },
+          "location": { "type": "string" },
+          "issue": { "type": "string" },
+          "fix": { "type": "string" }
+        }
+      }
+    }
+  }
+}

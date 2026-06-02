@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tdd-runner.schema.json",
+  "title": "TDD-runner agent return",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role",
+    "status",
+    "behavior",
+    "test_file",
+    "test_name",
+    "commands",
+    "right_reason",
+    "right_reason_note",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
+    "role": { "const": "tdd-runner" },
+    "status": { "enum": ["red", "error"] },
+    "behavior": { "type": "string" },
+    "test_file": { "type": "string" },
+    "test_name": { "type": "string" },
+    "commands": {
+      "type": "array",
+      "items": { "$ref": "_defs.schema.json#/$defs/command" }
+    },
+    "right_reason": { "type": "boolean" },
+    "right_reason_note": { "type": "string" },
+    "notes": { "type": "string" }
+  }
+}
