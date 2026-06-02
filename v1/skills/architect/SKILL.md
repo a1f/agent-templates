@@ -73,9 +73,10 @@ Resolve these values before the first dispatch:
    required) or **non-behavioral** (config/docs/rename — TDD skipped, log the skip + reason).
 3. **Per behavior, in order:**
    a. **RED** → dispatch `tdd-runner`. Require `"status":"red"` and `"right_reason":true`. If not,
-      re-dispatch with feedback (max 3 RED attempts for this behavior, then escalate to the human).
+      re-dispatch with feedback (max 3 RED dispatches for this behavior — each dispatch may
+      re-run the test internally — then escalate to the human).
    b. **GREEN** → dispatch `coder` with the failing test. Require `status: done` and observed
-      passing verification. If `blocked`, read the reason and decide (re-scope the slice,
+      passing verification (at least one `commands[].outcome` is `pass`). If `blocked`, read the reason and decide (re-scope the slice,
       re-dispatch, or stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
    c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `coder` with a
       refactor task; tests must stay green.

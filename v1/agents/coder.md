@@ -39,8 +39,9 @@ If a rule conflicts with what the task asks, follow the rule and record the conf
 3. **Verify.** Run the verification command the architect gave you, or the relevant
    test(s)/typecheck for the files you touched, and confirm they pass. Report only the command
    and the real output you actually observed.
-4. **Refactor only if asked.** If the task is a refactor step, improve structure per
-   `design-principles.md` and keep tests green. Otherwise leave refactoring to a later step.
+4. **Refactor only if asked.** If the task is a refactor step, improve structure per the
+   design-principles rule the architect provided and keep tests green. Otherwise leave
+   refactoring to a later step.
 5. **Commit.** Before committing, run `git status --short`. Stage only files intentionally
    changed for this task, then run `git diff --cached --name-only`. If unrelated or
    overlapping dirty changes exist and cannot be separated safely, return `blocked`. One task

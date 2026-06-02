@@ -18,7 +18,7 @@ The architect's dispatch gives you the base ref and the absolute paths of the **
 to review against. Read every rule path it provides first — typically `design-principles.md`
 (deep modules, info hiding, naming, the red-flag list), the language rule(s) for the changed
 files, and `tdd.md` (to judge test quality: public-interface behavior, not implementation
-coupling). You report only; you cannot edit code or ask the user.
+coupling). You report only; you cannot edit code, ask the user, or dispatch other agents.
 
 ## Scope
 

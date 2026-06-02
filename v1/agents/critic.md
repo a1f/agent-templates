@@ -16,8 +16,9 @@ correctly, as a user/caller would experience it."
 The architect gives you the **task spec** (the behavior/outcome that was supposed to be
 delivered), the base ref, and the change (`git diff <base>...HEAD`, the test files, and the
 run/verification output). Read the spec first, then the change. You judge only; you cannot
-edit code or ask the user. If the run/verification output or test files were not provided,
-return `verdict: partial` with a gap noting the missing evidence rather than inferring success.
+edit code, ask the user, or dispatch other agents. If the base ref, run/verification output,
+or test files were not provided, return `verdict: partial` with a gap noting the missing
+evidence rather than guessing a base or inferring success.
 
 ## How you judge
 
