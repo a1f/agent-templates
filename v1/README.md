@@ -21,14 +21,15 @@ architect (skill, the driver)
   │
   ├─ reviewer   — quality + bugs + security on the diff   (is the code good?)
   ├─ critic     — goal-fit on the task spec               (did it achieve the task?)
-  └─ gates      — ruff/mypy/pytest · biome/tsc/vitest      (hard fail)
+  └─ gates      — uv run ruff/mypy/pytest · pnpm exec biome/tsc/vitest  (hard fail)
 
   → done only when: all green, no CRITICAL, critic=achieved, gates green
 ```
 
-`architect` is a **skill** (it runs in the main loop so it can orchestrate, collect results,
-and loop). `coder`, `tdd-runner`, `reviewer`, `critic` are **agents** (isolated, scope-locked
-workers it dispatches via the Agent tool).
+`architect` is a **skill** invoked explicitly in the main loop (`disable-model-invocation:
+true`, so it never auto-triggers), which lets it orchestrate, collect results, and loop.
+`coder`, `tdd-runner`, `reviewer`, `critic` are **agents** (isolated, scope-locked workers it
+dispatches via the Agent tool).
 
 ## Layout
 
@@ -61,12 +62,22 @@ v1/
    (deep modules, information hiding), readability (naming, comments), and test quality
    (behavior through public interfaces). The reviewer holds the line on these.
 
+## Gate contract
+
+- Gate commands run through the project package manager (`uv run ...`, `pnpm exec ...`) so
+  they use the tools installed by `setup`, not globals from the shell.
+- Gates are templates. If a repository uses equivalent project scripts, adapt the gate file
+  before running the workflow and keep the rule file aligned with the gate.
+- `fix` commands are declared for humans and coder fix tasks. The architect runs `setup` and
+  `run` only; it does not auto-apply fixes itself.
+- Rules that are not mechanically enforced by gates are enforced by reviewer/critic judgment.
+
 ## Logging & validation
 
-The architect appends **one JSONL line per subagent call** to `runs/<pr-id>.jsonl` —
-`{ts, pr, step, role, prompt, result, verdict, files, note}`. Because the full prompt and
-the full result are captured for every dispatch, a human can replay and validate exactly
-what each agent was asked and what it returned, without having driven the run live.
+The architect appends **one JSONL line per subagent call, TDD skip, and gate run** to
+`runs/<run-id>.jsonl` — `{ts, run, step, role, prompt, result, verdict, files, note}`. The
+run id is a sanitized branch name or task id. Because the full prompt/result or command
+result is captured for every step, a human can replay and validate the run afterward.
 
 ## Scope of v1 (what's intentionally NOT here)
 
@@ -75,8 +86,3 @@ what each agent was asked and what it returned, without having driven the run li
 - **Workflow-engine port** — once the prompts stabilize, the architect's loop can move to a
   deterministic Workflow script for free journaling + resumability. v1 uses the skill form
   so it's interactive and easy to iterate.
-
-## Open reconciliation
-
-`python.md` specifies `mypy --strict`; the copied `gates/python.json` runs `pyright`. Pick
-one when wiring gates for real (recommendation: `mypy --strict`, to match the rule).

@@ -32,7 +32,10 @@ Type hints required on all function signatures and module-level variables.
 
 Prefer functions over classes unless state is needed. If a method doesn't use `self`, make it a `@staticmethod`.
 
-- Always use keyword-only args (`*` as first param) for all functions
+- Use keyword-only arguments for public functions and helpers when named arguments improve
+  call-site clarity. Exceptions: `self`/`cls`, dunder methods, protocol/callback signatures,
+  pytest fixture injection, framework-required signatures, and tiny private helpers where
+  positional use is clearer.
 - Never use mutable defaults (`list`, `dict`, `set`). Use `None` sentinel with `if arg is None: arg = []`
 - Sensible immutable defaults (strings, numbers, booleans, `None`, tuples) are fine
 - Return frozen dataclasses for multi-value returns (never bare tuples)

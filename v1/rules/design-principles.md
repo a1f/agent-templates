@@ -9,6 +9,20 @@ Language-agnostic rules for structure, abstraction, and readability. Language ru
 Based on Ousterhout's *A Philosophy of Software Design*. These apply to every change,
 however small.
 
+## Contents
+
+- The one goal: minimize complexity
+- Deep modules
+- Information hiding
+- Layers and abstraction
+- General-purpose interfaces
+- Define errors out of existence
+- Naming
+- Comments
+- Tactical vs strategic
+- Red flags
+- Testability is a design property
+
 ## The one goal: minimize complexity
 
 Complexity is anything about the structure of a system that makes it hard to understand
@@ -39,12 +53,12 @@ module is its interface (what every caller must learn); the benefit is its imple
 Each module should encapsulate a few design decisions that nothing outside it depends on.
 That is what makes interfaces simple and change local.
 
-- **No information leakage**: the same knowledge (a file format, a protocol detail, a
-  default) must not be baked into two modules. If changing one forces a change in another,
-  the decision leaked — pull it into one place.
-- **No temporal decomposition**: structure around knowledge and responsibility, not around
-  the order operations happen to run in. "Read, then modify, then write" as three modules
-  usually leaks the format into all three.
+- **Keep each design decision in one place** (no information leakage): a file format, a
+  protocol detail, or a default should live in a single module. If changing one forces a
+  change in another, the knowledge leaked — pull it into one place.
+- **Decompose by responsibility, not execution order** (avoid temporal decomposition):
+  structure around knowledge, not around the order operations happen to run in. "Read, then
+  modify, then write" as three modules usually leaks the format into all three.
 - Expose the *general* capability, hide the *specific* policy. Don't add a config parameter
   the caller must understand when a sensible internal decision would do.
 
@@ -52,10 +66,12 @@ That is what makes interfaces simple and change local.
 
 - **Different layer, different abstraction.** Adjacent layers that share the same
   abstraction are a smell.
-- **No pass-through methods** that just forward to another method with the same signature —
-  they add interface without adding value. Either add value or let the caller go direct.
-- **No pass-through variables** threaded through many layers just to reach the bottom;
-  introduce a context object or rethink the boundary.
+- **Each method should add abstraction.** A method that only forwards to another with the
+  same signature (a pass-through method) adds interface without value — add value or let the
+  caller go direct.
+- **Thread context, not pass-through variables.** When a value would otherwise be threaded
+  through many layers just to reach the bottom, introduce a context object or rethink the
+  boundary.
 - **Pull complexity downward.** It is better for the *module's* implementation to be complex
   than for its interface — and every caller — to be. Suffer once, inside, so users don't.
 
