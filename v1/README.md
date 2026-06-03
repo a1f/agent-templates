@@ -42,7 +42,7 @@ v1/
 │   ├── python.md               #   language idiom + tooling (copied from repo root)
 │   └── typescript.md           #   "
 ├── agents/
-│   ├── coder.md                # worker-coder: GREEN / REFACTOR / non-behavioral; commits; scope-locked
+│   ├── worker-coder.md         # GREEN / REFACTOR / non-behavioral; commits; scope-locked
 │   ├── tdd-runner.md           # RED: one failing test, right reason; no production code
 │   ├── reviewer.md             # quality / bugs / security; reports, doesn't fix
 │   └── critic.md               # goal-fit score + verdict
