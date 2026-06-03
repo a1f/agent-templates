@@ -68,8 +68,9 @@ Resolve these values before the first dispatch:
 - Use `Write`/`Edit` only for `v1/runs/<run-id>.jsonl`. Do not edit production source, tests,
   rules, or gates directly while acting as architect; route every code or test change to `worker-coder`.
 - Use `Bash` only for `git`, `date`, JSONL validation, the schema validator
-  (`v1/scripts/validate_return.py`), and the selected gate `setup`/`run` commands. Do not run
-  gate `fix` commands directly; route fixes to `worker-coder`.
+  (`v1/scripts/validate_return.py`), **re-running a worker's reported verification (e.g. the
+  named GREEN test) to confirm its result**, and the selected gate `setup`/`run` commands. Do
+  not run gate `fix` commands directly; route fixes to `worker-coder`.
 - Before **Done**, validate that the JSONL file parses and that logged rows match the
   subagent calls, skips, and gate runs you performed.
 
@@ -86,9 +87,11 @@ Resolve these values before the first dispatch:
       re-dispatch with feedback (max 3 RED dispatches for this behavior — each dispatch may
       re-run the test internally — then escalate to the human).
    b. **GREEN** → dispatch `worker-coder` with `mode: green` and the named failing test
-      (`test_file` + `test_name` from the RED return). Require `status: done` and observed
-      passing verification (at least one `commands[].outcome` is `pass`). If `blocked`, read the reason and decide (re-scope the slice, re-dispatch, or
-      stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
+      (`test_file` + `test_name` from the RED return). Require `status: done` with at least one
+      `commands[].outcome` of `pass`, then **re-run `test_file::test_name` yourself on HEAD and
+      require it to actually pass before accepting** — a self-reported pass you cannot reproduce
+      is a failed GREEN, not a done. If `blocked`, read the reason and decide (re-scope the
+      slice, re-dispatch, or stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
    c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `worker-coder`
       with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).

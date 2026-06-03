@@ -70,6 +70,11 @@ every mode.
   behavior and its test land in one commit. If it seems impossible to pass without changing the
   test, the test or the interface is wrong: return `blocked` and say so in `blocked_reason`,
   rather than editing the test.
+- **Confirm RED before you code, GREEN after.** First run the named test and watch it **fail**
+  for the expected reason; if it already passes, the behavior isn't missing — return `blocked`
+  (`named test is not failing`) instead of making a no-op change. Implement, then run it again
+  and confirm it passes. Report **both** runs in `commands`, so the RED→GREEN transition is
+  auditable rather than a single self-asserted pass.
 
 ### REFACTOR — improve structure, behavior unchanged
 - **Oracle:** every test that was green stays green — and stays **unchanged**. You add no tests
