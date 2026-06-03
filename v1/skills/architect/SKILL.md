@@ -41,9 +41,10 @@ behavior-level retry budgets in the loop below.
 A tight RED dispatch reads, e.g.: "Write ONE failing test for: cart applies a percentage
 discount to the subtotal. Public interface: `Cart.total(discount: Percent)`. Base: <base>.
 Rules (absolute paths): <abs>/tdd.md, <abs>/design-principles.md, <abs>/python.md." The matching
-GREEN dispatch adds the mode and the failing test: "Make <test_file> pass with minimal
-production code. mode: green. Base: <base>. Rules: <abs>/design-principles.md, <abs>/python.md,
-<abs>/tdd.md."
+GREEN dispatch names the exact failing test and the mode: "Make <test_file>::<test_name> pass
+with minimal production code. mode: green. The RED test is already on the tree but uncommitted —
+stage it unchanged with your production code. Base: <base>. Rules: <abs>/design-principles.md,
+<abs>/python.md, <abs>/tdd.md."
 
 ## Runtime resolution
 
@@ -84,9 +85,9 @@ Resolve these values before the first dispatch:
    a. **RED** → dispatch `tdd-runner`. Require `"status":"red"` and `"right_reason":true`. If not,
       re-dispatch with feedback (max 3 RED dispatches for this behavior — each dispatch may
       re-run the test internally — then escalate to the human).
-   b. **GREEN** → dispatch `worker-coder` with `mode: green` and the failing test. Require
-      `status: done` and observed passing verification (at least one `commands[].outcome` is
-      `pass`). If `blocked`, read the reason and decide (re-scope the slice, re-dispatch, or
+   b. **GREEN** → dispatch `worker-coder` with `mode: green` and the named failing test
+      (`test_file` + `test_name` from the RED return). Require `status: done` and observed
+      passing verification (at least one `commands[].outcome` is `pass`). If `blocked`, read the reason and decide (re-scope the slice, re-dispatch, or
       stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
    c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `worker-coder`
       with `mode: refactor`; tests must stay green and unchanged.
