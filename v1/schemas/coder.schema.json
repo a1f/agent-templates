@@ -35,10 +35,39 @@
     "files_staged": { "type": "array", "items": { "type": "string" } },
     "commands": {
       "type": "array",
-      "items": { "$ref": "_defs.schema.json#/$defs/command" }
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cmd", "exit_code", "outcome", "key_output"],
+        "properties": {
+          "cmd": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "outcome": { "type": "string", "enum": ["pass", "fail"] },
+          "key_output": { "type": "string" }
+        }
+      }
     },
     "scope_notes": { "type": "string" },
     "new_dependencies": { "type": "array", "items": { "type": "string" } },
     "blocked_reason": { "type": "string" }
-  }
+  },
+  "allOf": [
+    {
+      "$comment": "A done return must record a real commit and at least one passing verification.",
+      "if": { "properties": { "status": { "const": "done" } } },
+      "then": {
+        "properties": {
+          "commit": {
+            "properties": {
+              "sha": { "minLength": 1 },
+              "subject": { "minLength": 1 }
+            }
+          },
+          "commands": {
+            "contains": { "properties": { "outcome": { "const": "pass" } } }
+          }
+        }
+      }
+    }
+  ]
 }

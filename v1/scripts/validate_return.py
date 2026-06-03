@@ -3,7 +3,8 @@
 
 A stdlib-only structural validator for the subset of JSON Schema the v1 return
 schemas use: ``type``, ``const``, ``enum``, ``required``, ``properties``,
-``additionalProperties: false``, ``items``, ``minimum``/``maximum``, and ``$ref``
+``additionalProperties: false``, ``items``, ``minimum``/``maximum``,
+``minLength``, ``allOf``, ``if``/``then``/``else``, ``contains``, and ``$ref``
 (same-document ``#/...`` or sibling-file ``name.json#/...``). It is deliberately
 not a general JSON Schema implementation — just enough to enforce the v1 return
 contracts without adding a dependency the user's project may not have.
@@ -44,6 +45,13 @@ def _is_number(value: object) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+def _passes(instance: object, schema: dict, *, schema_dir: Path, root: dict) -> bool:
+    """True if instance validates against schema (used for if/ and contains/)."""
+    probe: list[str] = []
+    _validate(instance, schema, schema_dir=schema_dir, root=root, path="$", errors=probe)
+    return not probe
+
+
 def _validate(
     instance: object,
     schema: dict,
@@ -55,6 +63,14 @@ def _validate(
 ) -> None:
     if "$ref" in schema:
         schema = _resolve_ref(schema["$ref"], schema_dir=schema_dir, root=root)
+
+    # Combinators — apply alongside the rest, independent of the instance type.
+    for subschema in schema.get("allOf", []):
+        _validate(instance, subschema, schema_dir=schema_dir, root=root, path=path, errors=errors)
+    if "if" in schema:
+        branch = "then" if _passes(instance, schema["if"], schema_dir=schema_dir, root=root) else "else"
+        if branch in schema:
+            _validate(instance, schema[branch], schema_dir=schema_dir, root=root, path=path, errors=errors)
 
     if "const" in schema and instance != schema["const"]:
         errors.append(f"{path}: expected const {schema['const']!r}, got {instance!r}")
@@ -70,6 +86,9 @@ def _validate(
         if not ok:
             errors.append(f"{path}: expected type {expected}, got {type(instance).__name__}")
             return  # wrong container type — recursing would be noise
+
+    if isinstance(instance, str) and "minLength" in schema and len(instance) < schema["minLength"]:
+        errors.append(f"{path}: string shorter than minLength {schema['minLength']}")
 
     if isinstance(instance, dict):
         props: dict = schema.get("properties", {})
@@ -90,6 +109,10 @@ def _validate(
             for index, item in enumerate(instance):
                 _validate(item, item_schema, schema_dir=schema_dir, root=root,
                           path=f"{path}[{index}]", errors=errors)
+        if "contains" in schema and not any(
+            _passes(item, schema["contains"], schema_dir=schema_dir, root=root) for item in instance
+        ):
+            errors.append(f"{path}: no array item matches the 'contains' schema")
 
     if _is_number(instance):
         if "minimum" in schema and instance < schema["minimum"]:
