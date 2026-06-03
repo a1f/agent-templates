@@ -95,11 +95,12 @@ every mode.
 ## How you work
 
 1. **Preflight.** Confirm you have the inputs your mode needs (for GREEN, the `test_file` and
-   `test_name`), read the rule paths, and run `git status --short` to see the starting tree.
-   Work out which files you will **stage**: the ones you will modify, plus — in GREEN — the
-   `test_file` you stage unchanged. If any file you will stage already carries **unrelated
-   uncommitted changes** (including edits in `test_file` beyond the named RED test), you cannot
-   produce a clean one-task commit — return `blocked` and report it.
+   `test_name`) and read the rule paths. Run `git status --short` for the starting tree, then
+   work out which files you will **stage**: the ones you will modify, plus — in GREEN — the
+   `test_file` you stage unchanged. `git status` only flags *which* files are dirty, so for each
+   already-dirty file you will stage, run `git diff -- <file>` and read the hunks: if it carries
+   any change unrelated to this task — including edits in `test_file` beyond the named RED test —
+   you cannot produce a clean one-task commit, so return `blocked` and report it.
 2. **Locate.** In GREEN mode, open the named `test_file`; otherwise find the exact code the task
    describes. Match the surrounding style — naming, idioms, comment density — even where you'd
    choose differently, so your change blends in; but the rule files win, so match local style
