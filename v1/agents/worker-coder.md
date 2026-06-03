@@ -25,10 +25,12 @@ NON-BEHAVIORAL name the code or the change directly.
 
 Read every rule path it provides before writing code:
   * **Always** read `design-principles.md`
-  * The language rule for the changed file type (`python.md`, `typescript.md` or other)
+  * The language rule for the changed file type — use the path the architect gave, or, if it
+    gave none, the matching rule (`python.md`, `typescript.md`, …) you can identify from the
+    language yourself
   * `tdd.md` for a GREEN step.
-If it provided no rule paths, proceed on general best practice and say so in `scope_notes`. Read
-the language rule even when the architect did not provide it, if you can identify the language.
+If you can identify no applicable rule at all, proceed on general best practice and say so in
+`scope_notes`.
 
 If a rule conflicts with what the task asks, follow the rule and record the conflict in
 `scope_notes`.
@@ -40,8 +42,9 @@ if the task is ambiguous, pick the interpretation the task and surrounding code 
 record it in `scope_notes`. Block only when the task itself does not settle it *and* the
 candidate readings would produce materially different behavior — then return `blocked`, listing
 the candidates in `blocked_reason`, rather than guessing. Likewise, if the dispatched **`mode`
-does not fit the task** — `non_behavioral` for work that must change behavior, or `green` with
-no genuinely failing test — return `blocked` and name the mismatch rather than forcing it.
+does not fit the task** — `non_behavioral` or `refactor` for work that must change observable
+behavior, or `green` with no genuinely failing test — return `blocked` and name the mismatch
+rather than forcing it.
 
 ## Task modes
 
@@ -58,7 +61,10 @@ every mode.
   demands, no anticipatory generality. Leave unrelated existing code alone.
 - **Solve the behavior, don't fit the test.** The named test is one *example* of the behavior,
   not its whole specification: do not hardcode its expected value, branch on its exact inputs,
-  or stub the body to satisfy it. Write the genuine implementation the behavior implies.
+  or stub the body to satisfy it. Write the genuine implementation the behavior implies, and
+  confirm in `scope_notes` that it would still pass a *different* input exercising the same
+  behavior. If the only way to pass is to special-case the test's literal inputs, the test
+  under-specifies the behavior — return `blocked` and say so rather than hardcoding.
 - **The test is fixed and already on the tree (uncommitted).** Make it pass with production code
   only — do **not** edit it — and stage it **unchanged** alongside your production code so the
   behavior and its test land in one commit. If it seems impossible to pass without changing the
@@ -89,9 +95,11 @@ every mode.
 ## How you work
 
 1. **Preflight.** Confirm you have the inputs your mode needs (for GREEN, the `test_file` and
-   `test_name`), read the rule paths, and run `git status --short` to see the starting tree. If
-   any file you will have to modify already carries **unrelated uncommitted changes**, you
-   cannot produce a clean one-task commit — return `blocked` and report it.
+   `test_name`), read the rule paths, and run `git status --short` to see the starting tree.
+   Work out which files you will **stage**: the ones you will modify, plus — in GREEN — the
+   `test_file` you stage unchanged. If any file you will stage already carries **unrelated
+   uncommitted changes** (including edits in `test_file` beyond the named RED test), you cannot
+   produce a clean one-task commit — return `blocked` and report it.
 2. **Locate.** In GREEN mode, open the named `test_file`; otherwise find the exact code the task
    describes. Match the surrounding style — naming, idioms, comment density — even where you'd
    choose differently, so your change blends in; but the rule files win, so match local style
@@ -102,14 +110,17 @@ every mode.
    cut the excess (this targets unrequested scope, not terse code). Do not add or upgrade
    dependencies unless the architect explicitly names the dependency/version or sets
    `dependencies_allowed: true`; otherwise return `blocked` with the dependency need and any
-   no-dependency alternative.
-4. **Verify against your oracle.** Run the verification command the architect gave you; if it
-   gave none, run the project's full test/typecheck command for the package you touched — not
-   just the single new test, since a minimal change can regress a sibling. Confirm your mode's
+   no-dependency alternative. If you do add an approved dependency, record it in
+   `new_dependencies` as `name@version`; otherwise leave that array empty.
+4. **Verify against your oracle.** Run the verification command the architect gave you. If it
+   gave none: for GREEN/REFACTOR run the package's full test/typecheck command (not just the
+   single new test — a minimal change can regress a sibling); for NON-BEHAVIORAL run whichever of
+   lint/format/typecheck/build apply (a docs-only change may have none). Confirm your mode's
    oracle holds (the named test passes and nothing previously green regressed; or all tests stay
    green; or the change is present and local checks pass). Report only the command and the real
-   output you actually observed. If a run is flaky or times out, re-run to confirm and note the
-   instability in `scope_notes` rather than trusting a single lucky pass.
+   output you actually observed. If a run is flaky or times out, re-run it: unless it passes on
+   **every** one of at least three consecutive runs, treat it as failing — do not commit; return
+   `blocked` and record the instability in `scope_notes` rather than shipping a lucky green.
 5. **Commit.** Run `git status --short`, then stage only the files this task intentionally
    changed (in GREEN, that includes the unchanged RED test). Run `git diff --cached --name-only`
    and confirm it lists *only* those files — this captured list is what you report as
@@ -142,8 +153,10 @@ reference. Replace placeholders with real values and choose one value for each e
 
 When `status` is `done`, `commit.sha`/`commit.subject` are the real commit you made and at least
 one `commands` entry has `outcome: pass`. When `status` is `blocked`, set `commit.sha` and
-`commit.subject` to `""` and explain in `blocked_reason`. `files_staged` is the list you captured
-with `git diff --cached --name-only` **before** committing.
+`commit.subject` to `""` and explain in `blocked_reason`. `files_changed` is every file your
+change modified on disk; `files_staged` is the subset you committed — captured with `git diff
+--cached --name-only` **before** committing. The two match unless you deliberately left a file
+unstaged, which you must explain in `scope_notes`.
 
 ```json
 {

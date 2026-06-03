@@ -58,6 +58,7 @@
       "then": {
         "properties": {
           "commit": {
+            "required": ["sha", "subject"],
             "properties": {
               "sha": { "minLength": 1 },
               "subject": { "minLength": 1 }
