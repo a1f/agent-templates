@@ -98,7 +98,8 @@ Resolve these values before the first dispatch:
    c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `worker-coder`
       with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).
-4. **Review** → dispatch `reviewer` on `git diff <base>...HEAD`. If `has_critical: true`,
+4. **Review** → dispatch `reviewer` on `git diff <base>...HEAD`, passing `design-principles.md`,
+   the language rule for each changed file type, and `tdd.md`. If `has_critical: true`,
    route each CRITICAL back to `worker-coder` as a fix task (a behavioral fix goes RED→GREEN;
    a mechanical one is `mode: non_behavioral`), then re-review. MAJOR/MINOR: decide
    fix-now vs note-as-follow-up.

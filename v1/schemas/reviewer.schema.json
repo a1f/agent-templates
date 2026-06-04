@@ -4,21 +4,23 @@
   "title": "Reviewer agent return",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "role", "summary", "has_critical", "findings"],
+  "required": ["schema_version", "role", "summary", "summary_score", "has_critical", "findings"],
   "properties": {
     "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
     "role": { "const": "reviewer" },
     "summary": { "type": "string" },
+    "summary_score": { "type": "integer", "minimum": 1, "maximum": 100 },
     "has_critical": { "type": "boolean" },
     "findings": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["severity", "lens", "location", "issue", "fix"],
+        "required": ["severity", "score", "lens", "location", "issue", "fix"],
         "properties": {
           "severity": { "enum": ["CRITICAL", "MAJOR", "MINOR"] },
-          "lens": { "enum": ["quality", "bug", "security", "test"] },
+          "score": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "lens": { "enum": ["quality", "bug", "security", "readability", "test"] },
           "location": { "type": "string" },
           "issue": { "type": "string" },
           "fix": { "type": "string" }
