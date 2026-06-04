@@ -14,6 +14,7 @@ however small.
 - The one goal: minimize complexity
 - Deep modules
 - Information hiding
+- Better together or apart
 - Layers and abstraction
 - General-purpose interfaces
 - Define errors out of existence
@@ -61,6 +62,22 @@ That is what makes interfaces simple and change local.
   modify, then write" as three modules usually leaks the format into all three.
 - Expose the *general* capability, hide the *specific* policy. Don't add a config parameter
   the caller must understand when a sensible internal decision would do.
+
+## Better together or apart
+
+A module should have **one job** and do it fully. Combine two pieces of functionality into one
+module only when that genuinely reduces complexity; otherwise keep them apart.
+
+- **One concern per module.** A datastore and a cache are two concerns: expose a *store*
+  interface and hide caching as an implementation detail *inside* it, or keep them as separate
+  modules — never ship a `StoreAndCache` that does both. If the name needs an "and", or you
+  can't state the job in one phrase, split it.
+- **Bring together** when the pieces share information, when one interface is simpler than two
+  (callers learn one abstraction), or when it removes duplication or a shallow go-between.
+- **Keep apart** when the pieces are used independently, when one is general-purpose and the
+  other special-purpose, or when bundling forces callers to learn things they don't need.
+- The test is complexity, not line count: merge if the whole is simpler than the parts; split
+  if the parts are simpler than the whole.
 
 ## Layers and abstraction
 
@@ -114,6 +131,10 @@ non-obvious. They are part of the design, not an afterthought.
 - Never write a comment that just restates the code. Document the things that are *not*
   obvious from reading it.
 - Comments describe *why*, not *what*. The code already says what.
+- **The interface comment is a complete contract.** A caller — human or agent — should be able
+  to use the module correctly from its interface comment alone: inputs, result, errors, side
+  effects, and preconditions, without reading the body. If you can't document it that
+  completely, the interface is doing too much.
 
 ## Tactical vs strategic
 
@@ -131,6 +152,7 @@ codebase.
 - **Pass-through method / variable** — added layer carries no new abstraction.
 - **Repetition** — the same snippet appears more than twice.
 - **Special-general mixture** — special-purpose code embedded in a general-purpose mechanism.
+- **Multi-concern module** — one module owns two jobs that don't share information; the name needs an "and".
 - **Conjoined methods** — two pieces only understandable by reading both back-to-back.
 - **Comment repeats code** — or, you can't write a comment without restating the body.
 - **Hard to name / hard to describe** — the unit's responsibilities aren't clean.
