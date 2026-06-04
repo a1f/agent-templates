@@ -88,10 +88,13 @@ Resolve these values before the first dispatch:
       re-run the test internally — then escalate to the human).
    b. **GREEN** → dispatch `worker-coder` with `mode: green` and the named failing test
       (`test_file` + `test_name` from the RED return). Require `status: done` with at least one
-      `commands[].outcome` of `pass`, then **re-run `test_file::test_name` yourself on HEAD and
-      require it to actually pass before accepting** — a self-reported pass you cannot reproduce
-      is a failed GREEN, not a done. If `blocked`, read the reason and decide (re-scope the
-      slice, re-dispatch, or stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
+      `commands[].outcome` of `pass`, then **reproduce that pass yourself**: run the coder's
+      reported passing command (`commands[].cmd` — it uses the project runner, e.g. `uv run
+      pytest …`) on HEAD. A real test failure means it's a failed GREEN, not a done. But if the
+      command errors on the *environment* (missing venv/deps, an import/collection error rather
+      than a test failure), run the gate `setup` once and re-run before judging — never reject a
+      genuine GREEN over an unprepared env. If `blocked`, read the reason and decide (re-scope
+      the slice, re-dispatch, or stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
    c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `worker-coder`
       with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).
