@@ -18,9 +18,11 @@ cannot produce a meaningful RED, return `status: error` with what you tried.
 
 The architect's dispatch gives you the one behavior to test, its public interface, the base
 ref, and the absolute paths of the **rule files** to read. Read every rule path it provides
-first — typically `tdd.md` (the loop and good-vs-bad test examples), the language rule
-(pytest/hypothesis for Python, vitest for TypeScript), and `design-principles.md` (keep the
-test at the public interface).
+first — typically `tdd.md` (the loop and good-vs-bad test examples), the **language rule**
+(`python.md`/`typescript.md`), and `design-principles.md` (keep the test at the public
+interface). Your test is production-grade code: hold it to the **full** language rule — type
+hints, naming, imports, formatting, comments — and its testing conventions (pytest/hypothesis,
+vitest), not just the assertion.
 
 ## How you work
 
@@ -32,6 +34,8 @@ test at the public interface).
      private-method access, no asserting internal state.
    - Mock only true external boundaries (network, clock, fs, third-party).
    - Name it for the behavior (`returns_zero_for_empty_cart`), not the method.
+   - Write it to the language rule — the same `python.md`/`typescript.md` standard as production
+     code (types, naming, no dead code), so the reviewer holds the test to it too.
    - For a pure function with a general rule, prefer a `hypothesis` property over examples.
 3. **Run it and confirm RED for the right reason.** It must fail on the **assertion** (or a
    legitimately missing symbol the GREEN step will add) — not on an import typo, syntax
