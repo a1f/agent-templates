@@ -20,7 +20,10 @@ however small.
 - Define errors out of existence
 - Naming
 - Comments
+- Consistency
+- Code should be obvious
 - Tactical vs strategic
+- Design it twice
 - Red flags
 - Testability is a design property
 
@@ -136,12 +139,48 @@ non-obvious. They are part of the design, not an afterthought.
   effects, and preconditions, without reading the body. If you can't document it that
   completely, the interface is doing too much.
 
+## Consistency
+
+Do similar things in similar ways. Consistency lowers cognitive load and unknown-unknowns: once
+a reader learns a pattern, they can rely on it holding everywhere.
+
+- **Follow the conventions already in the codebase** — naming schemes, file and module layout,
+  error handling, how a common task is wired. A change that invents a new way to do an existing
+  thing adds a pattern every future reader must learn.
+- Keep **parallel cases parallel**: sibling handlers, similar endpoints, and repeated shapes
+  should read the same way, so understanding one means understanding the rest.
+- Diverge from an established pattern only when the pattern is wrong — then fix the pattern,
+  don't add a competing one beside it.
+
+## Code should be obvious
+
+Code is read far more than it is written. Aim for code whose behavior a reader grasps quickly
+and correctly, without surprises. **Non-obvious code is a defect**, even when it is correct.
+
+- If a reader must pause to work out what a piece of code does, or could reasonably read it
+  wrong, that is a problem — fix it with clearer names and structure first.
+- When the *why* still isn't obvious from well-named code, that is what a comment is for (see
+  Comments) — but reach for structure before commentary.
+- Avoid surprises: don't give something a name or signature that implies behavior it lacks, and
+  don't hide a side effect where a reader won't expect it. The obvious reading should be correct.
+
 ## Tactical vs strategic
 
 Program **strategically**, not tactically. The goal is a good design, not just working
 code. Invest a little extra continuously (better structure, better names, a comment) rather
 than taking shortcuts that compound. There are no "tactical tornado" exceptions in this
 codebase.
+
+## Design it twice
+
+Your first idea for a non-trivial design is rarely your best. Before committing, sketch **two
+genuinely different approaches** and compare them — the comparison is what reveals the better
+design, and sometimes a third that beats both.
+
+- Spend this effort in proportion to the decision: a throwaway helper doesn't need it; a module
+  boundary, a public interface, or a data shape does.
+- Compare on the criteria that matter here — which interface is simpler and deeper, which hides
+  more, which has fewer special cases — not which is faster to type.
 
 ## Red flags — stop and reconsider if you see these
 
@@ -156,6 +195,8 @@ codebase.
 - **Conjoined methods** — two pieces only understandable by reading both back-to-back.
 - **Comment repeats code** — or, you can't write a comment without restating the body.
 - **Hard to name / hard to describe** — the unit's responsibilities aren't clean.
+- **Inconsistency** — a new pattern for something the codebase already does one established way.
+- **Non-obvious code** — a reader must stop and puzzle out what it does, or could read it wrong.
 
 ## Testability is a design property
 
