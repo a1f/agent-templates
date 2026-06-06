@@ -1,120 +1,106 @@
 #!/usr/bin/env python3
-"""Anti-drift check: every agent prompt's example return matches its schema's shape.
+"""Anti-drift check: each agent prompt's example return stays in sync with its schema.
 
-Each v1 agent prompt ends with an illustrative ```json block. That block is a
-human-facing example — enum fields show "a | b" choices, so it is NOT a valid data
-instance — but its KEY STRUCTURE must stay in lockstep with the authoritative schema
-in v1/schemas/. This check extracts the block, reads its "role" to find the matching
-schema, and asserts the key sets are identical at every object level. A prompt edit
-that adds, renames, or drops a field is caught here before it can drift from the
-schema the architect validates real returns against.
+Every v1 agent prompt ends with a JSON return block. This checks that block against the
+authoritative schema in v1/schemas/ two ways: identical key sets at every object level
+(so an added, renamed, or dropped field is caught — stricter than the schema, which lets
+optional keys be absent), and — via the same validator the architect runs on real
+returns — the enum values and numeric ranges the key walk alone cannot see.
 
-Usage:
-    python3 check_prompt_schemas.py        # checks every prompt in v1/agents/
-
-Exits 0 if every prompt matches its schema, 1 on drift, 2 on bad input.
+Usage: python3 check_prompt_schemas.py    # every prompt in v1/agents/  (exit 0/1/2).
 """
+
 from __future__ import annotations
 
 import json
 import re
 import sys
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any, Final, cast
 
-V1 = Path(__file__).resolve().parent.parent
-AGENTS = V1 / "agents"
-SCHEMAS = V1 / "schemas"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from validate_return import (
+    Ctx,
+    Schema,
+    deref,
+    iter_errors,
+)
 
-_JSON_BLOCK = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
+_V1: Final = Path(__file__).resolve().parent.parent
+_AGENTS: Final = _V1 / "agents"
+_SCHEMAS: Final = _V1 / "schemas"
+_JSON_BLOCK: Final = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
 
 
-def _example_object(prompt_path: Path) -> dict:
-    blocks = _JSON_BLOCK.findall(prompt_path.read_text())
+def _example(prompt: Path) -> dict[str, Any]:
+    """The last ```json block in a prompt — the Return shape the agent is shown."""
+    blocks = _JSON_BLOCK.findall(prompt.read_text())
     if not blocks:
         raise ValueError("no ```json block found")
-    return json.loads(blocks[-1])  # the Return block is the last json fence
+    return cast("dict[str, Any]", json.loads(blocks[-1]))
 
 
-def _resolve(schema: dict, *, schema_dir: Path, root: dict) -> dict:
-    if "$ref" not in schema:
-        return schema
-    file_part, _, pointer = schema["$ref"].partition("#")
-    doc = root if not file_part else json.loads((schema_dir / file_part).read_text())
-    node: object = doc
-    for token in pointer.split("/"):
-        if token:
-            node = node[token]
-    return node  # type: ignore[return-value]
-
-
-def _check(
-    example: object,
-    schema: dict,
-    *,
-    schema_dir: Path,
-    root: dict,
-    path: str,
-    errors: list[str],
-) -> None:
-    schema = _resolve(schema, schema_dir=schema_dir, root=root)
-
+def _key_drift(example: object, schema: Schema, ctx: Ctx, path: str) -> Iterator[str]:
+    """Yield every place the example's keys diverge from the schema's properties."""
+    schema = deref(schema, ctx)
     if schema.get("type") == "object" or "properties" in schema:
         if not isinstance(example, dict):
-            errors.append(f"{path}: schema expects an object, example is {type(example).__name__}")
+            yield f"{path}: expected an object, example is {type(example).__name__}"
             return
-        props: dict = schema.get("properties", {})
-        expected, actual = set(props), set(example)
-        for missing in sorted(expected - actual):
-            errors.append(f"{path}: example is missing key '{missing}' (present in schema)")
-        for extra in sorted(actual - expected):
-            errors.append(f"{path}: example has key '{extra}' (not in schema)")
-        for key in sorted(expected & actual):
-            _check(example[key], props[key], schema_dir=schema_dir, root=root,
-                   path=f"{path}.{key}", errors=errors)
-    elif schema.get("type") == "array":
+        props: Schema = schema.get("properties", {})
+        for missing in sorted(props.keys() - example.keys()):
+            yield f"{path}: example is missing key {missing!r} (present in schema)"
+        for extra in sorted(example.keys() - props.keys()):
+            yield f"{path}: example has key {extra!r} (not in schema)"
+        for key in sorted(props.keys() & example.keys()):
+            yield from _key_drift(example[key], props[key], ctx, f"{path}.{key}")
+    elif schema.get("type") == "array" and (item_schema := schema.get("items")):
         if not isinstance(example, list):
-            errors.append(f"{path}: schema expects an array, example is {type(example).__name__}")
-            return
-        item_schema = schema.get("items")
-        if item_schema and example:
-            _check(example[0], item_schema, schema_dir=schema_dir, root=root,
-                   path=f"{path}[0]", errors=errors)
+            yield f"{path}: expected an array, example is {type(example).__name__}"
+        elif example:
+            yield from _key_drift(example[0], item_schema, ctx, f"{path}[0]")
 
 
-def check_agent(prompt_path: Path) -> list[str]:
-    example = _example_object(prompt_path)
+def drift(prompt: Path) -> list[str]:
+    """How a prompt's example diverges from its role's schema (empty = in sync)."""
+    example = _example(prompt)
     role = example.get("role")
-    schema_path = SCHEMAS / f"{role}.schema.json"
+    schema_path = _SCHEMAS / f"{role}.schema.json"
     if not schema_path.exists():
-        return [f"role {role!r} has no schema at {schema_path.relative_to(V1.parent)}"]
-    schema = json.loads(schema_path.read_text())
-    errors: list[str] = []
-    _check(example, schema, schema_dir=SCHEMAS, root=schema, path=str(role), errors=errors)
-    return errors
+        return [f"role {role!r} has no schema at {schema_path.relative_to(_V1.parent)}"]
+    schema: Schema = json.loads(schema_path.read_text())
+    ctx = Ctx(_SCHEMAS, schema)
+    # Key-set parity catches structural drift; iter_errors catches the enum/range drift
+    # the key walk cannot — together they hold the example to the full return contract.
+    return [
+        *_key_drift(example, schema, ctx, str(role)),
+        *iter_errors(example, schema, ctx, str(role)),
+    ]
 
 
 def main() -> int:
-    prompts = sorted(AGENTS.glob("*.md"))
+    prompts = sorted(_AGENTS.glob("*.md"))
     if not prompts:
-        print(f"no agent prompts found in {AGENTS}", file=sys.stderr)
+        print(f"no agent prompts found in {_AGENTS}", file=sys.stderr)
         return 2
-    failures = 0
-    for prompt_path in prompts:
+    drifted = 0
+    for prompt in prompts:
         try:
-            errors = check_agent(prompt_path)
+            errors = drift(prompt)
         except (OSError, ValueError, json.JSONDecodeError) as exc:
-            print(f"ERROR {prompt_path.name}: {exc}")
-            failures += 1
+            print(f"ERROR {prompt.name}: {exc}")
+            drifted += 1
             continue
         if errors:
-            failures += 1
-            print(f"DRIFT {prompt_path.name}:")
-            for err in errors:
-                print(f"  - {err}")
+            drifted += 1
+            print(f"DRIFT {prompt.name}:")
+            for error in errors:
+                print(f"  - {error}")
         else:
-            print(f"ok    {prompt_path.name}")
-    if failures:
-        print(f"\n{failures} prompt(s) drifted from their schema.")
+            print(f"ok    {prompt.name}")
+    if drifted:
+        print(f"\n{drifted} prompt(s) drifted from their schema.")
         return 1
     print("\nAll agent prompts match their return schemas.")
     return 0

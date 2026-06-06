@@ -19,13 +19,13 @@ architect (skill, the driver)
   │                    test, right        commit)
   │                    reason)
   │
-  ├─ gates      — uv run ruff/mypy/pytest · pnpm exec biome/tsc/vitest · cargo fmt/clippy/test  (hard fail, run first)
+  ├─ gates      — uv run ruff/mypy/pytest · pnpm exec biome/tsc/vitest · cargo fmt/clippy/check/test  (hard fail, run first)
   ├─ reviewer   — quality + bugs + security on the diff   (is the code good?)
   └─ critic     — goal-fit on the task spec               (did it achieve the task?)
 
   → objective gates run before the judges; one batched fix round, then re-verify in proportion
     to the change (gates always; scoped re-review; critic only on behavioral change)
-  → done only when: gates green, no CRITICAL, no unwaived review finding ≥70, critic=achieved
+  → done only when: all behaviors green, gates green, no CRITICAL, no unwaived review finding ≥70, critic=achieved
 ```
 
 `architect` is a **skill** invoked explicitly in the main loop (`disable-model-invocation:
@@ -89,14 +89,14 @@ v1/
 │   └── {coder,tdd-runner,reviewer,critic}.schema.json
 ├── scripts/                    # stdlib-only helpers — no third-party deps
 │   ├── validate_return.py      #   validate one agent return against its schema (used by architect)
-│   └── check_prompt_schemas.py #   anti-drift: prompt examples vs schemas (at validate --v1)
+│   └── check_prompt_schemas.py #   anti-drift: prompt examples vs schemas (python3 scripts/check_prompt_schemas.py)
 ├── skills/
 │   └── architect/SKILL.md      # the driver + JSONL logging contract + decision rules
 ├── gates/                      # declarative hard gates (reuses make-pr gate format)
 │   ├── python.json             #   ruff / typecheck / pytest
 │   ├── typescript.json         #   biome / tsc / vitest
 │   └── rust.json               #   fmt / clippy / check / test
-└── runs/                       # per-PR JSONL logs (gitignored) — written at runtime
+└── runs/                       # gitignored placeholder — real run logs go to <target_cwd>/.v1-runs (run_root), never under v1/
 ```
 
 ## How quality is enforced (two layers)
@@ -114,8 +114,9 @@ pins `role` as a `const`, requires every field, and sets `additionalProperties: 
 return must be **filled literally, not improvised**. The architect validates each return with
 `scripts/validate_return.py` (stdlib-only — required keys, enums, `const`s, no extra keys) and
 treats a failure as a malformed return. The ` ```json ` block shown in each agent prompt is the
-same shape for the model to read; `scripts/check_prompt_schemas.py` (run by `at validate --v1`)
-keeps those examples in lockstep with the schemas so a prompt edit can't silently drift.
+same shape for the model to read; `scripts/check_prompt_schemas.py` (run via `python3
+scripts/check_prompt_schemas.py`) checks each example's key structure against the schema so a prompt
+edit can't silently add, rename, or drop a field (it compares key sets, not enum values or ranges).
 
 ## Gate contract
 
