@@ -19,9 +19,9 @@ architect (skill, the driver)
   │                    test, right        commit)
   │                    reason)
   │
+  ├─ gates      — uv run ruff/mypy/pytest · pnpm exec biome/tsc/vitest  (hard fail, run first)
   ├─ reviewer   — quality + bugs + security on the diff   (is the code good?)
-  ├─ critic     — goal-fit on the task spec               (did it achieve the task?)
-  └─ gates      — uv run ruff/mypy/pytest · pnpm exec biome/tsc/vitest  (hard fail)
+  └─ critic     — goal-fit on the task spec               (did it achieve the task?)
 
   → done only when: all green, no CRITICAL, critic=achieved, gates green
 ```

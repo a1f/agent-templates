@@ -24,7 +24,7 @@ structured returns, and decide the next step.
 |-------|------|-----|
 | `tdd-runner` | RED, once per behavior | write ONE failing test, prove it fails for the right reason |
 | `worker-coder` | GREEN & REFACTOR (per behavior); non-behavioral edits | minimal code to pass the test, a behavior-preserving refactor, or an exact non-behavioral change; commit |
-| `reviewer` | after all behaviors green | quality + bugs + security on the diff |
+| `reviewer` | after the gates are green | quality + bugs + security on the diff |
 | `critic` | after review | goal-fit: did the PR achieve the task? |
 
 Give each agent the **task context + the exact files/base it needs + the absolute rule
@@ -98,20 +98,23 @@ Resolve these values before the first dispatch:
    c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `worker-coder`
       with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).
-4. **Review** → dispatch `reviewer` on `git diff <base>...HEAD`, passing `design-principles.md`,
+4. **Gate (run before the reviewer/critic).** Run the language gates from `v1/gates/<lang>.json`.
+   Each gate file is `{"setup": <cmd>, "gates": [{"name","run","fix"}]}`: run `setup` once, then
+   each `gates[].run` in order. All gates must pass **before you dispatch the reviewer or critic** —
+   the gates are cheap and objective, so letting a format/lint/type/test failure surface here means
+   it never costs reviewer and critic tokens on code that was going back for a fix anyway. On
+   failure, route the fix to `worker-coder` (`mode: non_behavioral` for format/lint/type fixes) and
+   re-run; keep gates green rather than marking done on a red gate. Run `setup`/`run` only, never `fix`.
+5. **Review** → dispatch `reviewer` on `git diff <base>...HEAD`, passing `design-principles.md`,
    the language rule for each changed file type, and `tdd.md`. If `has_critical: true`,
    route each CRITICAL back to `worker-coder` as a fix task (a behavioral fix goes RED→GREEN;
    a mechanical one is `mode: non_behavioral`), then re-review. MAJOR/MINOR: decide
    fix-now vs note-as-follow-up.
-5. **Critic** → dispatch `critic` with the task spec + diff. If `verdict: not_achieved` or
+6. **Critic** → dispatch `critic` with the task spec + diff. If `verdict: not_achieved` or
    `partial`, address the gaps (back to step 3) before proceeding.
-6. **Gate** → run the language gates from `v1/gates/<lang>.json`. Each gate file is
-   `{"setup": <cmd>, "gates": [{"name","run","fix"}]}`: run `setup` once, then each
-   `gates[].run` in order. All must pass. On failure, route the fix to `worker-coder`
-   (`mode: non_behavioral` for format/lint/type fixes) and re-run; keep gates green rather than
-   marking done on a red gate. Run `setup`/`run` only, never `fix`.
-7. **Done** → only when: all behaviors green, no CRITICAL review findings, critic
-   `achieved`, and all gates green. Summarize and hand back.
+7. **Done** → only when: all behaviors green, all gates green, no CRITICAL review findings, and
+   critic `achieved`. If a review- or critic-driven fix changed code after the gate ran, re-run the
+   gate before Done so a green gate always reflects the final tree. Summarize and hand back.
 
 ## JSONL logging contract (mandatory)
 
@@ -121,7 +124,7 @@ returns. `<run-id>` is the branch name or task id with `/` and whitespace replac
 so branch names cannot create nested paths. Schema:
 
 ```json
-{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|REVIEW|CRITIC|GATE",
+{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|GATE|REVIEW|CRITIC",
  "role":"tdd-runner|coder|reviewer|critic|architect","prompt":"<full prompt you sent>",
  "result":"<full agent return>","verdict":"pass|fail|skip","files":["<changed paths>"],
  "note":"<e.g. TDD skip reason, retry #, decision made>"}
@@ -159,7 +162,8 @@ unless asked.
 
 ## Hard rules
 
-- Fixed order for behavioral work: RED → GREEN → (refactor) → REVIEW → CRITIC → GATE.
+- Fixed order for behavioral work: RED → GREEN → (refactor) → GATE → REVIEW → CRITIC. The
+  objective gates run before the reviewer/critic so a gate failure never costs LLM-judgment tokens.
   Non-behavioral TDD skips are allowed only when logged with a reason.
 - Never refactor or declare done while any test or gate is red.
 - Never weaken a test or gate to get green.
