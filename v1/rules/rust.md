@@ -17,14 +17,14 @@ encode.
   (`//`) over block, one combined `#[derive(...)]` per item. Put any overrides in `rustfmt.toml`.
 - **Linter:** clippy. `cargo clippy --all-targets --all-features -- -D warnings` is clean before
   every commit. **Fix warnings, never silence them** — reach for `#[allow(...)]` only with a
-  comment justifying it. Configure lint levels in `[workspace.lints]`, not inline crate attributes.
+  comment justifying it (lint levels live in `[workspace.lints]` — see Workspace Lints).
 - **Async runtime:** Tokio (async-std is discontinued).
 - **Error handling:** thiserror (libraries) + anyhow (applications); eyre is an acceptable
   alternative for rich application error reports.
 - **Tests:** `cargo test` (unit + integration + doc tests). Use **cargo-nextest** as the local
   runner (faster parallelism, better output) — it does **not** run doc tests, so keep
   `cargo test --doc` alongside it. **proptest** for property-based tests (per-value shrinking).
-- **CI checks:** `cargo doc --no-deps`, `cargo audit`, `cargo deny`.
+- **CI checks:** `cargo doc --no-deps`, `cargo audit`, `cargo deny` (known vulnerabilities + license violations).
 
 ## Naming
 
@@ -82,6 +82,12 @@ Three groups, blank-line separated, in order: `std`/`core`/`alloc`; third-party 
   enum variants — rename locally (`use SomeLongEnum as Se;`) if needed.
 - Group same-path imports with nested braces (`use a::b::{C, D};`).
 
+The std/external/local grouping and same-path brace-merging are produced only by the *unstable*
+rustfmt options `group_imports`/`imports_granularity`. Stable `cargo fmt` (the gate) only sorts within
+existing groups, so on stable these two are reviewer-enforced conventions; to automate them, set
+`group_imports = "StdExternalCrate"` and `imports_granularity = "Crate"` in `rustfmt.toml` and run
+`cargo +nightly fmt`.
+
 ## Documentation
 
 Doc comments (`///`) required on all public items, written as complete sentences. Include these
@@ -127,8 +133,12 @@ uninlined_format_args = "warn"
 
 ## Async
 
-Native `async fn` in traits is stable — use it directly. Fall back to `#[async_trait]` only when
-the trait must be dyn-compatible (used as `dyn Trait`).
+Native `async fn` in traits is stable — use it directly. But it cannot express a `Send` bound on the
+returned future, so a future obtained through a generic or `dyn` bound will not satisfy `tokio::spawn`
+on the multithreaded runtime; when you must spawn the result, return `-> impl Future<Output = …> +
+Send` explicitly, annotate the trait with `#[trait_variant::make(Send)]`, or fall back to
+`#[async_trait]` (which boxes a `Send` future). Reach for `#[async_trait]` for dyn-compatibility **or**
+when you need that `Send` bound for spawning.
 
 - `tokio::select!` to multiplex futures; `tokio::sync::mpsc` for async channels.
 - Offload CPU-bound or blocking work to `tokio::task::spawn_blocking`; never block the async
@@ -150,11 +160,6 @@ the trait must be dyn-compatible (used as `dyn Trait`).
   with `dep.workspace = true` so versions stay consistent.
 - **No `println!`/`eprintln!`/`dbg!` in library code** — emit structured events through `tracing`
   (or `log`); binaries initialize the subscriber, libraries only emit.
-
-## Supply Chain Security
-
-Commit `Cargo.lock`. Run `cargo audit` and `cargo deny` in CI to catch known vulnerabilities and
-license violations. Pin or inherit dependency versions through the workspace.
 
 ## Testing
 

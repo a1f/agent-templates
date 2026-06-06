@@ -8,7 +8,7 @@ Target Python 3.12+. Use modern syntax and tooling throughout.
 
 ## Tooling
 
-- **Linter/Formatter:** ruff (`select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PIE", "RUF"]`)
+- **Linter/Formatter:** ruff (`select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PIE", "RUF", "DTZ", "PTH", "ASYNC"]` — `DTZ`/`PTH`/`ASYNC` enforce the tz-aware-datetime, pathlib, and async rules below)
 - **Type checker:** mypy with `strict = true`
 - **Package manager:** uv (manages packages, virtual envs, and Python versions)
 - **Tests:** pytest + hypothesis (property-based) + pytest-asyncio + pytest-cov (branch coverage)
@@ -72,7 +72,10 @@ Prefer functions over classes unless state is needed. If a method doesn't use `s
 - Use `pathlib.Path` over `os.path`
 - Use `asyncio` over threading for concurrent I/O
 - Always use top-level imports. Never import inside functions.
-- Never use `if TYPE_CHECKING:` — if it causes a circular import, fix the architecture
+- Avoid `if TYPE_CHECKING:` for ordinary imports — a circular import usually means the architecture
+  is wrong, so fix that first. Use it only for a genuinely unavoidable type-only cycle (or to keep a
+  heavy/optional dependency out of the runtime import graph); pair it with `from __future__ import
+  annotations`, since 3.12 still evaluates annotations eagerly without it
 - Convert `defaultdict` to plain `dict` before returning from functions
 - Executable modules define `main()` and call it under `if __name__ == "__main__":`; no work at import time
 - No mutable module-level state; module-level values are `Final`
@@ -110,5 +113,4 @@ Test discipline (pytest, hypothesis, pytest-asyncio) lives in `tdd.md`. Python-s
 - Set `filterwarnings = ["error"]` to catch deprecation warnings (the default gate also runs
   pytest with `-W error`).
 - Measure **branch** coverage, not just line coverage. Configure the package path and threshold
-  in `pyproject.toml`; do not hardcode repository layout in the shared gate. Reviewer should flag
-  a Python project that lacks branch coverage configuration as a quality finding.
+  in `pyproject.toml`; do not hardcode repository layout in the shared gate.

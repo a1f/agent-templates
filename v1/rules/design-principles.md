@@ -106,7 +106,8 @@ def get_user(self, uid):           # BAD — pure forwarder, same signature, no 
     return self._repo.get_user(uid)
 
 def get_user(self, uid):           # OK — earns the layer: adds caching + a domain error
-    return self._cache.get(uid) or self._fetch_or_raise(uid)
+    hit = self._cache.get(uid)
+    return hit if hit is not None else self._fetch_or_raise(uid)
 ```
 - **Thread context, not pass-through variables.** When a value would otherwise be threaded
   through many layers just to reach the bottom, introduce a context object or rethink the
@@ -169,8 +170,7 @@ def unset(self, key):              # BAD — every caller must wrap in try/excep
 def unset(self, key):              # GOOD — missing key is a no-op; the error case vanishes
     self._d.pop(key, None)
 ```
-- Use the language's result/exception conventions from the language rules; here the design
-  rule is: **minimize the number of exceptional cases the caller must reason about.**
+- Use the language's result/exception conventions from the language rules.
 
 ## Naming
 
@@ -240,8 +240,7 @@ genuinely different approaches** and compare them — the comparison is what rev
 design, and sometimes a third that beats both.
 
 - Spend this effort in proportion to the decision: a throwaway helper doesn't need it; a module
-  boundary, a public interface, or a data shape does. In GREEN, keep this to a brief sanity check
-  and do not add unused generality; reserve broad restructuring for REFACTOR.
+  boundary, a public interface, or a data shape does (scale to the mode, as the intro says).
 - Compare on the criteria that matter here — which interface is simpler and deeper, which hides
   more, which has fewer special cases — not which is faster to type.
 
@@ -266,6 +265,5 @@ design, and sometimes a third that beats both.
 
 ## Testability is a design property
 
-Code that is hard to test through its public interface is badly factored. Design modules so
-their behavior is observable at the boundary without reaching inside. See `tdd.md` — tests
-exercise public interfaces, never implementation details.
+Code that is hard to test through its public interface is badly factored — design modules so
+behavior is observable at the boundary without reaching inside (see `tdd.md`).

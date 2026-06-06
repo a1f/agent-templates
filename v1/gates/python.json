@@ -5,6 +5,6 @@
     { "name": "format",    "run": "uv run ruff format --check .",  "fix": "uv run ruff format ." },
     { "name": "lint",      "run": "uv run ruff check .",           "fix": "uv run ruff check --fix ." },
     { "name": "typecheck", "run": "uv run mypy --strict .",        "fix": null },
-    { "name": "test",      "run": "uv run pytest -x -W error",     "fix": null }
+    { "name": "test",      "run": "uv run pytest -W error",        "fix": null }
   ]
 }

@@ -8,7 +8,7 @@ Target TypeScript 5.8+. Use strict mode, modern ESM, and current tooling through
 
 ## Compiler Configuration
 
-Use `module: "nodenext"` (Node.js) or `module: "esnext"` (bundled apps). Always enable strict mode plus additional flags:
+Use `module: "nodenext"` (Node.js — it sets `moduleResolution` automatically) or, for bundled apps, `module: "preserve"` (TS 5.4+, which implies `moduleResolution: "bundler"`). If you instead use `module: "esnext"`, you must also set `moduleResolution: "bundler"` explicitly — alone it falls back to the legacy `classic` resolver, which cannot read package `exports` maps. Always enable strict mode plus additional flags:
 
 ```json
 {
@@ -150,8 +150,7 @@ Test discipline (vitest, behavior through the public interface) lives in `tdd.md
 `vitest` with `--passWithNoTests=false` so a test-less change cannot pass green. Configure
 coverage provider, branch thresholds, strict compiler flags, enum/barrel restrictions, and Biome
 rules in committed project config (`vitest.config.*`, `tsconfig*.json`, `biome.json`) rather than
-only on the gate command line. Reviewer should flag a TypeScript project that lacks branch
-coverage configuration as a quality finding.
+only on the gate command line.
 
 ## Logging
 
