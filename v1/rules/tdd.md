@@ -1,5 +1,5 @@
 ---
-paths: "**/*_test.py", "**/test_*.py", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/tests/**"
+paths: ["**/*_test.py", "**/test_*.py", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/tests/**"]
 ---
 
 # TDD Rules
