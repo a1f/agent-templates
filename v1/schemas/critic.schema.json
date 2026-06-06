@@ -44,5 +44,20 @@
       }
     },
     "note": { "type": "string" }
-  }
+  },
+  "allOf": [
+    {
+      "$comment": "verdict must follow from score: achieved >=85, partial 50-84, not_achieved <=49.",
+      "if": { "required": ["verdict"], "properties": { "verdict": { "const": "achieved" } } },
+      "then": { "properties": { "score": { "minimum": 85 } } }
+    },
+    {
+      "if": { "required": ["verdict"], "properties": { "verdict": { "const": "partial" } } },
+      "then": { "properties": { "score": { "minimum": 50, "maximum": 84 } } }
+    },
+    {
+      "if": { "required": ["verdict"], "properties": { "verdict": { "const": "not_achieved" } } },
+      "then": { "properties": { "score": { "maximum": 49 } } }
+    }
+  ]
 }

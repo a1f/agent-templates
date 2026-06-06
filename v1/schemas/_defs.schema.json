@@ -5,21 +5,6 @@
   "$defs": {
     "schema_version": {
       "const": "v1"
-    },
-    "command": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["cmd", "exit_code", "outcome", "key_output"],
-      "properties": {
-        "cmd": { "type": "string" },
-        "exit_code": { "type": "integer" },
-        "outcome": {
-          "type": "string",
-          "enum": ["pass", "fail", "red", "error"],
-          "description": "coder uses pass|fail; tdd-runner uses red|error"
-        },
-        "key_output": { "type": "string" }
-      }
     }
   }
 }
