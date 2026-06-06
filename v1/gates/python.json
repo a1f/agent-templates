@@ -1,9 +1,10 @@
 {
   "setup": "uv sync --frozen",
+  "triggers": ["*.py", "**/*.py", "pyproject.toml", "**/pyproject.toml", "uv.lock", "**/uv.lock"],
   "gates": [
     { "name": "format",    "run": "uv run ruff format --check .",  "fix": "uv run ruff format ." },
     { "name": "lint",      "run": "uv run ruff check .",           "fix": "uv run ruff check --fix ." },
-    { "name": "typecheck", "run": "uv run mypy --strict ." },
-    { "name": "test",      "run": "uv run pytest -x" }
+    { "name": "typecheck", "run": "uv run mypy --strict .",        "fix": null },
+    { "name": "test",      "run": "uv run pytest -x -W error",     "fix": null }
   ]
 }
