@@ -31,7 +31,9 @@ structured returns, and decide the next step.
 
 Give each agent the **task context + base + module boundary + allowed paths + exact files it
 needs + absolute rule paths** (resolve `v1/rules/...` to absolute — see Runtime resolution), and
-give `worker-coder` its **`mode`** (`green` | `refactor` | `non_behavioral`). Keep each dispatch
+give `worker-coder` its **`mode`** (`green` | `refactor` | `non_behavioral`) plus
+`dependencies_allowed` (and any named dependency/version) when the task permits dependencies —
+otherwise the coder blocks on any new dependency. Keep each dispatch
 prompt tight and scoped to one job. Require each agent to return exactly the JSON object defined
 in its prompt, and **validate that return against `<v1_root>/schemas/<role>.schema.json`**
 (keyed by the `role` field in the return). The validator reads the instance from a **file**, so
@@ -109,22 +111,29 @@ Resolve these values before the first dispatch:
 3. **Plan behaviors.** Per `tdd.md`, list the user-facing **behaviors** (not impl steps),
    ordered as thin vertical slices. Decide per task whether it is **behavioral** (TDD
    required) or **non-behavioral** (config/docs/rename — TDD skipped, log the skip + reason).
-   For non-behavioral work: log a RED skip, dispatch `worker-coder` with
-   `mode: non_behavioral`, reproduce any reported passing check when present, then continue to
-   GATE → REVIEW → CRITIC. Do not enter the RED/GREEN loop for non-behavioral work.
+   For non-behavioral work: log the skipped RED (`step: RED, verdict: skip`), dispatch
+   `worker-coder` with `mode: non_behavioral` (log that dispatch as `step: NON_BEHAVIORAL`),
+   reproduce any reported passing check when present, then continue to GATE → REVIEW → CRITIC. Do
+   not enter the RED/GREEN loop for non-behavioral work.
 4. **Per behavior, in order:**
    a. **RED** → dispatch `tdd-runner`. Require `"status":"red"` and `"right_reason":true`. If not,
-      re-dispatch with feedback (max 3 RED dispatches for this behavior — each dispatch may
-      re-run the test internally — then escalate to the human).
+      re-dispatch with feedback — max 3 RED dispatches for this behavior (the outer budget; each is a
+      fresh runner that spends up to its own 3 internal attempts and sees your feedback) — then
+      escalate to the human.
    b. **GREEN** → dispatch `worker-coder` with `mode: green` and the named failing test
-      (`test_file` + `test_name` from the RED return). Require `status: done` with at least one
-      `commands[].outcome` of `pass`, then **reproduce that pass yourself**: run the coder's
-      command whose `outcome` is `pass` — the GREEN run, not the earlier `fail` RED run
-      (`commands[].cmd` uses the project runner, e.g. `uv run pytest …`) — on HEAD. A real test failure means it's a failed GREEN, not a done. But if the
-      command errors on the *environment* (missing venv/deps, an import/collection error rather
-      than a test failure), run the gate `setup` once and re-run before judging — never reject a
-      genuine GREEN over an unprepared env. If `blocked`, read the reason and decide (re-scope
-      the slice, re-dispatch, or stop); allow at most 2 GREEN re-dispatches per behavior before escalating.
+      (`test_file` + `test_name` from the RED return). Require `status: done` (the schema enforces a
+      GREEN done carries both a `fail` and a `pass` run), then **reproduce the result yourself**: on
+      HEAD, re-run the package's full test command — the same suite the coder verified, not just the
+      named test (`commands[].cmd` uses the project runner, e.g. `uv run pytest`) — and confirm it
+      passes with the named test among it. A real failure means it's a failed GREEN, not a done, and a
+      sibling regression is caught here at the behavior that caused it. But if the command errors on
+      the *environment* (missing venv/deps, an import/collection error rather than a test failure),
+      run the gate `setup` once and re-run before judging — never reject a genuine GREEN over an
+      unprepared env. If the return's `new_dependencies` is non-empty and the task did not set
+      `dependencies_allowed: true` (or name that dependency), treat it as a blocked regression and
+      route back — never gate code carrying an unapproved dependency. If `blocked`, read the reason
+      and decide (re-scope the slice, re-dispatch, or stop); allow at most 2 GREEN re-dispatches per
+      behavior before escalating.
    c. **REFACTOR** (optional) → if duplication/structure warrants it, dispatch `worker-coder`
       with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).
@@ -137,16 +146,18 @@ Resolve these values before the first dispatch:
    no Biome config for the TypeScript profile), stop and report an unsupported v1 gate profile or
    request a gate override; do not label it a task regression. **All gates must pass before you
    dispatch the reviewer or critic** — spend no LLM judgment on code that does not lint,
-   typecheck, and pass its tests. On failure, route the concrete failure output to `worker-coder`
-   (`mode: non_behavioral` for format/lint/type/build fixes) and re-run the gates. Run
-   `setup`/`run` only, never `fix`. Allow at most **2 gate-fix rounds**; if it is still red after
-   that, stop and escalate as **stop / re-scope**.
+   typecheck, and pass its tests. On failure, route the concrete failure output to `worker-coder` —
+   `mode: non_behavioral` for a format/lint/type/build fix, but a failing **test** gate is a
+   behavioral regression that returns to the responsible behavior's RED/GREEN cycle (never a
+   `non_behavioral` edit) — and re-run the gates. Allow at most **2 gate-fix rounds**; if it is
+   still red after that, stop and escalate as **stop / re-scope**.
 6. **Review + critic (the judgment pass — run once, on the gate-green diff).** Dispatch
    `reviewer` on `git diff <base>...HEAD`, passing `design-principles.md`, the language rule for
    each changed file type, and `tdd.md`. Then dispatch `critic` with the task spec, task type,
    base ref, full diff, changed test files for behavioral work, RED/GREEN or non-behavioral check
-   output, **and the now-green gate output as evidence**. Collect **all blockers from both in one
-   pass**:
+   output, the now-green gate output, **and the reviewer's findings from this same pass** (so the
+   critic can trust the reviewer's test-form verdict instead of re-judging it). Collect **all
+   blockers from both in one pass**:
    - any `reviewer` finding that is CRITICAL or has `score >= 70` (`has_critical: true` always
      blocks), unless the human has explicitly waived that finding in the run log;
    - any `critic` verdict of `not_achieved` or `partial`, with its listed gaps.
@@ -180,11 +191,10 @@ Resolve these values before the first dispatch:
 
 Append **one line per subagent call, TDD skip, and gate run** to `<run_root>/<run-id>.jsonl`
 (create the dir/file if missing). Write the line immediately after each agent or command
-returns. `<run-id>` is the branch name or task id with `/` and whitespace replaced by `_`,
-so branch names cannot create nested paths. Schema:
+returns. `<run-id>` (per Runtime resolution) cannot create nested paths. Schema:
 
 ```json
-{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|GATE|REVIEW|CRITIC",
+{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|NON_BEHAVIORAL|GATE|REVIEW|CRITIC",
  "role":"tdd-runner|coder|reviewer|critic|architect","prompt":"<full prompt you sent>",
  "result":"<full agent return>","verdict":"pass|fail|skip","files":["<changed paths>"],
  "note":"<e.g. TDD skip reason, retry #, decision made>"}
@@ -200,7 +210,7 @@ schema (`coder.schema.json`).
 Example rows — a GREEN dispatch and a non-behavioral skip:
 
 ```json
-{"ts":"2026-06-01T14:32:07Z","run":"feat_cart-discount","step":"GREEN","role":"coder","prompt":"Make tests/test_cart.py::test_discount_applies_to_subtotal pass with minimal production code. mode: green. Module boundary: cart.py, tests/test_cart.py. Base: <merge-base>. Rules: <abs>/design-principles.md, <abs>/python.md, <abs>/tdd.md.","result":"{\"schema_version\":\"v1\",\"role\":\"coder\",\"mode\":\"green\",\"status\":\"done\",\"commit\":{\"sha\":\"a1b2c3d\",\"subject\":\"feat: apply cart discount\"},\"files_changed\":[\"cart.py\",\"tests/test_cart.py\"],\"files_staged\":[\"cart.py\",\"tests/test_cart.py\"],\"commands\":[{\"cmd\":\"uv run pytest tests/test_cart.py::test_discount_applies_to_subtotal\",\"exit_code\":1,\"outcome\":\"fail\",\"key_output\":\"AssertionError: expected Money(135), got Money(150)\"},{\"cmd\":\"uv run pytest tests/test_cart.py::test_discount_applies_to_subtotal\",\"exit_code\":0,\"outcome\":\"pass\",\"key_output\":\"1 passed\"}],\"scope_notes\":\"Implemented only the named behavior.\",\"new_dependencies\":[],\"blocked_reason\":\"\"}","verdict":"pass","files":["cart.py","tests/test_cart.py"],"note":"GREEN attempt 1"}
+{"ts":"2026-06-01T14:32:07Z","run":"feat_cart-discount","step":"GREEN","role":"coder","prompt":"Make tests/test_cart.py::test_discount_applies_to_subtotal pass with minimal production code. mode: green. Module boundary: cart.py, tests/test_cart.py. Base: <merge-base>. Rules: <abs>/design-principles.md, <abs>/python.md, <abs>/tdd.md.","result":"{\"schema_version\":\"v1\",\"role\":\"coder\",\"mode\":\"green\",\"status\":\"done\",\"commit\":{\"sha\":\"a1b2c3d\",\"subject\":\"feat: apply cart discount\"},\"files_changed\":[\"cart.py\",\"tests/test_cart.py\"],\"files_staged\":[\"cart.py\",\"tests/test_cart.py\"],\"commands\":[{\"cmd\":\"uv run pytest tests/test_cart.py::test_discount_applies_to_subtotal\",\"exit_code\":1,\"outcome\":\"fail\",\"key_output\":\"AssertionError: expected Money(135), got Money(150)\"},{\"cmd\":\"uv run pytest tests/test_cart.py::test_discount_applies_to_subtotal\",\"exit_code\":0,\"outcome\":\"pass\",\"key_output\":\"1 passed\"},{\"cmd\":\"uv run pytest\",\"exit_code\":0,\"outcome\":\"pass\",\"key_output\":\"42 passed\"}],\"scope_notes\":\"Implemented only the named behavior.\",\"new_dependencies\":[],\"blocked_reason\":\"\"}","verdict":"pass","files":["cart.py","tests/test_cart.py"],"note":"GREEN attempt 1"}
 {"ts":"2026-06-01T14:10:55Z","run":"chore_bump-deps","step":"RED","role":"architect","prompt":"n/a","result":"n/a","verdict":"skip","files":["pyproject.toml"],"note":"non-behavioral: dependency bump"}
 ```
 
@@ -213,8 +223,7 @@ of truth for status.
 ## Decisions you own
 
 After review + critic you choose one:
-- **done** — all gates green, critic `achieved`, no CRITICAL, and no unwaived review finding
-  with `score >= 70`.
+- **done** — the step-8 predicate holds (its conditions are the single source of truth).
 - **fix** — route the blockers back as one batched round, then re-verify in proportion to the
   change (step 7).
 - **stop / re-scope** — task is mis-scoped, blocked, or spans modules; report up with why.
@@ -224,10 +233,8 @@ unless asked.
 
 ## Hard rules
 
-- Fixed order for behavioral work: RED → GREEN → (refactor) → GATE → REVIEW → CRITIC. Objective
-  gates run before any LLM judgment; never spend a review or critic dispatch on code that has not
-  passed the gates. Non-behavioral TDD skips are allowed only when logged with a reason.
-- Never refactor or declare done while any test or gate is red.
-- Never weaken a test or gate to get green.
-- One behavior per RED/GREEN cycle; no horizontal slicing.
-- Log **every** dispatch before moving on — a missing log line means the run can't be validated.
+- Never refactor or declare done while any test or gate is red, and never weaken a test or gate to
+  get green.
+- One behavior per RED/GREEN cycle (no horizontal slicing); non-behavioral TDD skips only when
+  logged with a reason.
+- Fixed order: RED → GREEN → (refactor) → GATE → REVIEW → CRITIC — gates before judgment.
