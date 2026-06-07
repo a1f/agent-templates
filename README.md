@@ -171,7 +171,6 @@ Top-level skills that run full workflows by composing lower-level skills.
 | **cleanup-worktrees** | `/cleanup-worktrees` | Remove stale agent-generated worktrees under `.claude/worktrees/agent-*/` |
 | **latest-update** | `/latest-update` | Pull main, clean up merged branches, validate, install |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
-| **python-coding-rules** | `/python-coding-rules` | Apply Python 3.12+ coding standards (TypeScript / Rust / C++ rules load automatically via `rules/` when editing matching files) |
 
 #### Dispatched internally -- don't invoke directly
 

@@ -806,7 +806,7 @@ EOF
     fi
   done
 
-  local expected_skills="clean-code-planner python-coding-rules implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel multi-review make-pr"
+  local expected_skills="clean-code-planner implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel multi-review make-pr"
   for skill in $expected_skills; do
     if [ -f "$tmpdir/.claude/skills/$skill/SKILL.md" ]; then
       pass "skill installed: $skill/SKILL.md"

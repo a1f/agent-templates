@@ -194,7 +194,8 @@ Plan reviewed and saved to: /absolute/path/to/plan.md
 
 ## Language-Specific Structure
 
-For language-specific file conventions, apply the relevant language skill alongside this plan:
+For language-specific file conventions, the matching `rules/*.md` loads automatically when you
+edit a file of that type:
 
-- **Python:** `python-coding-rules` — covers `types.py`, `constants.py`, empty `__init__.py`, `Final[T]`, etc.
-- Other languages: apply their equivalent module/file structure conventions
+- **Python:** `rules/python.md` — covers `types.py`, `constants.py`, empty `__init__.py`, `Final[T]`, etc.
+- **Other languages:** `rules/typescript.md`, `rules/rust.md`, `rules/cpp.md` apply the same way.
