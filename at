@@ -200,8 +200,7 @@ manifest_write() {
   local repo_commit="$4"
   local comp_rules="$5"
   local comp_skills="$6"
-  local comp_hooks="$7"
-  local target_dir="$8"
+  local target_dir="$7"
 
   local mpath
   mpath="$(manifest_path)"
@@ -219,14 +218,13 @@ manifest_write() {
       --arg rc "$repo_commit" \
       --argjson cr "$comp_rules" \
       --argjson cs "$comp_skills" \
-      --argjson ch "$comp_hooks" \
       --arg td "$target_dir" \
       '{
         installed_at: $ia,
         updated_at: $ua,
         repo_path: $rp,
         repo_commit: $rc,
-        components: { rules: $cr, skills: $cs, hooks: $ch },
+        components: { rules: $cr, skills: $cs },
         target_dir: $td
       }' > "$mpath"
   else
@@ -237,7 +235,6 @@ repo_path=${repo_path}
 repo_commit=${repo_commit}
 components_rules=${comp_rules}
 components_skills=${comp_skills}
-components_hooks=${comp_hooks}
 target_dir=${target_dir}
 KVEOF
   fi
@@ -398,92 +395,6 @@ install_skills() {
   fi
 }
 
-install_hooks() {
-  local hooks_src="${SCRIPT_DIR}/hooks"
-  local hooks_dst="${HOME}/.claude/hooks"
-  local settings_src="${SCRIPT_DIR}/templates/settings-hooks.json"
-  local settings_dst="${HOME}/.claude/settings.json"
-
-  echo ""
-  printf "${BOLD}Installing Hooks${RESET}\n"
-  echo "  Hook source: $hooks_src"
-  echo "  Hook target: $hooks_dst"
-  echo "  Settings:    $settings_dst"
-  echo ""
-
-  if [ ! -d "$hooks_src" ]; then
-    warn "Hooks source directory not found: $hooks_src"
-    return 0
-  fi
-
-  for hook_file in "$hooks_src"/*.sh; do
-    [ -f "$hook_file" ] || continue
-    local filename
-    filename="$(basename "$hook_file")"
-    install_file_executable "$hook_file" "${hooks_dst}/${filename}"
-  done
-
-  if [ -f "$settings_src" ]; then
-    echo ""
-    info "Merging hook configuration into settings.json..."
-
-    if [ "$DRY_RUN" = "true" ]; then
-      dry "Would merge $settings_src into $settings_dst"
-      if [ -f "$settings_dst" ]; then
-        dry "Existing settings.json found, would deep-merge"
-      else
-        dry "No existing settings.json, would create new"
-      fi
-      return 0
-    fi
-
-    if command -v jq >/dev/null 2>&1; then
-      if [ -f "$settings_dst" ]; then
-        backup_file "$settings_dst"
-        # Merge preserves all top-level keys from the destination and
-        # concatenates per-event hook arrays instead of replacing them.
-        # Dedup keys on (matcher, hooks) so re-installs stay idempotent.
-        local merged
-        merged="$(jq -s '
-          .[0] as $dst | .[1] as $srcV |
-          $dst | .hooks = (
-            ($dst.hooks // {}) as $dh |
-            ($srcV.hooks // {}) as $sh |
-            ((($dh | keys) + ($sh | keys)) | unique) as $events |
-            reduce $events[] as $e ({};
-              .[$e] = (
-                (($dh[$e] // []) + ($sh[$e] // []))
-                | unique_by({matcher: (.matcher // ""), hooks: .hooks})
-              )
-            )
-          )
-        ' "$settings_dst" "$settings_src")"
-        echo "$merged" > "$settings_dst"
-        info "Merged hook config into existing settings.json (existing hook arrays preserved)"
-      else
-        local settings_dir
-        settings_dir="$(dirname "$settings_dst")"
-        if [ ! -d "$settings_dir" ]; then
-          mkdir -p "$settings_dir"
-        fi
-        cp "$settings_src" "$settings_dst"
-        info "Created settings.json with hook configuration"
-      fi
-    else
-      warn "jq not found — cannot auto-merge settings.json"
-      echo ""
-      echo "  Please manually merge the following into $settings_dst:"
-      echo ""
-      echo "  --- settings-hooks.json contents ---"
-      cat "$settings_src"
-      echo ""
-      echo "  --- end ---"
-      echo ""
-      echo "  Install jq for automatic merging: brew install jq (macOS) or apt install jq (Linux)"
-    fi
-  fi
-}
-
 # =============================================================================
 # Validation functions
 # =============================================================================
@@ -591,187 +502,6 @@ validate_rules() {
   IFS="$old_ifs"
 }
 
-validate_hooks() {
-  section "Hooks"
-
-  local hook_files
-  hook_files=$(find "$SCRIPT_DIR/hooks" -name "*.sh" -type f 2>/dev/null | sort)
-
-  if [ -z "$hook_files" ]; then
-    warn "No hook .sh files found"
-    return
-  fi
-
-  local old_ifs="$IFS"
-  IFS=$'\n'
-  for hook_file in $hook_files; do
-    IFS="$old_ifs"
-    local hook_name
-    hook_name=$(basename "$hook_file")
-
-    if [ -x "$hook_file" ]; then
-      pass "$hook_name: is executable"
-    else
-      fail "$hook_name: is not executable (run: chmod +x $hook_file)"
-    fi
-
-    local first_line
-    first_line=$(head -1 "$hook_file")
-    if [ "$first_line" = "#!/usr/bin/env bash" ]; then
-      pass "$hook_name: has correct shebang"
-    else
-      fail "$hook_name: shebang should be '#!/usr/bin/env bash', got: $first_line"
-    fi
-
-    if command -v shellcheck >/dev/null 2>&1; then
-      if shellcheck --severity=warning --shell=bash "$hook_file" >/dev/null 2>&1; then
-        pass "$hook_name: shellcheck passed"
-      else
-        fail "$hook_name: shellcheck warnings/errors found"
-        shellcheck --severity=warning --shell=bash "$hook_file" 2>&1 | head -20 | while IFS= read -r line; do
-          printf "         %s\n" "$line"
-        done
-      fi
-    else
-      warn "$hook_name: shellcheck not installed, skipping lint"
-    fi
-
-    case "$hook_name" in
-      auto-approve.sh)
-        if command -v jq >/dev/null 2>&1; then
-          local mock_input='{"tool_name":"Read","tool_input":{"file_path":"/tmp/test.txt"}}'
-          local output
-          output=$(echo "$mock_input" | "$hook_file" 2>/dev/null) || true
-          if [ -n "$output" ]; then
-            if echo "$output" | jq . >/dev/null 2>&1; then
-              pass "$hook_name: mock input produces valid JSON output"
-            else
-              fail "$hook_name: output is not valid JSON: $output"
-            fi
-          else
-            fail "$hook_name: no output for known safe tool 'Read'"
-          fi
-
-          local mock_unsafe='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
-          local unsafe_output
-          unsafe_output=$(echo "$mock_unsafe" | "$hook_file" 2>/dev/null) || true
-          if [ -z "$unsafe_output" ]; then
-            pass "$hook_name: no output for non-safe tool 'Bash'"
-          else
-            fail "$hook_name: should not produce output for non-safe tool, got: $unsafe_output"
-          fi
-        else
-          warn "$hook_name: jq not installed, skipping mock test"
-        fi
-        ;;
-      notify-slack.sh)
-        if [ -n "${CLAUDE_SLACK_WEBHOOK_URL:-}" ]; then
-          pass "$hook_name: CLAUDE_SLACK_WEBHOOK_URL is set"
-        else
-          warn "$hook_name: CLAUDE_SLACK_WEBHOOK_URL is not set (notifications will be silent)"
-        fi
-
-        local notify_output
-        notify_output=$(CLAUDE_SLACK_WEBHOOK_URL="" "$hook_file" stop 2>&1) || true
-        if [ -z "$notify_output" ]; then
-          pass "$hook_name: exits silently without webhook URL"
-        else
-          fail "$hook_name: should be silent without webhook URL, got output: $notify_output"
-        fi
-        ;;
-      check-github-issues.sh)
-        if command -v jq >/dev/null 2>&1; then
-          # The hook short-circuits when the environment cannot act on GitHub
-          # issues (no gh, no gh auth, or no github.com remote). Skip the
-          # EnterPlanMode output assertion in that case — otherwise the
-          # validator fails on exactly the hosts the guard exists to help.
-          if ! command -v gh >/dev/null 2>&1 \
-             || ! gh auth status >/dev/null 2>&1 \
-             || ! git -C "$SCRIPT_DIR" remote -v 2>/dev/null | grep -q 'github\.com'; then
-            warn "$hook_name: gh/github remote unavailable, skipping EnterPlanMode mock test"
-          else
-            local plan_input='{"tool_name":"EnterPlanMode","tool_result":{}}'
-            local plan_output
-            plan_output=$(echo "$plan_input" | "$hook_file" 2>/dev/null) || true
-            if [ -n "$plan_output" ]; then
-              if echo "$plan_output" | jq -e '.hookSpecificOutput.systemMessage' >/dev/null 2>&1; then
-                pass "$hook_name: EnterPlanMode input produces systemMessage"
-              else
-                fail "$hook_name: output missing hookSpecificOutput.systemMessage: $plan_output"
-              fi
-            else
-              fail "$hook_name: no output for EnterPlanMode input"
-            fi
-          fi
-
-          # Non-EnterPlanMode input must always produce no output — the new
-          # guard exits before the tool_name check so this remains silent.
-          local other_input='{"tool_name":"Read","tool_input":{"file_path":"/tmp/test"}}'
-          local other_output
-          other_output=$(echo "$other_input" | "$hook_file" 2>/dev/null) || true
-          if [ -z "$other_output" ]; then
-            pass "$hook_name: silent for non-EnterPlanMode tool"
-          else
-            fail "$hook_name: should be silent for non-EnterPlanMode tool, got: $other_output"
-          fi
-        else
-          warn "$hook_name: jq not installed, skipping mock test"
-        fi
-        ;;
-    esac
-  done
-  IFS="$old_ifs"
-}
-
-validate_settings() {
-  section "Settings"
-
-  local settings_file="$SCRIPT_DIR/templates/settings-hooks.json"
-
-  if [ ! -f "$settings_file" ]; then
-    fail "settings-hooks.json: file not found"
-    return
-  fi
-
-  if command -v jq >/dev/null 2>&1; then
-    if jq . "$settings_file" >/dev/null 2>&1; then
-      pass "settings-hooks.json: valid JSON"
-    else
-      fail "settings-hooks.json: invalid JSON"
-      return
-    fi
-
-    local known_events="Notification Stop PreToolUse PostToolUse SessionStart UserPromptSubmit"
-    local events
-    events=$(jq -r '.hooks | keys[]' "$settings_file" 2>/dev/null) || true
-
-    if [ -z "$events" ]; then
-      fail "settings-hooks.json: no hook events found"
-    else
-      local old_ifs="$IFS"
-      IFS=$'\n'
-      for event in $events; do
-        IFS="$old_ifs"
-        local found=false
-        for known in $known_events; do
-          if [ "$event" = "$known" ]; then
-            found=true
-            break
-          fi
-        done
-        if [ "$found" = true ]; then
-          pass "settings-hooks.json: event '$event' is valid"
-        else
-          fail "settings-hooks.json: unknown event type '$event'"
-        fi
-      done
-      IFS="$old_ifs"
-    fi
-  else
-    warn "settings-hooks.json: jq not installed, skipping validation"
-  fi
-}
-
 validate_smoke() {
   section "Smoke Test"
 
@@ -779,13 +509,6 @@ validate_smoke() {
   tmpdir=$(mktemp -d)
   # shellcheck disable=SC2064
   trap "rm -rf '$tmpdir'" EXIT
-
-  # Pre-seed a sentinel settings.json to exercise the merge path (fresh tmpdir
-  # would otherwise hit only the "create new" branch and never test the merge).
-  mkdir -p "$tmpdir/.claude"
-  cat > "$tmpdir/.claude/settings.json" <<'EOF'
-{"hooks":{"Notification":[{"matcher":"","hooks":[{"type":"command","command":"ECHO_PRESERVED"}]}]}}
-EOF
 
   printf "  Running installer into temp dir: %s\n" "$tmpdir"
   local install_output
@@ -806,7 +529,7 @@ EOF
     fi
   done
 
-  local expected_skills="clean-code-planner implement-orchestrator plan-codebase plan-tests implement-parallel review-parallel multi-review make-pr"
+  local expected_skills="make-pr multi-review pr-babysit pr-make-till-merge review-and-fix"
   for skill in $expected_skills; do
     if [ -f "$tmpdir/.claude/skills/$skill/SKILL.md" ]; then
       pass "skill installed: $skill/SKILL.md"
@@ -815,61 +538,11 @@ EOF
     fi
   done
 
-  local expected_hooks="auto-approve.sh check-github-issues.sh notify-slack.sh"
-  for hook in $expected_hooks; do
-    if [ -f "$tmpdir/.claude/hooks/$hook" ]; then
-      pass "hook installed: $hook"
-      if [ -x "$tmpdir/.claude/hooks/$hook" ]; then
-        pass "hook executable: $hook"
-      else
-        fail "hook not executable: $hook"
-      fi
-    else
-      fail "hook missing: $tmpdir/.claude/hooks/$hook"
-    fi
-  done
-
-  if [ -f "$tmpdir/.claude/settings.json" ]; then
-    pass "settings.json installed"
-
-    if command -v jq >/dev/null 2>&1; then
-      if jq . "$tmpdir/.claude/settings.json" >/dev/null 2>&1; then
-        pass "settings.json is valid JSON"
-      else
-        fail "settings.json is not valid JSON"
-      fi
-
-      # Merge-path assertions: the pre-seeded sentinel (ECHO_PRESERVED) must
-      # coexist with the template's Slack hook after the merge.
-      if jq -e '[.hooks.Notification[].hooks[] | select(.command == "ECHO_PRESERVED")] | length > 0' \
-           "$tmpdir/.claude/settings.json" >/dev/null 2>&1; then
-        pass "settings merge: existing Notification hook preserved"
-      else
-        fail "settings merge: existing Notification hook was lost (merge replaced the array)"
-      fi
-
-      if jq -e '[.hooks.Notification[].hooks[] | select(.command | test("notify-slack"))] | length > 0' \
-           "$tmpdir/.claude/settings.json" >/dev/null 2>&1; then
-        pass "settings merge: template notify-slack hook is present"
-      else
-        fail "settings merge: template notify-slack hook is missing"
-      fi
-
-      # Idempotency: re-running the installer must not duplicate the sentinel.
-      HOME="$tmpdir" "$SCRIPT_DIR/at" install --target="$tmpdir" --non-interactive --all >/dev/null 2>&1 || true
-      local preserved_count
-      preserved_count=$(jq '[.hooks.Notification[].hooks[] | select(.command == "ECHO_PRESERVED")] | length' \
-                           "$tmpdir/.claude/settings.json" 2>/dev/null || echo "0")
-      if [ "$preserved_count" = "1" ]; then
-        pass "settings merge: idempotent re-install keeps sentinel exactly once"
-      else
-        fail "settings merge: re-install produced $preserved_count sentinel entries (expected 1)"
-      fi
-    else
-      warn "jq not installed, skipping JSON validation of settings.json"
-    fi
+  # Idempotency: re-running the installer must succeed cleanly.
+  if HOME="$tmpdir" "$SCRIPT_DIR/at" install --target="$tmpdir" --non-interactive --all >/dev/null 2>&1; then
+    pass "at install is idempotent (second run succeeds)"
   else
-    fail "settings.json missing: $tmpdir/.claude/settings.json"
+    fail "at install failed on second run"
   fi
 
   rm -rf "$tmpdir"
@@ -945,28 +618,24 @@ cmd_install() {
   # Track which components get installed for the manifest
   local did_rules="false"
   local did_skills="false"
-  local did_hooks="false"
 
   if [ "$INSTALL_ALL" = "true" ]; then
     install_rules
     install_skills
-    install_hooks
     did_rules="true"
     did_skills="true"
-    did_hooks="true"
 
     echo ""
     echo "======================================"
     if [ "$DRY_RUN" = "true" ]; then
       dry "Dry run complete — no files were changed"
     else
-      _write_manifest "$did_rules" "$did_skills" "$did_hooks"
+      _write_manifest "$did_rules" "$did_skills"
       info "Installation complete!"
       echo ""
       echo "  Next steps:"
-      echo "    1. Set CLAUDE_SLACK_WEBHOOK_URL for Slack notifications"
+      echo "    1. Review .claude/rules/ for language-specific conventions"
       echo "    2. Add 'Bash(gh issue:*)' to permissions for GitHub issue integration"
-      echo "    3. Review .claude/rules/ for language-specific conventions"
     fi
     echo ""
     return 0
@@ -984,9 +653,8 @@ cmd_install() {
     echo "  What would you like to install?"
     echo ""
     echo "    [1] Language Rules (python, typescript, rust, cpp)"
-    echo "    [2] Skills (agentic workflow pipeline)"
-    echo "    [3] Hooks (Slack notifications, auto-approve)"
-    echo "    [4] Everything"
+    echo "    [2] Skills (PR creation, review, repo upkeep)"
+    echo "    [3] Everything"
     echo "    [0] Exit"
     echo ""
     printf "  Select options (comma-separated): "
@@ -1018,16 +686,10 @@ cmd_install() {
           did_skills="true"
           ;;
         3)
-          install_hooks
-          did_hooks="true"
-          ;;
-        4)
           install_rules
           install_skills
-          install_hooks
           did_rules="true"
           did_skills="true"
-          did_hooks="true"
           ;;
         *)
           warn "Unknown option: $choice"
@@ -1049,7 +711,7 @@ cmd_install() {
   done
 
   if [ "$DRY_RUN" != "true" ]; then
-    _write_manifest "$did_rules" "$did_skills" "$did_hooks"
+    _write_manifest "$did_rules" "$did_skills"
   fi
 
   echo ""
@@ -1059,7 +721,6 @@ cmd_install() {
 _write_manifest() {
   local did_rules="$1"
   local did_skills="$2"
-  local did_hooks="$3"
 
   local now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1074,7 +735,7 @@ _write_manifest() {
   fi
 
   manifest_write "$installed_at" "$now" "$SCRIPT_DIR" "$commit" \
-    "$did_rules" "$did_skills" "$did_hooks" "$TARGET_DIR"
+    "$did_rules" "$did_skills" "$TARGET_DIR"
 }
 
 # =============================================================================
@@ -1148,15 +809,13 @@ cmd_update() {
     info "Skipping git pull (--local)"
   fi
 
-  local comp_rules comp_skills comp_hooks
+  local comp_rules comp_skills
   if [ "$update_all" = "true" ]; then
     comp_rules="true"
     comp_skills="true"
-    comp_hooks="true"
   else
     comp_rules="$(manifest_read_field "components.rules" 2>/dev/null || echo "false")"
     comp_skills="$(manifest_read_field "components.skills" 2>/dev/null || echo "false")"
-    comp_hooks="$(manifest_read_field "components.hooks" 2>/dev/null || echo "false")"
   fi
 
   echo ""
@@ -1170,10 +829,6 @@ cmd_update() {
     install_skills
   fi
 
-  if [ "$comp_hooks" = "true" ]; then
-    install_hooks
-  fi
-
   # Update manifest with new commit and timestamp
   local now
   now="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
@@ -1183,7 +838,7 @@ cmd_update() {
   commit="$(git -C "$repo_path" rev-parse --short HEAD 2>/dev/null || echo "unknown")"
 
   manifest_write "$installed_at" "$now" "$repo_path" "$commit" \
-    "$comp_rules" "$comp_skills" "$comp_hooks" "$TARGET_DIR"
+    "$comp_rules" "$comp_skills" "$TARGET_DIR"
 
   echo ""
   info "Update complete!"
@@ -1196,13 +851,9 @@ cmd_update() {
 cmd_uninstall() {
   DRY_RUN="false"
   TARGET_DIR=""
-  local deep="false"
 
   for arg in "$@"; do
     case "$arg" in
-      --deep)
-        deep="true"
-        ;;
       --dry-run)
         DRY_RUN="true"
         ;;
@@ -1213,7 +864,6 @@ cmd_uninstall() {
         echo "Usage: at uninstall [OPTIONS]"
         echo ""
         echo "Options:"
-        echo "  --deep           Also remove plans/, impl-temp/, code-spec.md, test-plan.md"
         echo "  --dry-run        Show what would be done without making changes"
         echo "  --target=<path>  Target project directory (reads from manifest if omitted)"
         echo "  -h, --help       Show this help message"
@@ -1254,29 +904,6 @@ cmd_uninstall() {
 
   rollback || true
 
-  if [ "$deep" = "true" ]; then
-    echo ""
-    info "Deep clean: removing generated files..."
-
-    local deep_targets=(
-      "$HOME/.claude/plans"
-      "$TARGET_DIR/impl-temp"
-      "$TARGET_DIR/code-spec.md"
-      "$TARGET_DIR/test-plan.md"
-    )
-
-    for target in "${deep_targets[@]}"; do
-      if [ -e "$target" ]; then
-        if [ "$DRY_RUN" = "true" ]; then
-          dry "Would remove: $target"
-        else
-          rm -rf "$target"
-          info "Removed: $target"
-        fi
-      fi
-    done
-  fi
-
   if [ "$DRY_RUN" != "true" ]; then
     manifest_clear
   fi
@@ -1313,18 +940,14 @@ validate_v1() {
 cmd_validate() {
   local v_skills=false
   local v_rules=false
-  local v_hooks=false
   local v_smoke=false
-  local v_settings=false
   local v_v1=false
 
   for arg in "$@"; do
     case "$arg" in
       --skills)   v_skills=true ;;
       --rules)    v_rules=true ;;
-      --hooks)    v_hooks=true ;;
       --smoke)    v_smoke=true ;;
-      --settings) v_settings=true ;;
       --v1)       v_v1=true ;;
       --help|-h)
         echo "Usage: at validate [OPTIONS]"
@@ -1334,8 +957,6 @@ cmd_validate() {
         echo "Options:"
         echo "  --skills     Validate skill definitions"
         echo "  --rules      Validate rule files"
-        echo "  --hooks      Validate hook scripts"
-        echo "  --settings   Validate settings template"
         echo "  --v1         Validate agent return schemas + prompt shapes"
         echo "  --smoke      Run smoke tests (installs into temp dir)"
         echo "  -h, --help   Show this help message"
@@ -1350,12 +971,9 @@ cmd_validate() {
 
   # Default: everything except smoke
   if [ "$v_skills" = false ] && [ "$v_rules" = false ] && \
-     [ "$v_hooks" = false ] && [ "$v_smoke" = false ] && \
-     [ "$v_settings" = false ] && [ "$v_v1" = false ]; then
+     [ "$v_smoke" = false ] && [ "$v_v1" = false ]; then
     v_skills=true
     v_rules=true
-    v_hooks=true
-    v_settings=true
     v_v1=true
   fi
 
@@ -1370,14 +988,6 @@ cmd_validate() {
 
   if [ "$v_rules" = true ]; then
     validate_rules
-  fi
-
-  if [ "$v_hooks" = true ]; then
-    validate_hooks
-  fi
-
-  if [ "$v_settings" = true ]; then
-    validate_settings
   fi
 
   if [ "$v_v1" = true ]; then
@@ -1440,14 +1050,6 @@ cmd_status() {
   fi
   printf "  Skills: %d dirs in ~/.claude/skills/\n" "$skills_count"
 
-  local hooks_count=0
-  if [ -d "$HOME/.claude/hooks" ]; then
-    for f in "$HOME/.claude/hooks"/*.sh; do
-      [ -f "$f" ] && hooks_count=$((hooks_count + 1))
-    done
-  fi
-  printf "  Hooks:  %d files in ~/.claude/hooks/\n" "$hooks_count"
-
   # --- Repository ---
   section "Repository"
 
@@ -1506,27 +1108,6 @@ cmd_status() {
   # --- Config Health ---
   section "Config Health"
 
-  local settings_file="$HOME/.claude/settings.json"
-  if [ -f "$settings_file" ]; then
-    if command -v jq >/dev/null 2>&1; then
-      if jq . "$settings_file" >/dev/null 2>&1; then
-        printf "  settings.json: ${GREEN}valid${RESET}\n"
-      else
-        printf "  settings.json: ${RED}invalid JSON${RESET}\n"
-      fi
-    else
-      printf "  settings.json: exists (jq not available for validation)\n"
-    fi
-  else
-    printf "  settings.json: ${YELLOW}not found${RESET}\n"
-  fi
-
-  if [ -n "${CLAUDE_SLACK_WEBHOOK_URL:-}" ]; then
-    printf "  CLAUDE_SLACK_WEBHOOK_URL: ${GREEN}set${RESET}\n"
-  else
-    printf "  CLAUDE_SLACK_WEBHOOK_URL: ${YELLOW}not set${RESET}\n"
-  fi
-
   if command -v gh >/dev/null 2>&1; then
     if gh auth status >/dev/null 2>&1; then
       printf "  gh auth: ${GREEN}authenticated${RESET}\n"
@@ -1552,7 +1133,7 @@ Usage:
   at <command> [options]
 
 Commands:
-  install     Install rules, skills, and hooks
+  install     Install rules and skills
   update      Pull latest and reinstall tracked components
   uninstall   Restore backups and remove installed files
   validate    Validate all agent-templates artifacts
@@ -1573,22 +1154,20 @@ Update options:
   --all      Reinstall all components (override manifest)
 
 Uninstall options:
-  --deep       Also remove plans/, impl-temp/, code-spec.md, test-plan.md
   --dry-run    Preview changes without writing
   --target=<path>  Target project directory
 
 Validate options:
   --skills     Validate skill definitions
   --rules      Validate rule files
-  --hooks      Validate hook scripts
-  --settings   Validate settings template
+  --v1         Validate agent return schemas + prompt shapes
   --smoke      Run smoke tests
 
 Examples:
   at install --all                     Install everything
   at install --dry-run --all           Preview full install
   at update --local                    Reinstall without pulling
-  at uninstall --deep --dry-run        Preview deep uninstall
+  at uninstall --dry-run               Preview uninstall
   at validate --smoke                  Run smoke tests
   at status                            Show dashboard
 EOF
