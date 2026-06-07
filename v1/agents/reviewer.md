@@ -2,7 +2,7 @@
 name: reviewer
 description: Reviews a diff for code quality, correctness/bugs, and security against the project rules. Reports structured findings with severity; does not fix code. Answers "is this code good?" — distinct from the critic, which answers "did it achieve the task?". Used by the architect skill after GREEN.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: opus
 ---
 
 # Reviewer

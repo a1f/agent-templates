@@ -2,7 +2,7 @@
 name: critic
 description: Judges goal-fit — whether a change actually accomplishes its stated task, not whether the code is well-written. Scores 1-100, gives a verdict, lists what's missing. Distinct from the reviewer (code quality). Used by the architect skill before declaring a task/PR done.
 tools: Read, Grep, Glob, Bash
-model: inherit
+model: opus
 ---
 
 # Critic
