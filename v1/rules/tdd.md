@@ -1,5 +1,5 @@
 ---
-paths: "**/*_test.py", "**/test_*.py", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/tests/**"
+paths: ["**/*_test.py", "**/test_*.py", "**/*.test.ts", "**/*.test.tsx", "**/*.spec.ts", "**/tests/**"]
 ---
 
 # TDD Rules
@@ -34,29 +34,27 @@ one test → one implementation → repeat (tracer bullets).**
 For each behavior, in order:
 
 1. **RED** — Write exactly one test for one behavior. Run it. Watch it fail **for the right
-   reason** (assertion failure, not an import error or typo). A test that has never failed
-   proves nothing.
+   reason** — an assertion failure, or a missing symbol the GREEN step will add that exactly
+   matches the target public interface, not an import typo, syntax error, or fixture mistake. A
+   test that has never failed proves nothing.
 2. **GREEN** — Write the *minimum* code to make that test pass. No speculative features, no
    handling of cases no test demands yet.
 3. **REFACTOR** — Only once green. Remove duplication, improve names, deepen modules per
    `design-principles.md`. Re-run tests; they must stay green. **Never refactor while red.**
 
-Rules that hold every cycle:
-- One test at a time.
-- Only enough production code to pass the current test.
-- No anticipatory generality, no "while I'm here" additions.
-
 ## Planning a change (before the first RED)
 
-- Confirm the public interface with the user / task spec.
+- Confirm the public interface from the task spec.
 - List the **behaviors** to cover (user-facing outcomes), not implementation steps.
 - Order them so each slice is a thin end-to-end path.
-- Get agreement on the behavior list before writing code.
+- The task spec must include explicit acceptance criteria or a behavior list. If it does not,
+  stop for re-scope. If it does, proceed and log the chosen behavior list; ask the human only
+  when multiple materially different interfaces or behavior lists are plausible.
 
 ## When TDD is mandatory
 
 TDD is required for any change with **behavior or logic**: new functions, branching,
-parsing, state changes, bug fixes (the bug becomes a failing test first).
+parsing, state changes, and bug fixes.
 
 It may be **skipped** only for changes with no behavior to assert: pure config, dependency
 bumps, docs, comments, formatting, and mechanical renames. When skipped, the `architect`
@@ -75,10 +73,10 @@ A bug fix **always** starts with a failing test that reproduces the bug.
 
 ## Tooling
 
-- **Python** — `pytest`; `pytest-asyncio` for async; **`hypothesis`** for property-based
-  tests of pure functions (prefer a property over a handful of examples when the rule is
-  general). Measure **branch** coverage, not just line. See `python.md`.
-- **TypeScript** — `vitest`. Co-locate `foo.test.ts` next to `foo.ts`. See `typescript.md`.
+- Prefer a **property-based** test (hypothesis / proptest) over a handful of examples when the rule
+  is general, and measure **branch** coverage, not just line.
+- The test runner, async support, and where tests live are language-specific — see the language
+  rule (`python.md`, `typescript.md`, `rust.md`) for the runner and layout.
 
 ## What a good test looks like
 
@@ -94,4 +92,21 @@ def test_discount_calls_internal_multiplier():
     cart._apply_discount = Mock()
     cart.total(discount=Percent(10))
     cart._apply_discount.assert_called_once()
+```
+
+```typescript
+// GOOD (vitest) — same lesson: assert the public result, not an internal call
+test("discount applies to subtotal", () => {
+  const cart = new Cart([item(100), item(50)]);
+  expect(cart.total({ discount: percent(10) })).toBe(135);
+});
+```
+
+```rust
+// GOOD (cargo test) — same lesson: assert the public result, not an internal call
+#[test]
+fn discount_applies_to_subtotal() {
+    let cart = Cart::new(vec![item(100), item(50)]);
+    assert_eq!(cart.total(Percent(10)), Money(135));
+}
 ```

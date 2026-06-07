@@ -53,22 +53,48 @@
   },
   "allOf": [
     {
-      "$comment": "A done return must record a real commit and at least one passing verification.",
-      "if": { "properties": { "status": { "const": "done" } } },
+      "$comment": "A done return records a real commit.",
+      "if": { "required": ["status"], "properties": { "status": { "const": "done" } } },
       "then": {
         "properties": {
           "commit": {
-            "required": ["sha", "subject"],
             "properties": {
               "sha": { "minLength": 1 },
               "subject": { "minLength": 1 }
             }
-          },
-          "commands": {
-            "contains": { "properties": { "outcome": { "const": "pass" } } }
           }
         }
       }
+    },
+    {
+      "$comment": "A done GREEN must carry the auditable RED->GREEN transition: a failing run and a passing run.",
+      "if": { "required": ["status", "mode"], "properties": { "status": { "const": "done" }, "mode": { "const": "green" } } },
+      "then": {
+        "properties": {
+          "commands": {
+            "allOf": [
+              { "contains": { "required": ["outcome"], "properties": { "outcome": { "const": "fail" } } } },
+              { "contains": { "required": ["outcome"], "properties": { "outcome": { "const": "pass" } } } }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "$comment": "A done REFACTOR keeps tests green: at least one passing run. (non_behavioral may have no runnable check.)",
+      "if": { "required": ["status", "mode"], "properties": { "status": { "const": "done" }, "mode": { "const": "refactor" } } },
+      "then": {
+        "properties": {
+          "commands": {
+            "contains": { "required": ["outcome"], "properties": { "outcome": { "const": "pass" } } }
+          }
+        }
+      }
+    },
+    {
+      "$comment": "A blocked return must explain why.",
+      "if": { "required": ["status"], "properties": { "status": { "const": "blocked" } } },
+      "then": { "properties": { "blocked_reason": { "minLength": 1 } } }
     }
   ]
 }

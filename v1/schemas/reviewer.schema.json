@@ -24,8 +24,24 @@
           "location": { "type": "string" },
           "issue": { "type": "string" },
           "fix": { "type": "string" }
-        }
+        },
+        "allOf": [
+          { "if": { "required": ["severity"], "properties": { "severity": { "const": "CRITICAL" } } },
+            "then": { "properties": { "score": { "minimum": 85 } } } },
+          { "if": { "required": ["severity"], "properties": { "severity": { "const": "MAJOR" } } },
+            "then": { "properties": { "score": { "minimum": 50, "maximum": 84 } } } },
+          { "if": { "required": ["severity"], "properties": { "severity": { "const": "MINOR" } } },
+            "then": { "properties": { "score": { "maximum": 49 } } } }
+        ]
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "$comment": "has_critical must equal 'at least one finding is CRITICAL'.",
+      "if": { "properties": { "findings": { "contains": { "required": ["severity"], "properties": { "severity": { "const": "CRITICAL" } } } } } },
+      "then": { "properties": { "has_critical": { "const": true } } },
+      "else": { "properties": { "has_critical": { "const": false } } }
+    }
+  ]
 }
