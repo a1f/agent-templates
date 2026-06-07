@@ -17,26 +17,22 @@
 
 Language-specific rules are in `.claude/rules/` and load automatically when editing matching files.
 
-## Agentic Workflow
+## Workflow
 
-Use `/implement-orchestrator` to execute plans step-by-step. The plan can come from any source — a file, conversation context, or description. Each step is implemented, reviewed via `/simplify`, and committed separately.
+These skills cover code review, PR creation, and repo upkeep.
 
 ### Skill Entry Points
 
 | Command | Purpose |
 |---------|---------|
-| `/implement-orchestrator` | Run the step-by-step pipeline from any plan source |
-| `/plan-codebase` | Generate a code specification for a step |
-| `/plan-tests` | Generate a test plan for a step |
-| `/implement-parallel` | Dispatch parallel Impl Coder and Test Coder for a step |
-| `/review-parallel` | Run parallel code reviews with severity-based consensus |
-| `/clean-code-planner` | Apply clean code principles before any code change |
+| `/make-pr` | Drive a scoped coding task to done via a TDD loop, then create/update the PR (runs gates, fixes errors, links issues, assigns reviewers) |
+| `/pr-make-till-merge` | Create a PR from the current branch and babysit it until ready to merge |
+| `/pr-babysit` | Poll an open PR, fix review/CI issues, and loop until ready to merge |
+| `/review-and-fix` | Review the current diff and fix CRITICAL/MAJOR issues |
+| `/multi-review` | Multi-model code review via external AI CLIs |
 | `/simplify` | Review changed code for reuse, quality, and efficiency |
-| `/make-pr` | Create or update a PR — runs gates, fixes errors, links issues, assigns reviewers |
-
-## Context Management
-
-For long tasks, use `$IMPL_TMP/progress.md` to track state (`$IMPL_TMP` resolves to `~/.claude/impl-tmp/<repo>/<branch>`). Use `/clear` then continue with the progress file. Temporary artifacts are stored outside the repo and cleaned up automatically when the orchestrator finishes.
+| `/issue-make` | Create or update a GitHub issue with planning artifacts |
+| `/latest-update` | Pull main, clean up merged branches, validate, install |
 
 ## Project Structure
 
