@@ -2,7 +2,7 @@
 """Anti-drift check: each agent prompt's example return matches its schema.
 
 Every v1 agent prompt ends with a ```json return block. This validates that block
-against its schema in v1/schemas/ (via validate_return, as the architect does on real
+against its schema in schemas/ (via validate_return, as the architect does on real
 returns) and flags any omitted field, so a prompt edit can't reshape it silently.
 Run via uv:
     uv run --no-project --with jsonschema python check_prompt_schemas.py
@@ -18,9 +18,9 @@ from typing import Any, Final
 
 from validate_return import errors_against
 
-_V1: Final[Path] = Path(__file__).resolve().parent.parent
-_AGENTS: Final[Path] = _V1 / "agents"
-_SCHEMAS: Final[Path] = _V1 / "schemas"
+_ROOT: Final[Path] = Path(__file__).resolve().parent.parent
+_AGENTS: Final[Path] = _ROOT / "agents"
+_SCHEMAS: Final[Path] = _ROOT / "schemas"
 _JSON_BLOCK: Final[re.Pattern[str]] = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
 
 

@@ -1290,19 +1290,19 @@ cmd_uninstall() {
 # =============================================================================
 
 validate_v1() {
-  section "v1 schemas"
+  section "Schemas"
 
-  if [ ! -d "$SCRIPT_DIR/v1/schemas" ]; then
-    warn "No v1/schemas directory found"
+  if [ ! -d "$SCRIPT_DIR/schemas" ]; then
+    warn "No schemas directory found"
     return
   fi
   if ! command -v python3 >/dev/null 2>&1; then
-    warn "python3 not found — skipping v1 schema checks"
+    warn "python3 not found — skipping schema checks"
     return
   fi
 
   local output
-  if output=$(python3 "$SCRIPT_DIR/v1/scripts/check_prompt_schemas.py" 2>&1); then
+  if output=$(python3 "$SCRIPT_DIR/scripts/check_prompt_schemas.py" 2>&1); then
     pass "agent prompts match their return schemas"
   else
     fail "agent prompt(s) drifted from their return schemas"
@@ -1336,7 +1336,7 @@ cmd_validate() {
         echo "  --rules      Validate rule files"
         echo "  --hooks      Validate hook scripts"
         echo "  --settings   Validate settings template"
-        echo "  --v1         Validate v1 schemas + agent prompt shapes"
+        echo "  --v1         Validate agent return schemas + prompt shapes"
         echo "  --smoke      Run smoke tests (installs into temp dir)"
         echo "  -h, --help   Show this help message"
         return 0

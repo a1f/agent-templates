@@ -1,5 +1,5 @@
 # uv project for the v1 helper scripts: it pins jsonschema (the one runtime dep) and the
-# dev tooling so v1/gates/python.json can lint, type-check, and test this directory. The
+# dev tooling so gates/python.json can lint, type-check, and test this directory. The
 # architect runs the scripts via `uv run --no-project --with jsonschema python ...`.
 [project]
 name = "v1-scripts"

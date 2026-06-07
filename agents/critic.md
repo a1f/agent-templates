@@ -60,7 +60,7 @@ bottom of the partial band), `task_restated` set to the spec as given, `covered:
 ## Return
 
 Return exactly one JSON object, with no markdown fence and no prose — **fill this exact shape: do
-not add, rename, or drop required keys.** The authoritative schema is `v1/schemas/critic.schema.json`
+not add, rename, or drop required keys.** The authoritative schema is `schemas/critic.schema.json`
 (the architect validates your return against it). Replace placeholders with real values. Allowed
 `verdict` values are `achieved`, `partial`, and `not_achieved`. The schema enforces `verdict` against
 its score band, so set them consistently — if your intuitive verdict and the band disagree, adjust
