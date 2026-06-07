@@ -21,6 +21,10 @@ you refactor even though behavior did not change.
 - Mock only true external boundaries (network, clock, filesystem, third-party APIs).
 - If a behavior is only reachable by poking internals, the design is wrong — fix the design,
   not the test (see `design-principles.md`).
+- Write the **fewest** tests that pin the behavior. Prefer one test through the real public
+  interface over many that re-check the same path from different angles. Never add a test solely
+  to cover a line or branch, and never test a dormant or unreachable path — coverage is a
+  diagnostic, not a target. A suite that grows faster than the behavior it describes is slop.
 
 ## Anti-pattern: horizontal slices
 

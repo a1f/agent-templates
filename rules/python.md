@@ -75,4 +75,5 @@ Single sentence explaining WHY the function exists, not WHAT it does. Do not inc
 - Use hypothesis for property-based testing of pure functions
 - Use pytest-asyncio for async test functions
 - Set `filterwarnings = ["error"]` in pytest config to catch deprecation warnings
-- Measure branch coverage, not just line coverage
+- Measure branch coverage as a **diagnostic** to find untested paths — never as a gate target. Do not set a `--cov-fail-under` mandate; a coverage number counts lines touched, not behavior asserted, and a 100% target just manufactures tests that color branches green
+- Write the **fewest** tests that pin the behavior; never add a test solely to cover a line, and never test a dormant or unreachable path

@@ -112,5 +112,7 @@ Single sentence explaining WHY the function exists, not WHAT it does. Do not inc
 Test discipline (pytest, hypothesis, pytest-asyncio) lives in `tdd.md`. Python-specific config:
 - Set `filterwarnings = ["error"]` to catch deprecation warnings (the default gate also runs
   pytest with `-W error`).
-- Measure **branch** coverage, not just line coverage. Configure the package path and threshold
-  in `pyproject.toml`; do not hardcode repository layout in the shared gate.
+- Measure **branch** coverage as a **diagnostic**, never a gate target — read it to find a
+  genuinely untested path, but do not set a `--cov-fail-under` mandate. A 100% target just
+  manufactures tests that color branches green instead of asserting behavior. Configure the
+  coverage report (not a threshold) in `pyproject.toml`; do not hardcode repository layout in the gate.
