@@ -1,0 +1,40 @@
+# uv project for the v1 helper scripts: it pins jsonschema (the one runtime dep) and the
+# dev tooling so v1/gates/python.json can lint, type-check, and test this directory. The
+# architect runs the scripts via `uv run --no-project --with jsonschema python ...`.
+[project]
+name = "v1-scripts"
+version = "0"
+description = "Return-contract helpers for the v1 coding workflow."
+requires-python = ">=3.12"
+dependencies = ["jsonschema>=4.18"]  # the reference JSON Schema validator (referencing API)
+
+[dependency-groups]
+dev = [
+  "ruff>=0.9",
+  "mypy>=1.14",
+  "pytest>=8",
+  "pytest-cov>=6",
+  "types-jsonschema",  # stubs so mypy --strict can check the jsonschema calls
+]
+
+[tool.uv]
+package = false  # a scripts dir, not an installable package — just resolve dev deps
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# The exact selection mandated by rules/python.md.
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PIE", "RUF", "DTZ", "PTH", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]  # import the helper modules under test without a package
+# Coverage is a diagnostic (term-missing), never a gate target — a 100% mandate just
+# manufactures tests to paint branches green. Test behaviour, then read coverage to spot
+# a genuinely untested path; don't write a test solely to colour a line.
+addopts = ["--cov=validate_return", "--cov=check_prompt_schemas", "--cov-report=term-missing"]
+filterwarnings = ["error"]

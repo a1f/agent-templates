@@ -1,0 +1,2 @@
+# Runtime per-PR subagent logs — not version controlled
+*.jsonl
