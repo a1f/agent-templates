@@ -40,7 +40,9 @@ in its prompt, and **validate that return against `<v1_root>/schemas/<role>.sche
 first write the agent's raw return verbatim with `Write` (not `echo`/heredoc — those mangle the
 embedded quotes and newlines) to `<run_root>/<run-id>.<role>.json`, then run:
 
-`python3 <v1_root>/scripts/validate_return.py <v1_root>/schemas/<role>.schema.json <run_root>/<run-id>.<role>.json`
+`uv run --no-project --with jsonschema python <v1_root>/scripts/validate_return.py <v1_root>/schemas/<role>.schema.json <run_root>/<run-id>.<role>.json`
+
+(The validator depends on `jsonschema`; `uv run --no-project --with jsonschema` supplies it on first run and caches it — no separate install step.)
 
 Treat a validation failure, a missing field, or an unparsable return as malformed: re-dispatch
 once with the validator's feedback, and if it is still malformed, escalate to the human. This

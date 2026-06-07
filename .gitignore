@@ -18,3 +18,9 @@ impl-temp/
 # Python (v1/scripts)
 __pycache__/
 *.pyc
+.venv/
+.coverage
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/

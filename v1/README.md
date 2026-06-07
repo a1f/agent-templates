@@ -87,9 +87,11 @@ v1/
 ├── schemas/                    # authoritative return-shape contracts (architect validates against these)
 │   ├── _defs.schema.json       #   shared schema_version + command def ($ref'd by the others)
 │   └── {coder,tdd-runner,reviewer,critic}.schema.json
-├── scripts/                    # stdlib-only helpers — no third-party deps
+├── scripts/                    # jsonschema-backed helpers + their dev tooling (run via uv)
 │   ├── validate_return.py      #   validate one agent return against its schema (used by architect)
-│   └── check_prompt_schemas.py #   anti-drift: prompt examples vs schemas (python3 scripts/check_prompt_schemas.py)
+│   ├── check_prompt_schemas.py #   anti-drift: prompt examples vs schemas
+│   ├── pyproject.toml          #   dev-only ruff/mypy/pytest config so gates/python.json runs here
+│   └── tests/                  #   pytest — a few behavioural tests per helper, run by the gate
 ├── skills/
 │   └── architect/SKILL.md      # the driver + JSONL logging contract + decision rules
 ├── gates/                      # declarative hard gates (reuses make-pr gate format)
@@ -112,11 +114,11 @@ v1/
 Every agent returns one JSON object whose authoritative shape lives in `schemas/`. Each schema
 pins `role` as a `const`, requires every field, and sets `additionalProperties: false`, so a
 return must be **filled literally, not improvised**. The architect validates each return with
-`scripts/validate_return.py` (stdlib-only — required keys, enums, `const`s, no extra keys) and
+`scripts/validate_return.py` — a thin wrapper over `jsonschema`, the reference validator — and
 treats a failure as a malformed return. The ` ```json ` block shown in each agent prompt is the
-same shape for the model to read; `scripts/check_prompt_schemas.py` (run via `python3
-scripts/check_prompt_schemas.py`) checks each example's key structure against the schema so a prompt
-edit can't silently add, rename, or drop a field (it compares key sets, not enum values or ranges).
+same shape for the model to read; `scripts/check_prompt_schemas.py` (run via `uv run --no-project
+--with jsonschema python scripts/check_prompt_schemas.py`) validates each example against its
+schema and flags any omitted field, so a prompt edit can't silently add, rename, or drop a field.
 
 ## Gate contract
 
