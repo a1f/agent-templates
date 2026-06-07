@@ -73,12 +73,6 @@ dependencies_allowed: false
 ```
 v1/
 ├── README.md
-├── rules/                      # the contract every agent reads
-│   ├── design-principles.md    #   language-agnostic: deep modules, naming, complexity (Ousterhout)
-│   ├── tdd.md                  #   red→green→refactor, vertical slices, public-interface tests
-│   ├── python.md               #   language idiom + tooling (copied from repo root)
-│   ├── typescript.md           #   "
-│   └── rust.md                 #   "
 ├── agents/
 │   ├── worker-coder.md         # GREEN / REFACTOR / non-behavioral; commits; scope-locked
 │   ├── tdd-runner.md           # RED: one failing test, right reason; no production code
@@ -101,11 +95,15 @@ v1/
 └── runs/                       # gitignored placeholder — real run logs go to <target_cwd>/.v1-runs (run_root), never under v1/
 ```
 
+Rule files are **not** under `v1/` — they live at the repo-root `rules/` (a sibling of `v1/`):
+`design-principles.md`, `tdd.md`, `python.md`, `typescript.md`, `rust.md`. The architect resolves
+them via `rules_root`, and the installer ships the same files into each project's `.claude/rules/`.
+
 ## How quality is enforced (two layers)
 
 1. **Hard tooling gates** (`gates/*.json`) — objective, non-negotiable: format, lint,
    typecheck, tests. The architect runs these and will not declare done on a red gate.
-2. **Rules the agents read** (`rules/*.md`) — judgment the tools can't enforce: design
+2. **Rules the agents read** (repo-root `rules/*.md`) — judgment the tools can't enforce: design
    (deep modules, information hiding), readability (naming, comments), and test quality
    (behavior through public interfaces). The reviewer holds the line on these.
 

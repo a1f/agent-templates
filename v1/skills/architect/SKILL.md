@@ -30,7 +30,7 @@ structured returns, and decide the next step.
 | `critic` | with the reviewer, on the gate-green diff | goal-fit: did the PR achieve the task? |
 
 Give each agent the **task context + base + module boundary + allowed paths + exact files it
-needs + absolute rule paths** (resolve `v1/rules/...` to absolute — see Runtime resolution), and
+needs + absolute rule paths** (resolve `rules/...` to absolute — see Runtime resolution), and
 give `worker-coder` its **`mode`** (`green` | `refactor` | `non_behavioral`) plus
 `dependencies_allowed` (and any named dependency/version) when the task permits dependencies —
 otherwise the coder blocks on any new dependency. Keep each dispatch
@@ -62,7 +62,9 @@ stage it unchanged with your production code. Module boundary: `cart` only. Base
 Resolve these values before the first dispatch:
 
 - **v1_root**: the absolute path to this `v1/` directory in `agent-templates`. Use it for
-  immutable template assets: rules, schemas, scripts, and gates.
+  immutable template assets: schemas, scripts, and gates.
+- **rules_root**: the absolute path to the top-level `rules/` directory in `agent-templates`
+  — a sibling of `v1/` (`<v1_root>/../rules`). Use it for the rule files the agents read.
 - **target_cwd**: the absolute path to the repository being changed. Run every target-repo
   command there: `git`, verification commands, package-manager setup, and gate runs.
 - **run_root**: a writable directory for logs and transient return JSON, defaulting to
@@ -77,8 +79,8 @@ Resolve these values before the first dispatch:
   `git diff --name-only <base>...HEAD`. Match paths against each `<v1_root>/gates/*.json`
   profile's `triggers` globs; both root and nested paths must match. If a changed language has
   no v1 gate, stop and report the missing gate instead of declaring done.
-- **Rules**: resolve rule files to **absolute** paths (the `v1/rules/` directory of this
-  agent-templates repo) before passing them — a subagent's working directory is the user's
+- **Rules**: resolve rule files to **absolute** paths (the top-level `rules/` directory of this
+  agent-templates repo, `rules_root`) before passing them — a subagent's working directory is the user's
   project, not this repo, so bare or repo-relative names will not resolve. Always pass
   `design-principles.md`; add `tdd.md` for behavioral RED/GREEN steps; add the matching
   language rule (`python.md`, `typescript.md`, `rust.md`) for each changed file type.
