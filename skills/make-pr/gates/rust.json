@@ -1,9 +1,0 @@
-{
-  "gates": [
-    { "name": "format",    "run": "cargo fmt --check",               "fix": "cargo fmt" },
-    { "name": "lint",      "run": "cargo clippy -- -D warnings" },
-    { "name": "typecheck", "run": "cargo check" },
-    { "name": "test",      "run": "cargo nextest run" },
-    { "name": "build",     "run": "cargo build --release",           "required": false }
-  ]
-}

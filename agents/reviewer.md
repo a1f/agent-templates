@@ -74,7 +74,7 @@ the list — if the code is clean, say so (high `summary_score`, empty `findings
 ## Return
 
 Return exactly one JSON object, with no markdown fence and no prose — **fill this exact shape: do
-not add, rename, or drop required keys.** The authoritative schema is `v1/schemas/reviewer.schema.json`
+not add, rename, or drop required keys.** The authoritative schema is `schemas/reviewer.schema.json`
 (the architect validates your return against it). Replace placeholders with real values and choose
 one value for each enum field. The schema enforces the
 coupled fields — each finding's `score` inside its `severity` band, and `has_critical` equal to "any

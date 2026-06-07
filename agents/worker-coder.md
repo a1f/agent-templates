@@ -170,7 +170,7 @@ every mode.
 ## Return
 
 Return exactly one JSON object, with no markdown fence and no prose — **fill this exact shape: do
-not add, rename, or drop required keys.** The authoritative schema is `v1/schemas/coder.schema.json`
+not add, rename, or drop required keys.** The authoritative schema is `schemas/coder.schema.json`
 (the architect validates your return against it). Replace placeholders with real values and choose
 one value for each enum field. Allowed values: `mode` is `green`, `refactor`, or `non_behavioral`;
 `status` is `done` or `blocked`; command `outcome` is `pass` or `fail` (no `red` here — that is

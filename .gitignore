@@ -15,7 +15,7 @@ plan.md
 impl-tmp/
 impl-temp/
 
-# Python (v1/scripts)
+# Python (scripts)
 __pycache__/
 *.pyc
 .venv/

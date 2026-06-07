@@ -1,9 +1,0 @@
-{
-  "setup": "pnpm install --frozen-lockfile",
-  "gates": [
-    { "name": "format",    "run": "biome format --error-on-warnings .", "fix": "biome format --write ." },
-    { "name": "lint",      "run": "biome check .",                      "fix": "biome check --fix ." },
-    { "name": "typecheck", "run": "tsc --noEmit" },
-    { "name": "test",      "run": "vitest run" }
-  ]
-}

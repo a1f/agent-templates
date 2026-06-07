@@ -63,7 +63,7 @@ cargo test/nextest with proptest), not just the assertion.
 ## Return
 
 Return exactly one JSON object, with no markdown fence and no prose — **fill this exact shape: do
-not add, rename, or drop required keys.** The authoritative schema is `v1/schemas/tdd-runner.schema.json`
+not add, rename, or drop required keys.** The authoritative schema is `schemas/tdd-runner.schema.json`
 (the architect validates your return against it). Replace placeholders with real values and choose one
 value for each enum field.
 `exit_code` is the **real observed** code, not the literal `1` shown — an assertion RED is often

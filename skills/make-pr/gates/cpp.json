@@ -1,9 +1,0 @@
-{
-  "setup": "cmake --preset debug",
-  "gates": [
-    { "name": "format",    "run": "find src include -name '*.cpp' -o -name '*.h' | xargs clang-format --dry-run --Werror", "fix": "find src include -name '*.cpp' -o -name '*.h' | xargs clang-format -i" },
-    { "name": "lint",      "run": "cmake --build --preset debug --target clang-tidy" },
-    { "name": "build",     "run": "cmake --build --preset debug" },
-    { "name": "test",      "run": "ctest --preset debug --output-on-failure" }
-  ]
-}
