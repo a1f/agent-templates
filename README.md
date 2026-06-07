@@ -187,7 +187,7 @@ These skills are internal sub-components for orchestrator pipelines. Most users 
 
 ## Language Rules
 
-Opinionated, per-language coding standards that load automatically when editing matching files.
+Opinionated coding standards that load automatically when editing matching files — per-language conventions plus two cross-cutting rules (design and TDD).
 
 | Language | File | Target | Highlights |
 |----------|------|--------|------------|
@@ -195,6 +195,15 @@ Opinionated, per-language coding standards that load automatically when editing 
 | TypeScript | `rules/typescript.md` | TypeScript 5.8+ | Strict mode, discriminated unions, `satisfies`, Zod validation |
 | Rust | `rules/rust.md` | Edition 2024 | `?` propagation, `impl Trait` params, builder pattern, `#[must_use]` |
 | C++ | `rules/cpp.md` | C++20 | Concepts, ranges, `std::format`, smart pointers, RAII |
+
+### Cross-cutting rules
+
+Two language-agnostic rules install alongside the language rules and load on broader globs:
+
+| Rule | File | Loads on | Covers |
+|------|------|----------|--------|
+| Design principles | `rules/design-principles.md` | any source file | deep modules, information hiding, naming, complexity (Ousterhout) |
+| TDD | `rules/tdd.md` | test files | red→green→refactor, vertical slices, public-interface tests |
 
 ### Installation
 

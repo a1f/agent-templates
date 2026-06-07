@@ -797,7 +797,7 @@ EOF
     return
   fi
 
-  local expected_rules="python.md typescript.md rust.md cpp.md"
+  local expected_rules="python.md typescript.md rust.md cpp.md design-principles.md tdd.md"
   for rule in $expected_rules; do
     if [ -f "$tmpdir/.claude/rules/$rule" ]; then
       pass "rule installed: $rule"
