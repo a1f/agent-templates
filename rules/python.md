@@ -17,7 +17,13 @@ Target Python 3.12+. Use modern syntax and tooling throughout.
 
 ## Type Hints
 
-Type hints required on all function signatures and module-level variables.
+Type hints required on all function signatures and on **every variable binding** —
+module-level, class-level, and **local** — wherever the syntax allows an annotation. Annotate
+each `x = ...` assignment, including locals inside functions (this also pins the `Any` that
+`json.loads`/`re`/external calls leak, forcing a deliberate narrowing). The only exempt targets
+are those that *cannot* carry an annotation — `for`/comprehension loop variables, walrus (`:=`)
+targets, exception-handler (`except … as`) bindings, and tuple-unpacking targets; split a tuple
+unpack into single annotated assignments when the types matter.
 
 - Use modern syntax: `list[T]`, `dict[K, V]`, `T | None` (not `Optional[T]`)
 - Use the `type` statement for type aliases: `type Vector = list[float]`
