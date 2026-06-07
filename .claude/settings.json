@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebFetch(domain:dev.to)",
-      "WebFetch(domain:google.github.io)"
-    ]
-  }
-}

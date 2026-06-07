@@ -7,6 +7,7 @@ plan.md
 .DS_Store
 .idea/
 .vscode/
+.claude/
 *.swp
 .aider*
 
