@@ -1,9 +1,0 @@
-{
-  "setup": "uv sync --frozen",
-  "gates": [
-    { "name": "format",    "run": "ruff format --check .",  "fix": "ruff format ." },
-    { "name": "lint",      "run": "ruff check .",           "fix": "ruff check --fix ." },
-    { "name": "typecheck", "run": "pyright" },
-    { "name": "test",      "run": "pytest -x" }
-  ]
-}
