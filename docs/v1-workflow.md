@@ -10,7 +10,7 @@ of v1**. v1 assumes it is handed a single, already-scoped task.
 ## The pipeline
 
 ```
-architect (skill, the driver)
+architect (the /make-pr skill, the driver)
   │  intake → restate goal + public interface (must be single-module)
   │  plan behaviors as vertical slices (tdd.md)
   │
@@ -28,8 +28,9 @@ architect (skill, the driver)
   → done only when: all behaviors green, gates green, no CRITICAL, no unwaived review finding ≥70, critic=achieved
 ```
 
-`architect` is a **skill** invoked explicitly in the main loop (`disable-model-invocation:
-true`, so it never auto-triggers), which lets it orchestrate, collect results, and loop.
+`architect` is a **skill** (now invoked as `/make-pr`) called explicitly in the main loop
+(`disable-model-invocation: true`, so it never auto-triggers), which lets it orchestrate,
+collect results, and loop.
 `worker-coder` (the GREEN/REFACTOR/non-behavioral coder), `tdd-runner`, `reviewer`, `critic`
 are **agents** (isolated, scope-locked workers it dispatches via the Agent tool).
 
@@ -38,7 +39,7 @@ are **agents** (isolated, scope-locked workers it dispatches via the Agent tool)
 v1 expects a scoped task, not an idea. A valid dispatch names:
 
 - `task_id` and `base` (`origin/main`, a SHA, or another merge-base)
-- target cwd, absolute `v1_root`, and writable `run_root`
+- target cwd, absolute `repo_root`, and writable `run_root`
 - one module boundary (`module` plus `allowed_paths`)
 - task type: `behavioral` or `non_behavioral`
 - public interface or exact files in scope
@@ -51,7 +52,7 @@ Example:
 ```yaml
 task_id: feat_cart_discount
 target_cwd: /abs/project
-v1_root: /Users/alf/dev/agent-templates/v1
+repo_root: /Users/alf/dev/agent-templates
 run_root: /abs/project/.v1-runs
 base: origin/main
 module: cart
@@ -70,34 +71,15 @@ dependencies_allowed: false
 
 ## Layout
 
-```
-v1/
-├── README.md
-├── agents/
-│   ├── worker-coder.md         # GREEN / REFACTOR / non-behavioral; commits; scope-locked
-│   ├── tdd-runner.md           # RED: one failing test, right reason; no production code
-│   ├── reviewer.md             # quality / bugs / security; reports, doesn't fix
-│   └── critic.md               # goal-fit score + verdict
-├── schemas/                    # authoritative return-shape contracts (architect validates against these)
-│   ├── _defs.schema.json       #   shared schema_version + command def ($ref'd by the others)
-│   └── {coder,tdd-runner,reviewer,critic}.schema.json
-├── scripts/                    # jsonschema-backed helpers + their dev tooling (run via uv)
-│   ├── validate_return.py      #   validate one agent return against its schema (used by architect)
-│   ├── check_prompt_schemas.py #   anti-drift: prompt examples vs schemas
-│   ├── pyproject.toml          #   dev-only ruff/mypy/pytest config so gates/python.json runs here
-│   └── tests/                  #   pytest — a few behavioural tests per helper, run by the gate
-├── skills/
-│   └── architect/SKILL.md      # the driver + JSONL logging contract + decision rules
-├── gates/                      # declarative hard gates (reuses make-pr gate format)
-│   ├── python.json             #   ruff / typecheck / pytest
-│   ├── typescript.json         #   biome / tsc / vitest
-│   └── rust.json               #   fmt / clippy / check / test
-└── runs/                       # gitignored placeholder — real run logs go to <target_cwd>/.v1-runs (run_root), never under v1/
-```
+The workflow's pieces now live at the repo root (no longer under a `v1/` directory):
 
-Rule files are **not** under `v1/` — they live at the repo-root `rules/` (a sibling of `v1/`):
-`design-principles.md`, `tdd.md`, `python.md`, `typescript.md`, `rust.md`. The architect resolves
-them via `rules_root`, and the installer ships the same files into each project's `.claude/rules/`.
+- `skills/make-pr/SKILL.md` — the driver (this skill): orchestration loop, JSONL logging contract, decision rules
+- `agents/` — `worker-coder.md` (GREEN/REFACTOR/non-behavioral), `tdd-runner.md` (RED), `reviewer.md`, `critic.md`
+- `schemas/` — authoritative return-shape contracts the architect validates against (`_defs` + one per role)
+- `scripts/` — `validate_return.py`, `check_prompt_schemas.py`, plus pyproject/tests; run via `uv`
+- `gates/` — declarative hard gates: `python.json`, `typescript.json`, `rust.json`
+- `rules/` — `design-principles.md`, `tdd.md`, `python.md`, `typescript.md`, `rust.md`; resolved by the architect via `rules_root` and shipped into each project's `.claude/rules/` by the installer
+- `runs/` — gitignored placeholder; real run logs go to `<target_cwd>/.v1-runs` (`run_root`)
 
 ## How quality is enforced (two layers)
 
