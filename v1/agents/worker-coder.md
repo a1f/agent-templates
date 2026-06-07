@@ -136,10 +136,17 @@ every mode.
    output you actually observed. If a run is flaky or times out, re-run it: unless it passes on
    **every** one of at least three consecutive runs, treat it as failing — do not commit; return
    `blocked` and record the instability in `scope_notes` rather than shipping a lucky green.
-5. **Commit.** Run `git status --short`, then stage only the files this task intentionally
-   changed (in GREEN, that includes the unchanged RED test). Run `git diff --cached --name-only`
-   and confirm it lists *only* those files — this captured list is what you report as
-   `files_staged`, so capture it **before** `git commit` (afterward the index is clean).
+5. **Conform, then commit.** **Conform gate — never skip:** before you stage anything, re-read the
+   language rule file the dispatch passed and check **every line you changed** against it. The
+   objective gate (ruff/mypy/biome/clippy) cannot see rules like keyword-only `*`, `Final[T]` on
+   constants, type hints on **every** binding (locals included), or narrowest-exception — so this
+   self-check is the only thing that catches them before they land. A black-letter rule violation
+   (one the rule file states explicitly) is a **blocker, not a nit**: fix it before staging, or
+   return `blocked` if a rule genuinely conflicts with your scope/mode. Never commit code you know
+   breaks a stated rule. **Then commit:** run `git status --short`, then stage only the files this
+   task intentionally changed (in GREEN, that includes the unchanged RED test). Run `git diff
+   --cached --name-only` and confirm it lists *only* those files — this captured list is what you
+   report as `files_staged`, so capture it **before** `git commit` (afterward the index is clean).
    One task = one commit. Use a conventional message (`feat:`, `fix:`, `refactor:`, `test:`,
    `chore:`). Do **not** push. Do **not** add AI-attribution / `Co-Authored-By` lines.
 
@@ -156,6 +163,9 @@ every mode.
   target is its whole point.
 - If you cannot satisfy your mode's oracle within scope, **stop and report why** rather than
   expanding scope.
+- **Never commit a known black-letter rule violation.** The step-5 conform gate is non-skippable in
+  every mode — a green objective gate is not permission to skip it, since ruff/mypy/biome/clippy do
+  not enforce every rule (`*`, `Final[T]`, per-binding type hints, narrowest-exception, …).
 
 ## Return
 

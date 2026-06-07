@@ -26,7 +26,7 @@ structured returns, and decide the next step.
 |-------|------|-----|
 | `tdd-runner` | RED, once per behavior | write ONE failing test, prove it fails for the right reason |
 | `worker-coder` | GREEN & REFACTOR (per behavior); non-behavioral edits | minimal code to pass the test, a behavior-preserving refactor, or an exact non-behavioral change; commit |
-| `reviewer` | after gates are green | quality + bugs + security on the diff |
+| `reviewer` | after gates are green | quality + bugs + security + line-by-line rule conformance on the diff |
 | `critic` | with the reviewer, on the gate-green diff | goal-fit: did the PR achieve the task? |
 
 Give each agent the **task context + base + module boundary + allowed paths + exact files it
@@ -163,7 +163,9 @@ Resolve these values before the first dispatch:
    - any `reviewer` finding that is CRITICAL or has `score >= 70` (`has_critical: true` always
      blocks), unless the human has explicitly waived that finding in the run log;
    - any `critic` verdict of `not_achieved` or `partial`, with its listed gaps.
-   If there are no blockers, go to **Done**. A CRITICAL finding and a red gate are never waivable.
+   If there are no blockers, go to **Done**. A CRITICAL finding, a red gate, and a black-letter
+   language-rule violation (a rule the language file states explicitly — e.g. keyword-only `*`,
+   `Final[T]`, per-binding type hints) are never waivable.
 7. **Fix once, then re-verify in proportion to the change.** If step 6 found blockers, route them
    back as a **single batched fix round** — do not fix finding-by-finding with a re-review between
    each:
@@ -186,8 +188,9 @@ Resolve these values before the first dispatch:
    **stop / re-scope** — surface unresolved non-CRITICAL findings to the human as waive-or-rescope
    decisions rather than looping again.
 8. **Done** → only when: all behaviors green, all gates green, no CRITICAL review finding, no
-   unwaived review finding with `score >= 70`, critic `achieved`, and any step-7 fix has been
-   re-verified per the proportional rule above. Summarize and hand back.
+   unwaived review finding with `score >= 70` (a black-letter language-rule violation always scores
+   `>= 70` and is never waivable), critic `achieved`, and any step-7 fix has been re-verified per
+   the proportional rule above. Summarize and hand back.
 
 ## JSONL logging contract (mandatory)
 
@@ -240,3 +243,9 @@ unless asked.
 - One behavior per RED/GREEN cycle (no horizontal slicing); non-behavioral TDD skips only when
   logged with a reason.
 - Fixed order: RED → GREEN → (refactor) → GATE → REVIEW → CRITIC — gates before judgment.
+- **Language-rule conformance is non-skippable and covers every change — including v1's own
+  scripts, schemas, gates, and agent prompts. There is no "it's just tooling / internal" bypass.**
+  It runs in two places: the coder's pre-commit conform gate (worker-coder step 5) and the
+  reviewer's line-by-line rule check. ruff/mypy/biome/clippy do **not** enforce rules like
+  keyword-only `*`, `Final[T]`, or per-binding type hints — only this pass does, and a black-letter
+  violation is never waivable. A green objective gate is never sufficient evidence of conformance.

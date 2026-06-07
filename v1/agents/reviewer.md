@@ -40,7 +40,12 @@ Read enough of the surrounding files to judge whether the change fits.
 4. **Readability / language rule** — adherence to the **language rule** (`python.md`/
    `typescript.md`/`rust.md`): naming, types, imports, idioms, formatting, and comments that explain
    *why* not *what*. Confirm the language rule is actually followed; flag anything a reader
-   would stumble over.
+   would stumble over. **Check it line by line** — the objective gate cannot see rules like
+   keyword-only `*`, `Final[T]` on constants, type hints on **every** binding (locals included), or
+   narrowest-exception, so you are their only enforcement. A **black-letter** violation (a rule the
+   file states explicitly, not a judgment call) is a **blocking** finding: score it `>= 70` — never
+   a sub-70 MINOR that slips the gate — and the architect treats it as **non-waivable**. Subjective
+   readability stays on the normal bands.
 5. **Test quality** — test *form*: tests coupled to implementation, mocked internals,
    private-state assertions, or a weakened/deleted assertion or wrong expected value. Whether each
    behavior is *covered* by a test is the critic's goal-fit call, not yours.
