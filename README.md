@@ -30,9 +30,9 @@ For interactive component picking, dry-runs, or installing into a specific proje
 
 | Tool | Required by | Install (macOS) | Install (Debian/Ubuntu) |
 |------|-------------|-----------------|--------------------------|
-| `git` ≥ 2.5 | `make-pr`, `pr-babysit`, `latest-update`, `latest-rebase` | `brew install git` | `apt install git` |
+| `git` ≥ 2.5 | `make-pr`, `pr-babysit`, `latest-rebase` | `brew install git` | `apt install git` |
 | `jq` | Installer (`at`) and several skills | `brew install jq` | `apt install jq` |
-| `gh` | `make-pr`, `issue-make`, `pr-babysit` | `brew install gh` | `apt install gh` |
+| `gh` | `make-pr`, `pr-babysit` | `brew install gh` | `apt install gh` |
 | `uv` | `scripts/` (agent return-schema checks) | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `claude` CLI | All skills (the runtime) | Claude Code installer | Claude Code installer |
 
@@ -42,7 +42,7 @@ Verify the installation with `./validate.sh`.
 
 Every teammate runs this once after cloning:
 
-1. **GitHub CLI** — authenticate with the scopes required by `make-pr` and `issue-make`:
+1. **GitHub CLI** — authenticate with the scopes required by `make-pr`:
 
    ```bash
    gh auth login -s repo,read:project,project
@@ -73,9 +73,7 @@ Then pick a workflow from the decision tree below -- e.g. `/pr-make-till-merge` 
 
 ### Other daily tasks
 
-- Sync main: `/latest-update`
 - Rebase onto main: `/latest-rebase`
-- Open a GitHub issue: `/issue-make`
 
 ## Components Overview
 
@@ -103,8 +101,6 @@ Top-level skills that run full workflows by composing lower-level skills.
 |-------|---------|---------|
 | **make-pr** | `/make-pr` | Drive a scoped task to done via a TDD loop, run gates, then create/update the PR |
 | **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
-| **issue-make** | `/issue-make` | Create or update a GitHub issue with planning artifacts |
-| **latest-update** | `/latest-update` | Pull main, clean up merged branches, validate, install |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
 
 **Aliases** (same arguments, alternate slash name): `/pr-make` -> `/make-pr`.
