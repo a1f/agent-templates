@@ -99,7 +99,8 @@ Top-level skills that run full workflows by composing lower-level skills.
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| **make-pr** | `/make-pr` | Drive a scoped task to done via a TDD loop, run gates, then create/update the PR |
+| **make-pr** | `/make-pr` | Drive a scoped task to done via a per-behavior TDD loop (tdd-runner + worker-coder), run gates, then review/critic. Best for high-risk work |
+| **make-pr-lite** | `/make-pr-lite` | Lighter, cheaper sibling of make-pr for low-risk/greenfield PRs: one self-TDD coder + gates + a parallel review panel. Trades the live per-behavior RED witness for a test-form review lens |
 | **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
 
