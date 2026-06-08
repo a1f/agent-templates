@@ -28,8 +28,6 @@ These skills cover code review, PR creation, and repo upkeep.
 | `/make-pr` | Drive a scoped coding task to done via a TDD loop, then create/update the PR (runs gates, fixes errors, links issues, assigns reviewers) |
 | `/pr-make-till-merge` | Create a PR from the current branch and babysit it until ready to merge |
 | `/pr-babysit` | Poll an open PR, fix review/CI issues, and loop until ready to merge |
-| `/review-and-fix` | Review the current diff and fix CRITICAL/MAJOR issues |
-| `/multi-review` | Multi-model code review via external AI CLIs |
 | `/simplify` | Review changed code for reuse, quality, and efficiency |
 | `/issue-make` | Create or update a GitHub issue with planning artifacts |
 | `/latest-update` | Pull main, clean up merged branches, validate, install |
