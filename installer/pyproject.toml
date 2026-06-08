@@ -1,0 +1,42 @@
+# uv project for the agent-templates installer: it pins the runtime deps (questionary, rich)
+# and the dev tooling so gates/python.json can lint, type-check, and test this directory, and
+# so a future installer/at.py runs standalone via `uv run installer/at.py`.
+[project]
+name = "at-installer"
+version = "0.2.0"
+description = "Interactive installer for agent-templates."
+requires-python = ">=3.11"
+dependencies = ["questionary>=2", "rich>=13"]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.9",
+  "mypy>=1.14",
+  "pytest>=8",
+  "pytest-cov>=6",
+]
+
+[tool.uv]
+package = false  # an installer dir, not an installable package — just resolve deps
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+# The exact selection mandated by rules/python.md.
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PIE", "RUF", "DTZ", "PTH", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[tool.pytest.ini_options]
+pythonpath = ["."]  # rootdir is installer/, so tests import the module under test directly
+# Coverage is a diagnostic (term-missing), never a gate target — a 100% mandate just
+# manufactures tests to paint branches green. Test behaviour, then read coverage to spot
+# a genuinely untested path; don't write a test solely to colour a line.
+addopts = ["--cov=at", "--cov-report=term-missing"]
+filterwarnings = ["error"]
+
+[tool.coverage.run]
+branch = true

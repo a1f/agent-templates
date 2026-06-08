@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Directory of this script, resolved even when invoked via a relative path.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+if ! command -v uv >/dev/null 2>&1; then
+	echo "error: 'uv' is required but was not found on PATH." >&2
+	echo "Install it from https://docs.astral.sh/uv/ and try again." >&2
+	exit 1
+fi
+
+exec uv run "$SCRIPT_DIR/at.py" "$@"
