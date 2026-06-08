@@ -529,7 +529,7 @@ validate_smoke() {
     fi
   done
 
-  local expected_skills="make-pr pr-babysit pr-make-till-merge issue-make latest-update"
+  local expected_skills="make-pr pr-babysit pr-make-till-merge pr-make latest-rebase"
   for skill in $expected_skills; do
     if [ -f "$tmpdir/.claude/skills/$skill/SKILL.md" ]; then
       pass "skill installed: $skill/SKILL.md"
