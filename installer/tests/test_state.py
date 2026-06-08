@@ -4,7 +4,7 @@ from typing import NoReturn
 
 import pytest
 
-from state import STATE_VERSION, State, load_state, save_state
+from state import STATE_FILENAME, STATE_VERSION, State, load_state, save_state
 
 
 def test_load_state_on_first_run_creates_dir_and_returns_default(
@@ -45,3 +45,22 @@ def test_save_is_atomic_failed_replace_keeps_prior_state(
 
     survivor: State = load_state(tmp_path)
     assert survivor == prior
+
+
+def test_failed_save_leaves_no_orphan_temp_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    prior: State = State(version=STATE_VERSION, units={"skill/make-pr": "aaaa1111"})
+    save_state(prior, tmp_path)
+
+    def fail_replace(src: object, dst: object) -> NoReturn:
+        raise OSError("replace interrupted before the swap")
+
+    monkeypatch.setattr("os.replace", fail_replace)
+
+    clobber: State = State(version=STATE_VERSION, units={"skill/make-pr": "bbbb2222"})
+    with pytest.raises(OSError):
+        save_state(clobber, tmp_path)
+
+    remaining: set[str] = {entry.name for entry in tmp_path.iterdir()}
+    assert remaining == {STATE_FILENAME}

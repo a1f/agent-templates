@@ -35,7 +35,13 @@ def save_state(state: State, root: Path) -> None:
     ) as handle:
         json.dump(payload, handle)
         tmp_path: Path = Path(handle.name)
-    tmp_path.replace(state_file)
+    # A failed swap must not leave the sibling temp behind; the original error
+    # still propagates so callers see the write failed.
+    try:
+        tmp_path.replace(state_file)
+    except OSError:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
 def load_state(root: Path) -> State:
