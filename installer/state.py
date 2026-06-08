@@ -1,4 +1,5 @@
 import json
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast
@@ -27,8 +28,14 @@ def save_state(state: State, root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
     state_file: Path = root / STATE_FILENAME
     payload: dict[str, object] = {"version": state.version, "units": state.units}
-    with state_file.open("w", encoding="utf-8") as handle:
+    # Write a sibling temp file and atomically swap it in, so a failed write
+    # leaves the prior store intact rather than a half-written file.
+    with tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", dir=root, suffix=".tmp", delete=False
+    ) as handle:
         json.dump(payload, handle)
+        tmp_path: Path = Path(handle.name)
+    tmp_path.replace(state_file)
 
 
 def load_state(root: Path) -> State:
