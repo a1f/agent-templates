@@ -33,9 +33,8 @@ For interactive component picking, dry-runs, or installing into a specific proje
 | `git` ≥ 2.5 | `make-pr`, `pr-babysit`, `latest-update`, `latest-rebase` | `brew install git` | `apt install git` |
 | `jq` | Installer (`at`) and several skills | `brew install jq` | `apt install jq` |
 | `gh` | `make-pr`, `issue-make`, `pr-babysit` | `brew install gh` | `apt install gh` |
-| `uv` | `tools/multi-review` | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `uv` | `scripts/` (agent return-schema checks) | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `claude` CLI | All skills (the runtime) | Claude Code installer | Claude Code installer |
-| `codex` CLI (optional) | `/multi-review` (second reviewer) | vendor installer | vendor installer |
 
 Verify the installation with `./validate.sh`.
 
@@ -51,21 +50,19 @@ Every teammate runs this once after cloning:
 
    Already logged in? Refresh scopes: `gh auth refresh -s read:project,project`.
 
-2. **Multi-model review CLIs** (optional, only for `/multi-review`) — authenticate `claude` (always available if you have Claude Code installed) and `codex` if you want a second reviewer. See each vendor's docs.
-
 ### Mental model
 
 A skill is a named procedure invoked by typing `/skill-name` in a Claude Code session. Some skills are aliases that dispatch to another skill with identical arguments -- for example, `/pr-make` dispatches to `/make-pr`.
 
 ### Your first run
 
-With a few uncommitted changes in a project, try a read-only review to verify everything works:
+Verify the skills installed correctly:
 
-```
-/multi-review
+```bash
+ls ~/.claude/skills    # should list make-pr, pr-babysit, pr-make-till-merge, ...
 ```
 
-This reviews the current diff with one or more external model CLIs and prints findings -- it does not modify any files. (Requires `uv` and at least the `claude` CLI; see [Prerequisites](#prerequisites).)
+Then pick a workflow from the decision tree below -- e.g. `/pr-make-till-merge` on a finished branch.
 
 ### Decision tree -- "I have X, I want Y"
 
@@ -73,13 +70,11 @@ This reviews the current diff with one or more external model CLIs and prints fi
 |---|---|---|
 | A finished branch (committed work) | A merged PR | `/pr-make-till-merge` |
 | An open PR | A merged PR | `/pr-babysit` |
-| Uncommitted changes | Reviewed & fixed | `/review-and-fix` |
 
 ### Other daily tasks
 
 - Sync main: `/latest-update`
 - Rebase onto main: `/latest-rebase`
-- Review the current diff: `/review-and-fix` or `/multi-review`
 - Open a GitHub issue: `/issue-make`
 
 ## Components Overview
@@ -108,9 +103,6 @@ Top-level skills that run full workflows by composing lower-level skills.
 |-------|---------|---------|
 | **make-pr** | `/make-pr` | Drive a scoped task to done via a TDD loop, run gates, then create/update the PR |
 | **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
-| **review-and-fix** | `/review-and-fix` | Review current diff, fix CRITICAL and MAJOR issues |
-| **review-and-fix-that** | `/review-and-fix-that` | Critique a plan or doc from multiple perspectives, then address the feedback |
-| **multi-review** | `/multi-review` | Multi-model code review via external AI CLIs |
 | **issue-make** | `/issue-make` | Create or update a GitHub issue with planning artifacts |
 | **latest-update** | `/latest-update` | Pull main, clean up merged branches, validate, install |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
