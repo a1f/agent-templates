@@ -12,8 +12,8 @@ from at import (
     main,
     skill_rows,
 )
-from catalog import Catalog, Unit
-from state import State
+from catalog import Catalog, Unit, skill_unit_id
+from state import State, load_state
 
 
 def test_version_flag_prints_version_and_exits_zero(
@@ -168,3 +168,48 @@ def test_skills_tab_install_picker_marks_chosen_skill_installed(
     assert exit_code == 0
     assert f"{MARKER_INSTALLED} demo-skill" in captured
     assert (tmp_path / "claude" / "skills" / "demo-skill").is_symlink()
+
+
+def test_skills_tab_declining_install_confirmation_installs_nothing(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("at.STATE_ROOT", tmp_path / "at")
+    monkeypatch.setattr("at.CLAUDE_ROOT", tmp_path / "claude")
+    monkeypatch.setattr("at.REPO_ROOT", tmp_path / "repo")
+
+    source_skill: Path = tmp_path / "repo" / "skills" / "demo-skill" / "SKILL.md"
+    source_skill.parent.mkdir(parents=True)
+    source_skill.write_text("# demo skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # Tab menu, then pick the skill at the install picker, then exit the tab menu.
+    select_answers: Iterator[str] = iter(["Skills", "demo-skill", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # The confirm gate is declined, so the install must be a true no-op.
+    class DeclinePrompt:
+        def ask(self) -> bool:
+            return False
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: DeclinePrompt())
+
+    exit_code: int = main(["install"])
+
+    captured: str = capsys.readouterr().out
+    live_link: Path = tmp_path / "claude" / "skills" / "demo-skill"
+    final_state: State = load_state(tmp_path / "at")
+    assert exit_code == 0
+    assert not live_link.exists() and not live_link.is_symlink()
+    assert skill_unit_id("demo-skill") not in final_state.units
+    assert f"{MARKER_NOT_INSTALLED} demo-skill" in captured
