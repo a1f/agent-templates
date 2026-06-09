@@ -74,6 +74,7 @@ Then pick a workflow from the decision tree below -- e.g. `/pr-make-till-merge` 
 ### Other daily tasks
 
 - Rebase onto main: `/latest-rebase`
+- Audit a subsystem's module decomposition: `/improve-architecture`
 
 ## Components Overview
 
@@ -103,6 +104,7 @@ Top-level skills that run full workflows by composing lower-level skills.
 | **make-pr-lite** | `/make-pr-lite` | Lighter, cheaper sibling of make-pr for low-risk/greenfield PRs: one self-TDD coder + gates + a parallel review panel. Trades the live per-behavior RED witness for a test-form review lens |
 | **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
+| **improve-architecture** | `/improve-architecture` | Read-only audit of a subsystem's module decomposition — ranks SPLIT/MERGE/EXTRACT/MOVE/DELETE/DEEPEN candidates against `design-principles.md` with traced evidence, gates on your pick, hands off to `/breakdown` or `/make-pr` |
 
 **Aliases** (same arguments, alternate slash name): `/pr-make` -> `/make-pr`.
 
