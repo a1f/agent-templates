@@ -44,9 +44,7 @@ def test_install_skill_records_and_persists_installed_unit(tmp_path: Path) -> No
     source_root: Path = tmp_path / "repo"
     skill_source: Path = source_root / "skills" / "demo-skill"
     skill_source.mkdir(parents=True)
-    (skill_source / "SKILL.md").write_text(
-        "# Demo Skill\n", encoding="utf-8"
-    )
+    (skill_source / "SKILL.md").write_text("# Demo Skill\n", encoding="utf-8")
 
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
