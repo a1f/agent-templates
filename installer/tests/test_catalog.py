@@ -3,7 +3,15 @@ from typing import Final
 
 import pytest
 
-from catalog import Bundle, Catalog, Package, Unit, list_skills, load_catalog
+from catalog import (
+    Bundle,
+    Catalog,
+    Package,
+    Unit,
+    list_skills,
+    load_catalog,
+    skill_unit_id,
+)
 
 SEED: Final[Path] = Path(__file__).resolve().parent.parent / "catalog.toml"
 
@@ -62,6 +70,12 @@ def test_list_skills_returns_only_skill_names_sorted(tmp_path: Path) -> None:
 
     # Only skill-kind units, and sorted (declaration order is beta, alpha).
     assert list_skills(catalog) == ["alpha", "beta"]
+
+
+def test_skill_unit_id_joins_kind_and_name() -> None:
+    # The skill-unit id is the join key install status is keyed by; pin it here
+    # so the "<kind>/<name>" format lives in exactly one module.
+    assert skill_unit_id("make-pr") == "skill/make-pr"
 
 
 def test_load_catalog_rejects_package_referencing_undeclared_unit(
