@@ -76,3 +76,24 @@ def test_link_unit_symlinks_to_staged_path_and_creates_missing_parent(tmp_path: 
     assert link_path.is_symlink()
     assert link_path.resolve() == staged_path.resolve()
     assert (link_path / "SKILL.md").read_text(encoding="utf-8") == content
+
+
+def test_link_unit_backs_up_existing_real_file_before_linking(tmp_path: Path) -> None:
+    staged_content: str = "# Make PR\n\nOurs.\n"
+    staged_path: Path = tmp_path / "at" / "skill" / "make-pr.md"
+    staged_path.parent.mkdir(parents=True)
+    staged_path.write_text(staged_content, encoding="utf-8")
+
+    user_content: str = "user's own data\n"
+    link_path: Path = tmp_path / "claude" / "commands" / "make-pr.md"
+    link_path.parent.mkdir(parents=True)
+    link_path.write_text(user_content, encoding="utf-8")
+
+    link_unit(staged_path=staged_path, link_path=link_path)
+
+    backup_path: Path = link_path.with_name(link_path.name + ".bak")
+    assert link_path.is_symlink()
+    assert link_path.resolve() == staged_path.resolve()
+    assert backup_path.exists()
+    assert not backup_path.is_symlink()
+    assert backup_path.read_text(encoding="utf-8") == user_content
