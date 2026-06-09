@@ -20,6 +20,10 @@ name = "course-correct"
 
 [[units]]
 kind = "skill"
+name = "improve-architecture"
+
+[[units]]
+kind = "skill"
 name = "latest-rebase"
 
 [[units]]
