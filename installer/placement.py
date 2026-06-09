@@ -9,5 +9,8 @@ def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
     install can swap a fully-built tree into place instead of writing live."""
     destination: Path = staged_root / unit.kind / unit.name
     destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(source, destination)
+    if source.is_dir():
+        shutil.copytree(source, destination)
+    else:
+        shutil.copyfile(source, destination)
     return destination
