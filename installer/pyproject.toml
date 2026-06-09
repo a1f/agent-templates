@@ -35,7 +35,7 @@ pythonpath = ["."]  # rootdir is installer/, so tests import the module under te
 # Coverage is a diagnostic (term-missing), never a gate target — a 100% mandate just
 # manufactures tests to paint branches green. Test behaviour, then read coverage to spot
 # a genuinely untested path; don't write a test solely to colour a line.
-addopts = ["--cov=at", "--cov=state", "--cov=catalog", "--cov-report=term-missing"]
+addopts = ["--cov=at", "--cov=state", "--cov=catalog", "--cov=placement", "--cov-report=term-missing"]
 filterwarnings = ["error"]
 
 [tool.coverage.run]
