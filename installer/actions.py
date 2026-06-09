@@ -4,14 +4,13 @@
 from pathlib import Path
 from typing import Final
 
-from catalog import Unit, skill_unit_id
+from catalog import skill_unit, skill_unit_id
 from placement import link_unit, stage_unit
 from state import State, save_state
 
 # The kind→subdir layout lives here, the first concrete caller of the placement
 # primitives: a skill stages under "staged/skill/<name>" and goes live under
 # "<claude>/skills/<name>", matching ~/.claude's per-kind directories.
-_SKILL_KIND: Final[str] = "skill"
 _STAGED_DIRNAME: Final[str] = "staged"
 _SKILLS_DIRNAME: Final[str] = "skills"
 
@@ -29,11 +28,13 @@ def install_skill(
     state: State,
 ) -> State:
     """Place a skill on disk by staging its source then linking the staged tree
-    live, so the staged copy stays the single source of truth behind the symlink."""
-    unit: Unit = Unit(kind=_SKILL_KIND, name=name)
+    live, so the staged copy stays the single source of truth behind the symlink.
+
+    Persists the updated state to state_root (via save_state) and returns a brand-new
+    immutable State; the passed-in state is never mutated."""
     source: Path = source_root / _SKILLS_DIRNAME / name
     staged_path: Path = stage_unit(
-        unit=unit, source=source, staged_root=state_root / _STAGED_DIRNAME
+        unit=skill_unit(name), source=source, staged_root=state_root / _STAGED_DIRNAME
     )
     link_unit(staged_path=staged_path, link_path=claude_root / _SKILLS_DIRNAME / name)
     new_state: State = State(

@@ -53,10 +53,16 @@ def _unit_id(unit: Unit) -> str:
     return f"{unit.kind}{_REF_SEP}{unit.name}"
 
 
+def skill_unit(name: str) -> Unit:
+    """Own the skill-kind decision here, so callers stage skills without
+    re-encoding the "skill" kind token this module is the source of truth for."""
+    return Unit(kind=_SKILL_KIND, name=name)
+
+
 def skill_unit_id(name: str) -> str:
     """Expose the id a skill unit is keyed by, so callers render install status
     without re-encoding the "<kind>/<name>" join this module owns."""
-    return _unit_id(Unit(kind=_SKILL_KIND, name=name))
+    return _unit_id(skill_unit(name))
 
 
 def list_skills(catalog: Catalog) -> list[str]:
