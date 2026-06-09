@@ -16,6 +16,10 @@ name = "breakdown"
 
 [[units]]
 kind = "skill"
+name = "course-correct"
+
+[[units]]
+kind = "skill"
 name = "latest-rebase"
 
 [[units]]
@@ -127,6 +131,7 @@ units = [
   "skill/to-prd",
   "skill/to-issues",
   "skill/pr-breakdown",
+  "skill/course-correct",
 ]
 
 [[packages]]

@@ -106,6 +106,19 @@ Top-level skills that run full workflows by composing lower-level skills.
 
 **Aliases** (same arguments, alternate slash name): `/pr-make` -> `/make-pr`.
 
+### Planning & course-correction
+
+Turn a discussion into a published plan in one growing GitHub issue, then keep
+that plan honest as PRs land.
+
+| Skill | Command | Purpose |
+|-------|---------|---------|
+| **breakdown** | `/breakdown` | Run the whole pipeline (PRD -> slices -> PR rows) into one issue, gating at each step. Composes the three below |
+| **to-prd** | `/to-prd` | Turn the conversation into a short PRD published as a GitHub issue |
+| **to-issues** | `/to-issues` | Break the PRD into vertical, tracer-bullet slices in the same issue |
+| **pr-breakdown** | `/pr-breakdown` | Split each slice into ~100-200 LOC PR rows in the same issue |
+| **course-correct** | `/course-correct` | After some PRs land, check merged work against the PRD goal and re-plan: refresh Status, add/remove/re-scope slices and PRs. Checkpoint-aware; run it in a fresh session every few PRs |
+
 ## Language Rules
 
 Opinionated coding standards that load automatically when editing matching files — per-language conventions plus two cross-cutting rules (design and TDD).
