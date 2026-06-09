@@ -1,3 +1,5 @@
+import os
+import stat
 from pathlib import Path
 
 from catalog import Unit
@@ -19,6 +21,24 @@ def test_stage_unit_copies_single_file_to_kind_name_destination(tmp_path: Path) 
     assert destination == staged_root / "agent" / "reviewer"
     assert destination.is_file()
     assert destination.read_text(encoding="utf-8") == content
+
+
+def test_stage_unit_preserves_executable_bit_of_single_file(tmp_path: Path) -> None:
+    source: Path = tmp_path / "pre-commit.sh"
+    source.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    source.chmod(0o755)
+    source_exec_bits: int = source.stat().st_mode & 0o777
+    staged_root: Path = tmp_path / "staged"
+
+    destination: Path = stage_unit(
+        unit=Unit(kind="hook", name="pre-commit"),
+        source=source,
+        staged_root=staged_root,
+    )
+
+    assert os.access(destination, os.X_OK)
+    assert destination.stat().st_mode & stat.S_IXUSR
+    assert destination.stat().st_mode & 0o777 == source_exec_bits
 
 
 def test_stage_unit_copies_directory_source_recursively(tmp_path: Path) -> None:

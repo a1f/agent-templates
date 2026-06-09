@@ -20,10 +20,12 @@ def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
         shutil.rmtree(destination)
     elif destination.exists():
         destination.unlink()
+    # copy2 (not copyfile) carries the source's mode across, so an executable
+    # hook script stays executable once staged — matching copytree below.
     if source.is_dir():
         shutil.copytree(source, destination)
     else:
-        shutil.copyfile(source, destination)
+        shutil.copy2(source, destination)
     return destination
 
 
