@@ -31,10 +31,12 @@ def link_unit(*, staged_path: Path, link_path: Path) -> Path:
     """Symlink a staged unit into its live location so it is visible under
     ~/.claude/<kind>/ while ~/.claude/at stays the single source of truth."""
     link_path.parent.mkdir(parents=True, exist_ok=True)
-    # A pre-existing real (non-symlink) entry is the user's own data, never a
-    # prior install of ours, so preserve it before claiming the path; this also
-    # frees the path so symlink_to does not hit an existing entry.
-    if link_path.exists() and not link_path.is_symlink():
+    # An existing symlink is a prior install of ours, so just drop it; only a
+    # real (non-symlink) entry is the user's own data worth backing up. Either
+    # way the path is freed so symlink_to does not hit an existing entry.
+    if link_path.is_symlink():
+        link_path.unlink()
+    elif link_path.exists():
         backup_path: Path = link_path.with_name(link_path.name + _BACKUP_SUFFIX)
         link_path.replace(backup_path)
     link_path.symlink_to(staged_path)

@@ -78,6 +78,28 @@ def test_link_unit_symlinks_to_staged_path_and_creates_missing_parent(tmp_path: 
     assert (link_path / "SKILL.md").read_text(encoding="utf-8") == content
 
 
+def test_link_unit_replaces_prior_symlink_in_place_without_backup(tmp_path: Path) -> None:
+    old_content: str = "# Old staged\n\nFrom a prior install run.\n"
+    staged_old: Path = tmp_path / "at" / "skill" / "old.md"
+    staged_old.parent.mkdir(parents=True)
+    staged_old.write_text(old_content, encoding="utf-8")
+
+    new_content: str = "# New staged\n\nFrom the current install run.\n"
+    staged_new: Path = tmp_path / "at" / "skill" / "new.md"
+    staged_new.write_text(new_content, encoding="utf-8")
+
+    link_path: Path = tmp_path / "claude" / "commands" / "make-pr.md"
+    link_unit(staged_path=staged_old, link_path=link_path)
+
+    link_unit(staged_path=staged_new, link_path=link_path)
+
+    backup_path: Path = link_path.with_name(link_path.name + ".bak")
+    assert link_path.is_symlink()
+    assert link_path.resolve() == staged_new.resolve()
+    assert link_path.read_text(encoding="utf-8") == new_content
+    assert not backup_path.exists()
+
+
 def test_link_unit_backs_up_existing_real_file_before_linking(tmp_path: Path) -> None:
     staged_content: str = "# Make PR\n\nOurs.\n"
     staged_path: Path = tmp_path / "at" / "skill" / "make-pr.md"
