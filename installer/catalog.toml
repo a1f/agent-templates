@@ -1,0 +1,148 @@
+# Seed catalog for the installer's three-tier model: units are the atoms the
+# installer can place (skills, agents, rules, hooks); packages group units the
+# user installs together; bundles group packages into a single opinionated pick.
+# Packages reference units by a "<kind>/<name>" id so a unit is declared once and
+# reused across packages. Every name here is a real unit in this repo, not a
+# fixture — [[units]] is the complete inventory the menu browses.
+#
+# The [[units]] list is exhaustive and factual. The [[packages]] / [[bundles]]
+# curation below is PROVISIONAL (mirrors the examples in issue #74); final
+# bundle/package taste is the content side-lane and may change.
+
+# --- skills (skills/<name>/SKILL.md) ---
+[[units]]
+kind = "skill"
+name = "breakdown"
+
+[[units]]
+kind = "skill"
+name = "latest-rebase"
+
+[[units]]
+kind = "skill"
+name = "make-pr"
+
+[[units]]
+kind = "skill"
+name = "make-pr-lite"
+
+[[units]]
+kind = "skill"
+name = "pr-babysit"
+
+[[units]]
+kind = "skill"
+name = "pr-breakdown"
+
+[[units]]
+kind = "skill"
+name = "pr-make"
+
+[[units]]
+kind = "skill"
+name = "pr-make-till-merge"
+
+[[units]]
+kind = "skill"
+name = "to-issues"
+
+[[units]]
+kind = "skill"
+name = "to-prd"
+
+# --- agents (agents/<name>.md) ---
+[[units]]
+kind = "agent"
+name = "coder-lite"
+
+[[units]]
+kind = "agent"
+name = "critic"
+
+[[units]]
+kind = "agent"
+name = "reviewer"
+
+[[units]]
+kind = "agent"
+name = "tdd-runner"
+
+[[units]]
+kind = "agent"
+name = "worker-coder"
+
+# --- rules (rules/<name>.md) ---
+[[units]]
+kind = "rule"
+name = "cpp"
+
+[[units]]
+kind = "rule"
+name = "design-principles"
+
+[[units]]
+kind = "rule"
+name = "python"
+
+[[units]]
+kind = "rule"
+name = "rust"
+
+[[units]]
+kind = "rule"
+name = "tdd"
+
+[[units]]
+kind = "rule"
+name = "typescript"
+
+# --- packages (provisional curation; mirrors issue #74's examples) ---
+[[packages]]
+name = "architect-pr"
+units = [
+  "skill/make-pr",
+  "agent/tdd-runner",
+  "agent/worker-coder",
+  "agent/reviewer",
+  "agent/critic",
+  "rule/design-principles",
+  "rule/tdd",
+]
+
+[[packages]]
+name = "lite-pr"
+units = [
+  "skill/make-pr-lite",
+  "agent/coder-lite",
+  "agent/reviewer",
+  "agent/critic",
+  "rule/design-principles",
+  "rule/tdd",
+]
+
+[[packages]]
+name = "breakdown"
+units = [
+  "skill/breakdown",
+  "skill/to-prd",
+  "skill/to-issues",
+  "skill/pr-breakdown",
+]
+
+[[packages]]
+name = "pr-ops"
+units = [
+  "skill/pr-babysit",
+  "skill/pr-make",
+  "skill/pr-make-till-merge",
+  "skill/latest-rebase",
+]
+
+# --- bundles (provisional) ---
+[[bundles]]
+name = "tdd-pr-flow"
+packages = ["architect-pr", "lite-pr"]
+
+[[bundles]]
+name = "planning"
+packages = ["breakdown"]
