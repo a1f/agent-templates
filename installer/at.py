@@ -4,13 +4,23 @@
 # dependencies = ["questionary", "rich"]
 # ///
 import sys
+from pathlib import Path
 from typing import Final
 
 import questionary
 from rich.console import Console
 from rich.panel import Panel
 
+from catalog import Catalog, list_skills, load_catalog, skill_unit_id
+from state import State, load_state
+
 AT_VERSION: Final[str] = "0.2.0"
+
+CATALOG_PATH: Final[Path] = Path(__file__).parent / "catalog.toml"
+STATE_ROOT: Final[Path] = Path.home() / ".claude" / "at"
+
+MARKER_INSTALLED: Final[str] = "✅"
+MARKER_NOT_INSTALLED: Final[str] = "❌"
 
 HEADER_TEXT: Final[str] = "Agent Templates Installer"
 NON_TTY_NOTICE: Final[str] = (
@@ -42,6 +52,19 @@ KNOWN_TOKENS: Final[frozenset[str]] = frozenset(
 )
 
 
+def _skill_marker(name: str, installed: frozenset[str]) -> str:
+    if skill_unit_id(name) in installed:
+        return MARKER_INSTALLED
+    return MARKER_NOT_INSTALLED
+
+
+def skill_rows(*, catalog: Catalog, state: State) -> list[str]:
+    """Pair each catalog skill with its on-disk install marker so the Skills tab
+    renders status, keying install state by the unit id catalog.py owns."""
+    installed: frozenset[str] = frozenset(state.units)
+    return [f"{_skill_marker(name, installed)} {name}" for name in list_skills(catalog)]
+
+
 def launch_tui() -> int:
     """Bail out on non-interactive stdin: questionary's prompt would otherwise
     block forever waiting on input no CI session can supply."""
@@ -57,6 +80,12 @@ def launch_tui() -> int:
             ).ask()
             if choice is None or choice == "Exit":
                 return 0
+            if choice == "Skills":
+                catalog: Catalog = load_catalog(CATALOG_PATH)
+                state: State = load_state(STATE_ROOT)
+                for row in skill_rows(catalog=catalog, state=state):
+                    console.print(row, markup=False)
+                continue
             console.print(TAB_PLACEHOLDER)
     except KeyboardInterrupt:
         return 0

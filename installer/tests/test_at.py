@@ -1,7 +1,18 @@
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 from pytest import CaptureFixture, MonkeyPatch
 
-from at import main
+from at import (
+    MARKER_INSTALLED,
+    MARKER_NOT_INSTALLED,
+    TAB_PLACEHOLDER,
+    main,
+    skill_rows,
+)
+from catalog import Catalog, Unit
+from state import State
 
 
 def test_version_flag_prints_version_and_exits_zero(
@@ -48,3 +59,63 @@ def test_install_on_non_tty_prints_notice_and_exits_without_hanging(
     assert exit_code == 0
     assert "Agent Templates Installer" in captured
     assert "terminal" in captured.lower()
+
+
+def test_skill_rows_marks_installed_and_not_installed_skills() -> None:
+    catalog: Catalog = Catalog(
+        units=(Unit(kind="skill", name="alpha"), Unit(kind="skill", name="beta")),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={"skill/alpha": "hash"})
+
+    rows: list[str] = skill_rows(catalog=catalog, state=state)
+
+    assert f"{MARKER_INSTALLED} alpha" in rows
+    assert f"{MARKER_NOT_INSTALLED} beta" in rows
+
+
+def test_skill_rows_lists_every_skill_sorted_and_excludes_non_skills() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="skill", name="zeta"),
+            Unit(kind="agent", name="some-agent"),
+            Unit(kind="skill", name="alpha"),
+            Unit(kind="rule", name="some-rule"),
+        ),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={})
+
+    rows: list[str] = skill_rows(catalog=catalog, state=state)
+
+    assert rows == [f"{MARKER_NOT_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
+
+
+def test_skills_tab_renders_skill_rows_instead_of_placeholder(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("at.STATE_ROOT", tmp_path)
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakePrompt:
+        def ask(self) -> str:
+            return next(answers)
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakePrompt())
+
+    exit_code: int = main(["install"])
+
+    captured: str = capsys.readouterr().out
+    assert exit_code == 0
+    assert f"{MARKER_NOT_INSTALLED} demo-skill" in captured
+    assert TAB_PLACEHOLDER not in captured

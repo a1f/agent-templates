@@ -53,6 +53,12 @@ def _unit_id(unit: Unit) -> str:
     return f"{unit.kind}{_REF_SEP}{unit.name}"
 
 
+def skill_unit_id(name: str) -> str:
+    """Expose the id a skill unit is keyed by, so callers render install status
+    without re-encoding the "<kind>/<name>" join this module owns."""
+    return _unit_id(Unit(kind=_SKILL_KIND, name=name))
+
+
 def list_skills(catalog: Catalog) -> list[str]:
     """Surface the installable skills by name in a stable order, so a UI listing
     doesn't depend on declaration order in the toml."""
