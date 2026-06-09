@@ -39,10 +39,14 @@ def test_stage_unit_copies_directory_source_recursively(tmp_path: Path) -> None:
     assert destination == staged_root / "skill" / "make-pr"
     assert destination.is_dir()
     assert (destination / "SKILL.md").read_text(encoding="utf-8") == skill_content
-    assert (destination / "schemas" / "x.json").read_text(encoding="utf-8") == schema_content
+    assert (destination / "schemas" / "x.json").read_text(
+        encoding="utf-8"
+    ) == schema_content
 
 
-def test_stage_unit_replaces_previously_staged_tree_for_same_unit(tmp_path: Path) -> None:
+def test_stage_unit_replaces_previously_staged_tree_for_same_unit(
+    tmp_path: Path,
+) -> None:
     unit: Unit = Unit(kind="skill", name="make-pr")
     staged_root: Path = tmp_path / "staged"
 
@@ -63,7 +67,9 @@ def test_stage_unit_replaces_previously_staged_tree_for_same_unit(tmp_path: Path
     assert not (destination / "old.txt").exists()
 
 
-def test_link_unit_symlinks_to_staged_path_and_creates_missing_parent(tmp_path: Path) -> None:
+def test_link_unit_symlinks_to_staged_path_and_creates_missing_parent(
+    tmp_path: Path,
+) -> None:
     content: str = "# Make PR\n\nOpens a pull request.\n"
     staged_path: Path = tmp_path / "at" / "skill" / "make-pr"
     staged_path.mkdir(parents=True)
@@ -78,7 +84,9 @@ def test_link_unit_symlinks_to_staged_path_and_creates_missing_parent(tmp_path: 
     assert (link_path / "SKILL.md").read_text(encoding="utf-8") == content
 
 
-def test_link_unit_replaces_prior_symlink_in_place_without_backup(tmp_path: Path) -> None:
+def test_link_unit_replaces_prior_symlink_in_place_without_backup(
+    tmp_path: Path,
+) -> None:
     old_content: str = "# Old staged\n\nFrom a prior install run.\n"
     staged_old: Path = tmp_path / "at" / "skill" / "old.md"
     staged_old.parent.mkdir(parents=True)
