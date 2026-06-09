@@ -20,3 +20,11 @@ def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
     else:
         shutil.copyfile(source, destination)
     return destination
+
+
+def link_unit(*, staged_path: Path, link_path: Path) -> Path:
+    """Symlink a staged unit into its live location so it is visible under
+    ~/.claude/<kind>/ while ~/.claude/at stays the single source of truth."""
+    link_path.parent.mkdir(parents=True, exist_ok=True)
+    link_path.symlink_to(staged_path)
+    return link_path

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from catalog import Unit
-from placement import stage_unit
+from placement import link_unit, stage_unit
 
 
 def test_stage_unit_copies_single_file_to_kind_name_destination(tmp_path: Path) -> None:
@@ -61,3 +61,18 @@ def test_stage_unit_replaces_previously_staged_tree_for_same_unit(tmp_path: Path
 
     assert (destination / "SKILL.md").read_text(encoding="utf-8") == new_content
     assert not (destination / "old.txt").exists()
+
+
+def test_link_unit_symlinks_to_staged_path_and_creates_missing_parent(tmp_path: Path) -> None:
+    content: str = "# Make PR\n\nOpens a pull request.\n"
+    staged_path: Path = tmp_path / "at" / "skill" / "make-pr"
+    staged_path.mkdir(parents=True)
+    (staged_path / "SKILL.md").write_text(content, encoding="utf-8")
+    link_path: Path = tmp_path / "claude" / "skills" / "make-pr"
+
+    returned: Path = link_unit(staged_path=staged_path, link_path=link_path)
+
+    assert returned == link_path
+    assert link_path.is_symlink()
+    assert link_path.resolve() == staged_path.resolve()
+    assert (link_path / "SKILL.md").read_text(encoding="utf-8") == content
