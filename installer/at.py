@@ -11,6 +11,7 @@ import questionary
 from rich.console import Console
 from rich.panel import Panel
 
+from actions import install_skill
 from catalog import Catalog, list_skills, load_catalog, skill_unit_id
 from state import State, load_state
 
@@ -18,6 +19,12 @@ AT_VERSION: Final[str] = "0.2.0"
 
 CATALOG_PATH: Final[Path] = Path(__file__).parent / "catalog.toml"
 STATE_ROOT: Final[Path] = Path.home() / ".claude" / "at"
+# at.py lives in installer/; the repo root one level up holds skills/<name>/ sources.
+REPO_ROOT: Final[Path] = Path(__file__).parent.parent
+# Live link root where installs go; kept separate from STATE_ROOT so tests can pin each.
+CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
+# Sentinel choice that leaves the install picker and returns to the tab menu.
+BACK_CHOICE: Final[str] = "← Back"
 
 MARKER_INSTALLED: Final[str] = "✅"
 MARKER_NOT_INSTALLED: Final[str] = "❌"
@@ -85,6 +92,29 @@ def launch_tui() -> int:
                 state: State = load_state(STATE_ROOT)
                 for row in skill_rows(catalog=catalog, state=state):
                     console.print(row, markup=False)
+                installed: frozenset[str] = frozenset(state.units)
+                installable: list[str] = [
+                    name
+                    for name in list_skills(catalog)
+                    if skill_unit_id(name) not in installed
+                ]
+                if not installable:
+                    continue
+                pick: str | None = questionary.select(
+                    "Install which skill?", choices=[*installable, BACK_CHOICE]
+                ).ask()
+                if pick is None or pick == BACK_CHOICE:
+                    continue
+                if questionary.confirm(f"Install {pick}?").ask():
+                    state = install_skill(
+                        name=pick,
+                        source_root=REPO_ROOT,
+                        state_root=STATE_ROOT,
+                        claude_root=CLAUDE_ROOT,
+                        state=state,
+                    )
+                    for row in skill_rows(catalog=catalog, state=state):
+                        console.print(row, markup=False)
                 continue
             console.print(TAB_PLACEHOLDER)
     except KeyboardInterrupt:
