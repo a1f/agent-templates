@@ -98,6 +98,8 @@ def launch_tui() -> int:
                 plan: ReconcilePlan = plan_skill_reconcile(
                     ticked=frozenset(ticked), catalog=catalog, state=state
                 )
+                if plan.is_empty:
+                    continue
                 confirmed: bool | None = questionary.confirm(
                     "Apply skill changes?"
                 ).ask()

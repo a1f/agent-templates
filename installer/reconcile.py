@@ -14,6 +14,11 @@ class ReconcilePlan:
     to_install: tuple[str, ...]
     to_remove: tuple[str, ...]
 
+    @property
+    def is_empty(self) -> bool:
+        """A no-op plan lets callers skip the confirm/apply step: nothing to confirm."""
+        return not self.to_install and not self.to_remove
+
 
 def plan_skill_reconcile(
     *, ticked: frozenset[str], catalog: Catalog, state: State

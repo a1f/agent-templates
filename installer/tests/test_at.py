@@ -270,3 +270,77 @@ def test_skills_tab_declining_confirm_leaves_install_state_untouched(
     assert not demo_b_link.exists() and not demo_b_link.is_symlink()
     assert not demo_b_staging.exists()
     assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_skills_tab_unchanged_selection_asks_no_confirm_and_changes_nothing(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the no-op reconcile.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Ticking exactly the installed set leaves the plan empty: nothing to reconcile.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-a"]
+
+    # Reaching the confirm prompt at all is the failure: an unchanged selection must
+    # short-circuit before any confirmation is asked.
+    class ConfirmForbidden:
+        def ask(self) -> bool:
+            raise AssertionError(
+                "no confirmation should be asked for an unchanged selection"
+            )
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr(
+        "questionary.confirm", lambda *args, **kwargs: ConfirmForbidden()
+    )
+
+    exit_code: int = main(["install"])
+
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert demo_a_link.is_symlink()
+    assert demo_a_staging.exists()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert not demo_b_staging.exists()
+    assert skill_unit_id("demo-b") not in final_state.units
