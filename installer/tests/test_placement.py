@@ -167,6 +167,19 @@ def test_unlink_unit_removes_live_symlink_and_leaves_staged_target_intact(
     assert (staged_path / "SKILL.md").read_text(encoding="utf-8") == content
 
 
+def test_unlink_unit_leaves_real_non_symlink_file_untouched(tmp_path: Path) -> None:
+    user_content: str = "user's own data\n"
+    link_path: Path = tmp_path / "claude" / "commands" / "make-pr.md"
+    link_path.parent.mkdir(parents=True)
+    link_path.write_text(user_content, encoding="utf-8")
+
+    unlink_unit(link_path=link_path)
+
+    assert link_path.is_file()
+    assert not link_path.is_symlink()
+    assert link_path.read_text(encoding="utf-8") == user_content
+
+
 def test_unlink_unit_restores_displaced_backup_over_removed_symlink(
     tmp_path: Path,
 ) -> None:

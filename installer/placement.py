@@ -49,6 +49,11 @@ def unlink_unit(*, link_path: Path) -> None:
     """Remove a unit's live symlink so it is no longer visible under
     ~/.claude/<kind>/, while the staged tree it pointed at survives untouched
     as the single source of truth."""
+    # Only a symlink is a prior install of ours to drop; a real entry is the
+    # user's own data, so leave it untouched as a quiet no-op — the inverse of
+    # link_unit, which likewise treats only a real non-symlink entry as the user's.
+    if not link_path.is_symlink():
+        return
     # unlink drops the symlink itself, never following it, so the staged target
     # is left in place — the inverse of link_unit's symlink_to.
     link_path.unlink()
