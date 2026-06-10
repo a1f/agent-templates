@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from actions import install_skill
+from actions import install_skill, uninstall_skill
 from catalog import skill_unit_id
 from state import State, load_state
 
@@ -62,3 +62,34 @@ def test_install_skill_records_and_persists_installed_unit(tmp_path: Path) -> No
     assert unit_id in result.units
     assert unit_id in load_state(state_root).units
     assert initial_state.units == {}
+
+
+def test_uninstall_skill_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo-skill"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo Skill\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    installed_state: State = install_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    result: State = uninstall_skill(
+        name="demo-skill",
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    unit_id: str = skill_unit_id("demo-skill")
+    assert not (claude_root / "skills" / "demo-skill").is_symlink()
+    assert not (state_root / "staged" / "skill" / "demo-skill").exists()
+    assert unit_id not in result.units
+    assert unit_id not in load_state(state_root).units
+    assert unit_id in installed_state.units
