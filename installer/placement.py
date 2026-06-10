@@ -43,3 +43,12 @@ def link_unit(*, staged_path: Path, link_path: Path) -> Path:
         link_path.replace(backup_path)
     link_path.symlink_to(staged_path)
     return link_path
+
+
+def unlink_unit(*, link_path: Path) -> None:
+    """Remove a unit's live symlink so it is no longer visible under
+    ~/.claude/<kind>/, while the staged tree it pointed at survives untouched
+    as the single source of truth."""
+    # unlink drops the symlink itself, never following it, so the staged target
+    # is left in place — the inverse of link_unit's symlink_to.
+    link_path.unlink()

@@ -3,7 +3,7 @@ import stat
 from pathlib import Path
 
 from catalog import Unit
-from placement import link_unit, stage_unit
+from placement import link_unit, stage_unit, unlink_unit
 
 
 def test_stage_unit_copies_single_file_to_kind_name_destination(tmp_path: Path) -> None:
@@ -147,3 +147,21 @@ def test_link_unit_backs_up_existing_real_file_before_linking(tmp_path: Path) ->
     assert backup_path.exists()
     assert not backup_path.is_symlink()
     assert backup_path.read_text(encoding="utf-8") == user_content
+
+
+def test_unlink_unit_removes_live_symlink_and_leaves_staged_target_intact(
+    tmp_path: Path,
+) -> None:
+    content: str = "# Make PR\n\nOpens a pull request.\n"
+    staged_path: Path = tmp_path / "at" / "skill" / "make-pr"
+    staged_path.mkdir(parents=True)
+    (staged_path / "SKILL.md").write_text(content, encoding="utf-8")
+    link_path: Path = tmp_path / "claude" / "skills" / "make-pr"
+    link_unit(staged_path=staged_path, link_path=link_path)
+
+    unlink_unit(link_path=link_path)
+
+    assert not link_path.is_symlink()
+    assert not link_path.exists()
+    assert staged_path.is_dir()
+    assert (staged_path / "SKILL.md").read_text(encoding="utf-8") == content
