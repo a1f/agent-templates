@@ -9,6 +9,16 @@ from catalog import Unit
 _BACKUP_SUFFIX: Final[str] = ".bak"
 
 
+def _remove_staged_entry(path: Path) -> None:
+    """Drop a staged entry without the caller minding its shape — a unit stages
+    as a directory tree (skill) or a single file (agent/rule), and an absent path
+    is a quiet no-op so re-staging and unstaging share one removal decision."""
+    if path.is_dir():
+        shutil.rmtree(path)
+    elif path.exists():
+        path.unlink()
+
+
 def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
     """Lay a unit out under "<kind>/<name>" in a staging area first, so the real
     install can swap a fully-built tree into place instead of writing live."""
@@ -16,10 +26,7 @@ def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Clear any prior staging of this unit so a re-stage fully supersedes it,
     # leaving no stale files behind, rather than colliding with the old tree.
-    if destination.is_dir():
-        shutil.rmtree(destination)
-    elif destination.exists():
-        destination.unlink()
+    _remove_staged_entry(destination)
     # copy2 (not copyfile) carries the source's mode across, so an executable
     # hook script stays executable once staged — matching copytree below.
     if source.is_dir():
@@ -27,6 +34,14 @@ def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
     else:
         shutil.copy2(source, destination)
     return destination
+
+
+def unstage_unit(*, unit: Unit, staged_root: Path) -> None:
+    """Tear down a unit's staged entry at "<kind>/<name>" so the staging area no
+    longer holds it — the inverse of stage_unit, dropping either the directory
+    tree or the single file it laid down."""
+    staged_path: Path = staged_root / unit.kind / unit.name
+    _remove_staged_entry(staged_path)
 
 
 def link_unit(*, staged_path: Path, link_path: Path) -> Path:

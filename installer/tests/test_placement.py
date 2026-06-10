@@ -3,7 +3,7 @@ import stat
 from pathlib import Path
 
 from catalog import Unit
-from placement import link_unit, stage_unit, unlink_unit
+from placement import link_unit, stage_unit, unlink_unit, unstage_unit
 
 
 def test_stage_unit_copies_single_file_to_kind_name_destination(tmp_path: Path) -> None:
@@ -178,6 +178,31 @@ def test_unlink_unit_leaves_real_non_symlink_file_untouched(tmp_path: Path) -> N
     assert link_path.is_file()
     assert not link_path.is_symlink()
     assert link_path.read_text(encoding="utf-8") == user_content
+
+
+def test_unstage_unit_removes_staged_entry_for_both_tree_and_file_shapes(
+    tmp_path: Path,
+) -> None:
+    staged_root: Path = tmp_path / "staged"
+
+    skill: Unit = Unit(kind="skill", name="make-pr")
+    skill_path: Path = staged_root / skill.kind / skill.name
+    (skill_path / "schemas").mkdir(parents=True)
+    (skill_path / "SKILL.md").write_text("# Make PR\n", encoding="utf-8")
+    (skill_path / "schemas" / "x.json").write_text(
+        '{"type": "object"}\n', encoding="utf-8"
+    )
+
+    agent: Unit = Unit(kind="agent", name="reviewer")
+    agent_path: Path = staged_root / agent.kind / agent.name
+    agent_path.parent.mkdir(parents=True)
+    agent_path.write_text("# Reviewer\n", encoding="utf-8")
+
+    unstage_unit(unit=skill, staged_root=staged_root)
+    unstage_unit(unit=agent, staged_root=staged_root)
+
+    assert not skill_path.exists()
+    assert not agent_path.exists()
 
 
 def test_unlink_unit_restores_displaced_backup_over_removed_symlink(
