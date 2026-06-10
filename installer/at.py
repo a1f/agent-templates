@@ -98,8 +98,11 @@ def launch_tui() -> int:
                 plan: ReconcilePlan = plan_skill_reconcile(
                     ticked=frozenset(ticked), catalog=catalog, state=state
                 )
-                # Confirm is shown now; gating apply on the answer is a later slice.
-                questionary.confirm("Apply skill changes?").ask()
+                confirmed: bool | None = questionary.confirm(
+                    "Apply skill changes?"
+                ).ask()
+                if not confirmed:
+                    continue
                 state = apply_skill_reconcile(
                     plan=plan,
                     source_root=REPO_ROOT,

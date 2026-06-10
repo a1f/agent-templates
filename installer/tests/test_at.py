@@ -200,3 +200,73 @@ def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
     assert skill_unit_id("demo-a") not in final_state.units
     assert demo_b_link.is_symlink()
     assert skill_unit_id("demo-b") in final_state.units
+
+
+def test_skills_tab_declining_confirm_leaves_install_state_untouched(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front, so
+    # the declined reconcile must neither remove demo-a nor add demo-b.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the declined reconcile.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # A both-directions change: untick installed demo-a and tick uninstalled demo-b.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-b"]
+
+    # Declining the confirm must gate the apply: the selection change is discarded.
+    class DeclinePrompt:
+        def ask(self) -> bool:
+            return False
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: DeclinePrompt())
+
+    exit_code: int = main(["install"])
+
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert demo_a_link.is_symlink()
+    assert demo_a_staging.exists()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert not demo_b_staging.exists()
+    assert skill_unit_id("demo-b") not in final_state.units
