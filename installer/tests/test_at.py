@@ -344,3 +344,78 @@ def test_skills_tab_unchanged_selection_asks_no_confirm_and_changes_nothing(
     assert not demo_b_link.exists() and not demo_b_link.is_symlink()
     assert not demo_b_staging.exists()
     assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_skills_tab_checkbox_pre_ticks_installed_skills_and_cancel_is_noop(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front, so
+    # the checkbox must offer demo-a pre-ticked and demo-b unticked.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the cancelled prompt.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Capture whatever choices the checkbox is offered (the message is positional, so
+    # choices may arrive positionally or by keyword), then cancel with a None answer.
+    captured_choices: list[object] = []
+
+    class CancellingCheckbox:
+        def ask(self) -> None:
+            return None
+
+    def capture_checkbox(*args: object, **kwargs: object) -> CancellingCheckbox:
+        choices: object = kwargs.get("choices") if "choices" in kwargs else args[1]
+        assert isinstance(choices, list)
+        captured_choices.extend(choices)
+        return CancellingCheckbox()
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", capture_checkbox)
+
+    exit_code: int = main(["install"])
+
+    # Normalise bare strings and questionary.Choice objects alike: a plain string has
+    # no .checked, so today's string choices read as unticked and fail this assertion.
+    presented: list[tuple[object, object]] = [
+        (getattr(c, "title", c), getattr(c, "checked", False)) for c in captured_choices
+    ]
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    assert exit_code == 0
+    assert presented == [("demo-a", True), ("demo-b", False)]
+    assert demo_a_link.is_symlink()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert skill_unit_id("demo-b") not in final_state.units

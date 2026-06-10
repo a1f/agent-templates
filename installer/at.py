@@ -90,8 +90,13 @@ def launch_tui() -> int:
                 state: State = load_state(STATE_ROOT)
                 for row in skill_rows(catalog=catalog, state=state):
                     console.print(row, markup=False)
+                installed: frozenset[str] = frozenset(state.units)
+                choices: list[questionary.Choice] = [
+                    questionary.Choice(name, checked=skill_unit_id(name) in installed)
+                    for name in list_skills(catalog)
+                ]
                 ticked: list[str] | None = questionary.checkbox(
-                    "Select installed skills", choices=list_skills(catalog)
+                    "Select installed skills", choices=choices
                 ).ask()
                 if ticked is None:
                     continue
