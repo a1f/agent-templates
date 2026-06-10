@@ -1,5 +1,7 @@
 from dataclasses import dataclass
+from pathlib import Path
 
+from actions import install_skill, uninstall_skill
 from catalog import Catalog, list_skills, skill_unit_id
 from state import State
 
@@ -29,3 +31,32 @@ def plan_skill_reconcile(
         name for name in skills if name in installed and name not in ticked
     )
     return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+
+
+def apply_skill_reconcile(
+    *,
+    plan: ReconcilePlan,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned diff by installing then uninstalling each named skill,
+    threading the persisted State through so the final return reflects every action."""
+    current: State = state
+    for name in plan.to_install:
+        current = install_skill(
+            name=name,
+            source_root=source_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    for name in plan.to_remove:
+        current = uninstall_skill(
+            name=name,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    return current
