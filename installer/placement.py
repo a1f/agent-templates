@@ -52,3 +52,8 @@ def unlink_unit(*, link_path: Path) -> None:
     # unlink drops the symlink itself, never following it, so the staged target
     # is left in place — the inverse of link_unit's symlink_to.
     link_path.unlink()
+    # If linking displaced the user's own file to "<name>.bak", move it back over
+    # the now-freed path so the original is restored — inverse of link_unit's backup.
+    backup_path: Path = link_path.with_name(link_path.name + _BACKUP_SUFFIX)
+    if backup_path.exists():
+        backup_path.replace(link_path)
