@@ -5,10 +5,15 @@
 # ///
 import sys
 from pathlib import Path
-from typing import Final, cast
+from typing import Final
 
 import questionary
-from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.key_binding import (
+    KeyBindings,
+    KeyBindingsBase,
+    KeyPressEvent,
+    merge_key_bindings,
+)
 from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.panel import Panel
@@ -80,14 +85,18 @@ def abort_on_esc(question: questionary.Question) -> questionary.Question:
     # to register — hand it straight back rather than blow up on the missing attribute.
     if getattr(question, "application", None) is None:
         return question
-    # questionary always builds its prompts with a concrete KeyBindings; narrow the
-    # Application's loosely typed key_bindings so we can register on it like Ctrl-C.
-    bindings: KeyBindings = cast(KeyBindings, question.application.key_bindings)
+    # A confirm's existing bindings are a _MergedKeyBindings with no .add, unlike a
+    # checkbox/select's concrete KeyBindings — so register Escape on a fresh KeyBindings
+    # and merge it ahead of whatever the prompt already had, leaving those intact.
+    escape: KeyBindings = KeyBindings()
 
-    @bindings.add(Keys.Escape, eager=True)
+    @escape.add(Keys.Escape, eager=True)
     def _(event: KeyPressEvent) -> None:
         event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
 
+    existing: KeyBindingsBase | None = question.application.key_bindings
+    merged: list[KeyBindingsBase] = [escape] if existing is None else [existing, escape]
+    question.application.key_bindings = merge_key_bindings(merged)
     return question
 
 
@@ -126,8 +135,8 @@ def launch_tui() -> int:
                 )
                 if plan.is_empty:
                     continue
-                confirmed: bool | None = questionary.confirm(
-                    "Apply skill changes?"
+                confirmed: bool | None = abort_on_esc(
+                    questionary.confirm("Apply skill changes?")
                 ).ask()
                 if not confirmed:
                     continue
