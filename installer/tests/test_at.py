@@ -2,6 +2,9 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+import questionary
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.output import DummyOutput
 from pytest import CaptureFixture, MonkeyPatch
 
 from actions import install_skill
@@ -9,6 +12,7 @@ from at import (
     MARKER_INSTALLED,
     MARKER_NOT_INSTALLED,
     TAB_PLACEHOLDER,
+    abort_on_esc,
     main,
     skill_rows,
 )
@@ -419,3 +423,19 @@ def test_skills_tab_checkbox_pre_ticks_installed_skills_and_cancel_is_noop(
     assert skill_unit_id("demo-a") in final_state.units
     assert not demo_b_link.exists() and not demo_b_link.is_symlink()
     assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_abort_on_esc_makes_esc_cancel_the_prompt_like_ctrl_c() -> None:
+    # Drive a real questionary prompt off an in-memory pipe so no TTY is needed.
+    # The feed is "Esc then Enter": without an Esc binding the Esc is ignored and
+    # Enter submits the empty selection (a non-None answer, so this can never hang);
+    # abort_on_esc must instead make Esc abort eagerly like Ctrl-C, so .ask()
+    # turns the resulting KeyboardInterrupt into None before Enter is ever read.
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("\x1b\r")
+        question: questionary.Question = questionary.checkbox(
+            "pick", choices=["a"], input=pipe_input, output=DummyOutput()
+        )
+        answer: list[str] | None = abort_on_esc(question).ask()
+
+    assert answer is None

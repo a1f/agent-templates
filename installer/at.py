@@ -5,9 +5,11 @@
 # ///
 import sys
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import questionary
+from prompt_toolkit.key_binding import KeyBindings, KeyPressEvent
+from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -68,6 +70,20 @@ def skill_rows(*, catalog: Catalog, state: State) -> list[str]:
     renders status, keying install state by the unit id catalog.py owns."""
     installed: frozenset[str] = frozenset(state.units)
     return [f"{_skill_marker(name, installed)} {name}" for name in list_skills(catalog)]
+
+
+def abort_on_esc(question: questionary.Question) -> questionary.Question:
+    """Let Esc abort a prompt exactly like Ctrl-C, so a user can back out with the
+    key they reach for first; returns the question for chaining."""
+    # questionary always builds its prompts with a concrete KeyBindings; narrow the
+    # Application's loosely typed key_bindings so we can register on it like Ctrl-C.
+    bindings: KeyBindings = cast(KeyBindings, question.application.key_bindings)
+
+    @bindings.add(Keys.Escape, eager=True)
+    def _(event: KeyPressEvent) -> None:
+        event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
+
+    return question
 
 
 def launch_tui() -> int:
