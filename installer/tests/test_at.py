@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from pytest import CaptureFixture, MonkeyPatch
 
-import at
+from actions import install_skill
 from at import (
     MARKER_INSTALLED,
     MARKER_NOT_INSTALLED,
@@ -106,19 +106,24 @@ def test_skills_tab_renders_skill_rows_instead_of_placeholder(
         encoding="utf-8",
     )
     monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
-    # Entering the Skills tab now leads to an install-picker select; pick the
-    # Back sentinel so this read-only test installs nothing and falls through.
-    answers: Iterator[str] = iter(["Skills", at.BACK_CHOICE, "Exit"])
+    # Enter the Skills tab, then close it; the empty tick set is an unchanged
+    # selection, so this read-only test installs nothing and falls through.
+    answers: Iterator[str] = iter(["Skills", "Exit"])
 
     class FakePrompt:
         def ask(self) -> str:
             return next(answers)
+
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return []
 
     class DeclinePrompt:
         def ask(self) -> bool:
             return False
 
     monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakePrompt())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
     monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: DeclinePrompt())
 
     exit_code: int = main(["install"])
@@ -129,87 +134,288 @@ def test_skills_tab_renders_skill_rows_instead_of_placeholder(
     assert TAB_PLACEHOLDER not in captured
 
 
-def test_skills_tab_install_picker_marks_chosen_skill_installed(
-    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("at.STATE_ROOT", tmp_path / "at")
-    monkeypatch.setattr("at.CLAUDE_ROOT", tmp_path / "claude")
-    monkeypatch.setattr("at.REPO_ROOT", tmp_path / "repo")
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
 
-    source_skill: Path = tmp_path / "repo" / "skills" / "demo-skill" / "SKILL.md"
-    source_skill.parent.mkdir(parents=True)
-    source_skill.write_text("# demo skill\n", encoding="utf-8")
+    # Pre-install both skills through the real public install action, so on-disk
+    # state, staging, and live symlinks all exist before the reconcile runs.
+    state: State = load_state(state_root)
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+        state = install_skill(
+            name=name,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
 
     catalog_file: Path = tmp_path / "catalog.toml"
     catalog_file.write_text(
         "packages = []\nbundles = []\n\n"
-        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
     monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
-    # Tab menu, then the install-picker pick, then the tab menu again to exit.
-    select_answers: Iterator[str] = iter(["Skills", "demo-skill", "Exit"])
+    # The tab menu opens the Skills tab, then closes it after the reconcile.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
     class FakeSelect:
         def ask(self) -> str:
             return next(select_answers)
+
+    # demo-a is left unticked; only demo-b stays in the desired set.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-b"]
 
     class ConfirmPrompt:
         def ask(self) -> bool:
             return True
 
     monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
     monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
 
     exit_code: int = main(["install"])
 
-    captured: str = capsys.readouterr().out
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
     assert exit_code == 0
-    assert f"{MARKER_INSTALLED} demo-skill" in captured
-    assert (tmp_path / "claude" / "skills" / "demo-skill").is_symlink()
+    assert not demo_a_link.exists() and not demo_a_link.is_symlink()
+    assert not demo_a_staging.exists()
+    assert skill_unit_id("demo-a") not in final_state.units
+    assert demo_b_link.is_symlink()
+    assert skill_unit_id("demo-b") in final_state.units
 
 
-def test_skills_tab_declining_install_confirmation_installs_nothing(
-    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+def test_skills_tab_declining_confirm_leaves_install_state_untouched(
+    monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("at.STATE_ROOT", tmp_path / "at")
-    monkeypatch.setattr("at.CLAUDE_ROOT", tmp_path / "claude")
-    monkeypatch.setattr("at.REPO_ROOT", tmp_path / "repo")
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
 
-    source_skill: Path = tmp_path / "repo" / "skills" / "demo-skill" / "SKILL.md"
-    source_skill.parent.mkdir(parents=True)
-    source_skill.write_text("# demo skill\n", encoding="utf-8")
+    # Real sources for both skills exist, but only demo-a is installed up front, so
+    # the declined reconcile must neither remove demo-a nor add demo-b.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
 
     catalog_file: Path = tmp_path / "catalog.toml"
     catalog_file.write_text(
         "packages = []\nbundles = []\n\n"
-        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
     monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
-    # Tab menu, then pick the skill at the install picker, then exit the tab menu.
-    select_answers: Iterator[str] = iter(["Skills", "demo-skill", "Exit"])
+    # The tab menu opens the Skills tab, then closes it after the declined reconcile.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
     class FakeSelect:
         def ask(self) -> str:
             return next(select_answers)
 
-    # The confirm gate is declined, so the install must be a true no-op.
+    # A both-directions change: untick installed demo-a and tick uninstalled demo-b.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-b"]
+
+    # Declining the confirm must gate the apply: the selection change is discarded.
     class DeclinePrompt:
         def ask(self) -> bool:
             return False
 
     monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
     monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: DeclinePrompt())
 
     exit_code: int = main(["install"])
 
-    captured: str = capsys.readouterr().out
-    live_link: Path = tmp_path / "claude" / "skills" / "demo-skill"
-    final_state: State = load_state(tmp_path / "at")
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
     assert exit_code == 0
-    assert not live_link.exists() and not live_link.is_symlink()
-    assert skill_unit_id("demo-skill") not in final_state.units
-    assert f"{MARKER_NOT_INSTALLED} demo-skill" in captured
+    assert demo_a_link.is_symlink()
+    assert demo_a_staging.exists()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert not demo_b_staging.exists()
+    assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_skills_tab_unchanged_selection_asks_no_confirm_and_changes_nothing(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the no-op reconcile.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Ticking exactly the installed set leaves the plan empty: nothing to reconcile.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-a"]
+
+    # Reaching the confirm prompt at all is the failure: an unchanged selection must
+    # short-circuit before any confirmation is asked.
+    class ConfirmForbidden:
+        def ask(self) -> bool:
+            raise AssertionError(
+                "no confirmation should be asked for an unchanged selection"
+            )
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr(
+        "questionary.confirm", lambda *args, **kwargs: ConfirmForbidden()
+    )
+
+    exit_code: int = main(["install"])
+
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert demo_a_link.is_symlink()
+    assert demo_a_staging.exists()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert not demo_b_staging.exists()
+    assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_skills_tab_checkbox_pre_ticks_installed_skills_and_cancel_is_noop(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front, so
+    # the checkbox must offer demo-a pre-ticked and demo-b unticked.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the cancelled prompt.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Capture whatever choices the checkbox is offered (the message is positional, so
+    # choices may arrive positionally or by keyword), then cancel with a None answer.
+    captured_choices: list[object] = []
+
+    class CancellingCheckbox:
+        def ask(self) -> None:
+            return None
+
+    def capture_checkbox(*args: object, **kwargs: object) -> CancellingCheckbox:
+        choices: object = kwargs.get("choices") if "choices" in kwargs else args[1]
+        assert isinstance(choices, list)
+        captured_choices.extend(choices)
+        return CancellingCheckbox()
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", capture_checkbox)
+
+    exit_code: int = main(["install"])
+
+    # Normalise bare strings and questionary.Choice objects alike: a plain string has
+    # no .checked, so today's string choices read as unticked and fail this assertion.
+    presented: list[tuple[object, object]] = [
+        (getattr(c, "title", c), getattr(c, "checked", False)) for c in captured_choices
+    ]
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    assert exit_code == 0
+    assert presented == [("demo-a", True), ("demo-b", False)]
+    assert demo_a_link.is_symlink()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert skill_unit_id("demo-b") not in final_state.units

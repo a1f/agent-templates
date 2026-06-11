@@ -11,8 +11,8 @@ import questionary
 from rich.console import Console
 from rich.panel import Panel
 
-from actions import install_skill
 from catalog import Catalog, list_skills, load_catalog, skill_unit_id
+from reconcile import ReconcilePlan, apply_skill_reconcile, plan_skill_reconcile
 from state import State, load_state
 
 AT_VERSION: Final[str] = "0.2.0"
@@ -23,8 +23,6 @@ STATE_ROOT: Final[Path] = Path.home() / ".claude" / "at"
 REPO_ROOT: Final[Path] = Path(__file__).parent.parent
 # Live link root where installs go; kept separate from STATE_ROOT so tests can pin each.
 CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
-# Sentinel choice that leaves the install picker and returns to the tab menu.
-BACK_CHOICE: Final[str] = "← Back"
 
 MARKER_INSTALLED: Final[str] = "✅"
 MARKER_NOT_INSTALLED: Final[str] = "❌"
@@ -93,28 +91,34 @@ def launch_tui() -> int:
                 for row in skill_rows(catalog=catalog, state=state):
                     console.print(row, markup=False)
                 installed: frozenset[str] = frozenset(state.units)
-                installable: list[str] = [
-                    name
+                choices: list[questionary.Choice] = [
+                    questionary.Choice(name, checked=skill_unit_id(name) in installed)
                     for name in list_skills(catalog)
-                    if skill_unit_id(name) not in installed
                 ]
-                if not installable:
-                    continue
-                pick: str | None = questionary.select(
-                    "Install which skill?", choices=[*installable, BACK_CHOICE]
+                ticked: list[str] | None = questionary.checkbox(
+                    "Select installed skills", choices=choices
                 ).ask()
-                if pick is None or pick == BACK_CHOICE:
+                if ticked is None:
                     continue
-                if questionary.confirm(f"Install {pick}?").ask():
-                    state = install_skill(
-                        name=pick,
-                        source_root=REPO_ROOT,
-                        state_root=STATE_ROOT,
-                        claude_root=CLAUDE_ROOT,
-                        state=state,
-                    )
-                    for row in skill_rows(catalog=catalog, state=state):
-                        console.print(row, markup=False)
+                plan: ReconcilePlan = plan_skill_reconcile(
+                    ticked=frozenset(ticked), catalog=catalog, state=state
+                )
+                if plan.is_empty:
+                    continue
+                confirmed: bool | None = questionary.confirm(
+                    "Apply skill changes?"
+                ).ask()
+                if not confirmed:
+                    continue
+                state = apply_skill_reconcile(
+                    plan=plan,
+                    source_root=REPO_ROOT,
+                    state_root=STATE_ROOT,
+                    claude_root=CLAUDE_ROOT,
+                    state=state,
+                )
+                for row in skill_rows(catalog=catalog, state=state):
+                    console.print(row, markup=False)
                 continue
             console.print(TAB_PLACEHOLDER)
     except KeyboardInterrupt:
