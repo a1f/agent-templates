@@ -75,6 +75,11 @@ def skill_rows(*, catalog: Catalog, state: State) -> list[str]:
 def abort_on_esc(question: questionary.Question) -> questionary.Question:
     """Let Esc abort a prompt exactly like Ctrl-C, so a user can back out with the
     key they reach for first; returns the question for chaining."""
+    # Both real questionary Questions and the test doubles that stub only .ask() cross
+    # this seam; a double carries no prompt_toolkit Application, so there is no binding
+    # to register — hand it straight back rather than blow up on the missing attribute.
+    if getattr(question, "application", None) is None:
+        return question
     # questionary always builds its prompts with a concrete KeyBindings; narrow the
     # Application's loosely typed key_bindings so we can register on it like Ctrl-C.
     bindings: KeyBindings = cast(KeyBindings, question.application.key_bindings)
@@ -111,8 +116,8 @@ def launch_tui() -> int:
                     questionary.Choice(name, checked=skill_unit_id(name) in installed)
                     for name in list_skills(catalog)
                 ]
-                ticked: list[str] | None = questionary.checkbox(
-                    "Select installed skills", choices=choices
+                ticked: list[str] | None = abort_on_esc(
+                    questionary.checkbox("Select installed skills", choices=choices)
                 ).ask()
                 if ticked is None:
                     continue

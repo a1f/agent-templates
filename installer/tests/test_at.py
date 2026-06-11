@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -422,6 +422,92 @@ def test_skills_tab_checkbox_pre_ticks_installed_skills_and_cancel_is_noop(
     assert demo_a_link.is_symlink()
     assert skill_unit_id("demo-a") in final_state.units
     assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_skills_tab_esc_in_checkbox_cancels_reconcile_without_confirm(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front, so
+    # an Esc-cancelled reconcile must leave that install exactly as it stands.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the cancelled reconcile.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Reaching the confirm prompt at all is the failure: Esc must cancel the reconcile
+    # before any apply or confirmation is considered.
+    class ConfirmForbidden:
+        def ask(self) -> bool:
+            raise AssertionError(
+                "Esc must cancel the reconcile before any confirmation is asked"
+            )
+
+    # Drive the REAL checkbox off an in-memory pipe so the eager Escape binding (or
+    # its absence) is what decides the outcome. The feed is "Esc, space, Enter": only
+    # when launch_tui wraps the checkbox in abort_on_esc does Esc abort eagerly and
+    # .ask() return None before the space unticks the pre-ticked demo-a. Without that
+    # wiring the Esc is ignored, the space unticks demo-a, Enter submits the empty set,
+    # and the planned removal would reach the forbidden confirm.
+    real_checkbox: Callable[..., questionary.Question] = questionary.checkbox
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr(
+        "questionary.confirm", lambda *args, **kwargs: ConfirmForbidden()
+    )
+
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("\x1b \r")
+
+        def esc_checkbox(*args: object, **kwargs: object) -> questionary.Question:
+            return real_checkbox(
+                *args, **kwargs, input=pipe_input, output=DummyOutput()
+            )
+
+        monkeypatch.setattr("questionary.checkbox", esc_checkbox)
+        exit_code: int = main(["install"])
+
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert demo_a_link.is_symlink()
+    assert demo_a_staging.exists()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert not demo_b_staging.exists()
     assert skill_unit_id("demo-b") not in final_state.units
 
 
