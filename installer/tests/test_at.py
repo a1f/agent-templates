@@ -525,3 +525,32 @@ def test_abort_on_esc_makes_esc_cancel_the_prompt_like_ctrl_c() -> None:
         answer: list[str] | None = abort_on_esc(question).ask()
 
     assert answer is None
+
+
+def test_esc_at_tab_menu_exits_cleanly(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    # Drive the REAL tab-menu select off one in-memory pipe so the eager Escape
+    # binding (or its absence) decides the outcome. The feed is "Esc then Enter",
+    # and the pipe is closed so any read past it ends in EOF rather than a hang.
+    # Only when launch_tui wraps "Select a tab" in abort_on_esc does Esc abort the
+    # first prompt eagerly, so .ask() returns None and the loop exits 0 without ever
+    # opening a tab. Without that wiring Esc is swallowed, the menu advances onto a
+    # placeholder tab, and the loop's next select reads the exhausted pipe and dies.
+    real_select: Callable[..., questionary.Question] = questionary.select
+
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("\x1b\r")
+        pipe_input.close()
+
+        def esc_select(*args: object, **kwargs: object) -> questionary.Question:
+            return real_select(*args, **kwargs, input=pipe_input, output=DummyOutput())
+
+        monkeypatch.setattr("questionary.select", esc_select)
+        exit_code: int = main(["install"])
+
+    captured: str = capsys.readouterr().out
+    assert exit_code == 0
+    assert TAB_PLACEHOLDER not in captured

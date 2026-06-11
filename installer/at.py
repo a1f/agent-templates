@@ -101,8 +101,8 @@ def launch_tui() -> int:
         return 0
     try:
         while True:
-            choice: str | None = questionary.select(
-                "Select a tab", choices=list(MENU_CHOICES)
+            choice: str | None = abort_on_esc(
+                questionary.select("Select a tab", choices=list(MENU_CHOICES))
             ).ask()
             if choice is None or choice == "Exit":
                 return 0
