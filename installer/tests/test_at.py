@@ -341,9 +341,7 @@ def test_esc_at_apply_confirm_discards_selection_change(
         pipe_input.close()
 
         def esc_confirm(*args: object, **kwargs: object) -> questionary.Question:
-            return real_confirm(
-                *args, **kwargs, input=pipe_input, output=DummyOutput()
-            )
+            return real_confirm(*args, **kwargs, input=pipe_input, output=DummyOutput())
 
         monkeypatch.setattr("questionary.confirm", esc_confirm)
         exit_code: int = main(["install"])
