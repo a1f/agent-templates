@@ -2,6 +2,7 @@ from pathlib import Path
 
 from actions import install_skill, uninstall_skill
 from catalog import skill_unit_id
+from hashing import hash_unit
 from state import State, load_state
 
 
@@ -62,6 +63,34 @@ def test_install_skill_records_and_persists_installed_unit(tmp_path: Path) -> No
     assert unit_id in result.units
     assert unit_id in load_state(state_root).units
     assert initial_state.units == {}
+
+
+def test_install_skill_records_staged_content_hash_as_unit_value(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo-skill"
+    (skill_source / "schemas").mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo Skill\n", encoding="utf-8")
+    (skill_source / "schemas" / "x.json").write_text(
+        '{"type": "object"}\n', encoding="utf-8"
+    )
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    staged_path: Path = state_root / "staged" / "skill" / "demo-skill"
+    recorded_hash: str = result.units[skill_unit_id("demo-skill")]
+    assert recorded_hash == hash_unit(staged_path)
+    assert recorded_hash != ""
 
 
 def test_uninstall_skill_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
