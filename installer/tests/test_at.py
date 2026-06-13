@@ -1,7 +1,10 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
+import questionary
+from prompt_toolkit.input import create_pipe_input
+from prompt_toolkit.output import DummyOutput
 from pytest import CaptureFixture, MonkeyPatch
 
 from actions import install_skill
@@ -9,6 +12,7 @@ from at import (
     MARKER_INSTALLED,
     MARKER_NOT_INSTALLED,
     TAB_PLACEHOLDER,
+    abort_on_esc,
     main,
     skill_rows,
 )
@@ -272,6 +276,90 @@ def test_skills_tab_declining_confirm_leaves_install_state_untouched(
     assert skill_unit_id("demo-b") not in final_state.units
 
 
+def test_esc_at_apply_confirm_discards_selection_change(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front, so an
+    # Esc-cancelled confirm must neither remove demo-a nor add demo-b.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the cancelled confirm.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # A both-directions change: untick installed demo-a and tick uninstalled demo-b, so
+    # the plan is non-empty and the confirm prompt is reached.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-b"]
+
+    # Drive the REAL confirm off an in-memory pipe so the eager Escape binding (or its
+    # absence) is what decides the outcome. The feed is "Esc, space, Enter", and the
+    # pipe is closed so any read past it ends in EOF rather than a hang; the space
+    # flushes the Escape as a standalone key (a bare "\x1b\r" is instead parsed as one
+    # inert sequence, never reaching the default). Today the confirm has no Escape
+    # binding, so Esc is swallowed and Enter accepts the confirm's affirmative default:
+    # the reconcile applies, demo-a is removed and demo-b installed, so the
+    # state-untouched assertions below fail. Once launch_tui makes Esc abort the confirm
+    # eagerly, .ask() returns None and `not confirmed` discards the plan untouched.
+    real_confirm: Callable[..., questionary.Question] = questionary.confirm
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("\x1b \r")
+        pipe_input.close()
+
+        def esc_confirm(*args: object, **kwargs: object) -> questionary.Question:
+            return real_confirm(*args, **kwargs, input=pipe_input, output=DummyOutput())
+
+        monkeypatch.setattr("questionary.confirm", esc_confirm)
+        exit_code: int = main(["install"])
+
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert demo_a_link.is_symlink()
+    assert demo_a_staging.exists()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert not demo_b_staging.exists()
+    assert skill_unit_id("demo-b") not in final_state.units
+
+
 def test_skills_tab_unchanged_selection_asks_no_confirm_and_changes_nothing(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -419,3 +507,134 @@ def test_skills_tab_checkbox_pre_ticks_installed_skills_and_cancel_is_noop(
     assert skill_unit_id("demo-a") in final_state.units
     assert not demo_b_link.exists() and not demo_b_link.is_symlink()
     assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_skills_tab_esc_in_checkbox_cancels_reconcile_without_confirm(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist, but only demo-a is installed up front, so
+    # an Esc-cancelled reconcile must leave that install exactly as it stands.
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Skills tab, then closes it after the cancelled reconcile.
+    select_answers: Iterator[str] = iter(["Skills", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Reaching the confirm prompt at all is the failure: Esc must cancel the reconcile
+    # before any apply or confirmation is considered.
+    class ConfirmForbidden:
+        def ask(self) -> bool:
+            raise AssertionError(
+                "Esc must cancel the reconcile before any confirmation is asked"
+            )
+
+    # Drive the REAL checkbox off an in-memory pipe so the eager Escape binding (or
+    # its absence) is what decides the outcome. The feed is "Esc, space, Enter": only
+    # when launch_tui wraps the checkbox in abort_on_esc does Esc abort eagerly and
+    # .ask() return None before the space unticks the pre-ticked demo-a. Without that
+    # wiring the Esc is ignored, the space unticks demo-a, Enter submits the empty set,
+    # and the planned removal would reach the forbidden confirm.
+    real_checkbox: Callable[..., questionary.Question] = questionary.checkbox
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr(
+        "questionary.confirm", lambda *args, **kwargs: ConfirmForbidden()
+    )
+
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("\x1b \r")
+
+        def esc_checkbox(*args: object, **kwargs: object) -> questionary.Question:
+            return real_checkbox(
+                *args, **kwargs, input=pipe_input, output=DummyOutput()
+            )
+
+        monkeypatch.setattr("questionary.checkbox", esc_checkbox)
+        exit_code: int = main(["install"])
+
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert demo_a_link.is_symlink()
+    assert demo_a_staging.exists()
+    assert skill_unit_id("demo-a") in final_state.units
+    assert not demo_b_link.exists() and not demo_b_link.is_symlink()
+    assert not demo_b_staging.exists()
+    assert skill_unit_id("demo-b") not in final_state.units
+
+
+def test_abort_on_esc_makes_esc_cancel_the_prompt_like_ctrl_c() -> None:
+    # Drive a real questionary prompt off an in-memory pipe so no TTY is needed.
+    # The feed is "Esc then Enter": without an Esc binding the Esc is ignored and
+    # Enter submits the empty selection (a non-None answer, so this can never hang);
+    # abort_on_esc must instead make Esc abort eagerly like Ctrl-C, so .ask()
+    # turns the resulting KeyboardInterrupt into None before Enter is ever read.
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("\x1b\r")
+        question: questionary.Question = questionary.checkbox(
+            "pick", choices=["a"], input=pipe_input, output=DummyOutput()
+        )
+        answer: list[str] | None = abort_on_esc(question).ask()
+
+    assert answer is None
+
+
+def test_esc_at_tab_menu_exits_cleanly(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+
+    # Drive the REAL tab-menu select off one in-memory pipe so the eager Escape
+    # binding (or its absence) decides the outcome. The feed is "Esc then Enter",
+    # and the pipe is closed so any read past it ends in EOF rather than a hang.
+    # Only when launch_tui wraps "Select a tab" in abort_on_esc does Esc abort the
+    # first prompt eagerly, so .ask() returns None and the loop exits 0 without ever
+    # opening a tab. Without that wiring Esc is swallowed, the menu advances onto a
+    # placeholder tab, and the loop's next select reads the exhausted pipe and dies.
+    real_select: Callable[..., questionary.Question] = questionary.select
+
+    with create_pipe_input() as pipe_input:
+        pipe_input.send_text("\x1b\r")
+        pipe_input.close()
+
+        def esc_select(*args: object, **kwargs: object) -> questionary.Question:
+            return real_select(*args, **kwargs, input=pipe_input, output=DummyOutput())
+
+        monkeypatch.setattr("questionary.select", esc_select)
+        exit_code: int = main(["install"])
+
+    captured: str = capsys.readouterr().out
+    assert exit_code == 0
+    assert TAB_PLACEHOLDER not in captured

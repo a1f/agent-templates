@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Final
 
 import questionary
+from prompt_toolkit.key_binding import (
+    KeyBindings,
+    KeyBindingsBase,
+    KeyPressEvent,
+    merge_key_bindings,
+)
+from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.panel import Panel
 
@@ -70,6 +77,29 @@ def skill_rows(*, catalog: Catalog, state: State) -> list[str]:
     return [f"{_skill_marker(name, installed)} {name}" for name in list_skills(catalog)]
 
 
+def abort_on_esc(question: questionary.Question) -> questionary.Question:
+    """Let Esc abort a prompt exactly like Ctrl-C, so a user can back out with the
+    key they reach for first; returns the question for chaining."""
+    # Both real questionary Questions and the test doubles that stub only .ask() cross
+    # this seam; a double carries no prompt_toolkit Application, so there is no binding
+    # to register — hand it straight back rather than blow up on the missing attribute.
+    if getattr(question, "application", None) is None:
+        return question
+    # A confirm's existing bindings are a _MergedKeyBindings with no .add, unlike a
+    # checkbox/select's concrete KeyBindings — so register Escape on a fresh KeyBindings
+    # and merge it ahead of whatever the prompt already had, leaving those intact.
+    escape: KeyBindings = KeyBindings()
+
+    @escape.add(Keys.Escape, eager=True)
+    def _(event: KeyPressEvent) -> None:
+        event.app.exit(exception=KeyboardInterrupt, style="class:aborting")
+
+    existing: KeyBindingsBase | None = question.application.key_bindings
+    merged: list[KeyBindingsBase] = [escape] if existing is None else [existing, escape]
+    question.application.key_bindings = merge_key_bindings(merged)
+    return question
+
+
 def launch_tui() -> int:
     """Bail out on non-interactive stdin: questionary's prompt would otherwise
     block forever waiting on input no CI session can supply."""
@@ -80,8 +110,8 @@ def launch_tui() -> int:
         return 0
     try:
         while True:
-            choice: str | None = questionary.select(
-                "Select a tab", choices=list(MENU_CHOICES)
+            choice: str | None = abort_on_esc(
+                questionary.select("Select a tab", choices=list(MENU_CHOICES))
             ).ask()
             if choice is None or choice == "Exit":
                 return 0
@@ -95,8 +125,8 @@ def launch_tui() -> int:
                     questionary.Choice(name, checked=skill_unit_id(name) in installed)
                     for name in list_skills(catalog)
                 ]
-                ticked: list[str] | None = questionary.checkbox(
-                    "Select installed skills", choices=choices
+                ticked: list[str] | None = abort_on_esc(
+                    questionary.checkbox("Select installed skills", choices=choices)
                 ).ask()
                 if ticked is None:
                     continue
@@ -105,8 +135,8 @@ def launch_tui() -> int:
                 )
                 if plan.is_empty:
                     continue
-                confirmed: bool | None = questionary.confirm(
-                    "Apply skill changes?"
+                confirmed: bool | None = abort_on_esc(
+                    questionary.confirm("Apply skill changes?")
                 ).ask()
                 if not confirmed:
                     continue
