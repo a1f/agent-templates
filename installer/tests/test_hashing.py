@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hashing import hash_unit
+from hashing import detect_drift, hash_unit
 
 
 def test_hash_unit_is_stable_for_equal_content_and_differs_on_change(
@@ -53,3 +53,34 @@ def test_hash_unit_fingerprints_a_directory_tree_by_path_and_content(
     # (c) the same bytes rearranged onto different paths changes the hash, guarding
     #     against concatenating file bytes while ignoring paths.
     assert hash_unit(swapped) != tree_hash
+
+
+def test_detect_drift_upstream_changed_reflects_whether_source_matches_recorded(
+    tmp_path: Path,
+) -> None:
+    installed_bytes: bytes = b"# Reviewer\n\nReviews code.\n"
+
+    # Derive `recorded` from `staged` so the staged copy always matches the
+    # install-time hash; this isolates the upstream (source-vs-recorded) axis.
+    staged: Path = tmp_path / "staged.md"
+    staged.write_bytes(installed_bytes)
+    recorded: str = hash_unit(staged)
+
+    pristine_source: Path = tmp_path / "pristine.md"
+    pristine_source.write_bytes(installed_bytes)
+
+    upstream_source: Path = tmp_path / "upstream.md"
+    upstream_source.write_bytes(installed_bytes + b"\n## New upstream section\n")
+
+    assert (
+        detect_drift(
+            source=pristine_source, staged=staged, recorded=recorded
+        ).upstream_changed
+        is False
+    )
+    assert (
+        detect_drift(
+            source=upstream_source, staged=staged, recorded=recorded
+        ).upstream_changed
+        is True
+    )

@@ -1,4 +1,5 @@
 import hashlib
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -17,3 +18,20 @@ def hash_unit(path: Path) -> str:
         for file in files
     )
     return hashlib.sha256(manifest).hexdigest()
+
+
+@dataclass(frozen=True)
+class Drift:
+    """Separates the two independent axes of divergence so a caller can tell an
+    upstream update apart from a local edit."""
+
+    upstream_changed: bool
+    locally_edited: bool
+
+
+def detect_drift(*, source: Path, staged: Path, recorded: str) -> Drift:
+    """Reports how an installed unit diverges from its recorded install-time hash
+    so a reconcile step can choose between updating it and preserving it."""
+    # Only the upstream axis is pinned by a test so far; the staged-vs-recorded
+    # local-edit axis lands in a later slice.
+    return Drift(upstream_changed=hash_unit(source) != recorded, locally_edited=False)
