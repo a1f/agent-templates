@@ -205,6 +205,21 @@ def _reject_unknown_skills(names: list[str], catalog: Catalog) -> int | None:
     return 2
 
 
+def _skill_values(argv: list[str]) -> list[str] | None:
+    """Parse the value following each --skill so the dispatch can validate a
+    skills request before acting; returns None when a --skill has no following
+    value (the last token), so a malformed request is a usage error, not a crash."""
+    values: list[str] = []
+    for index, token in enumerate(argv):
+        if token != "--skill":
+            continue
+        value_index: int = index + 1
+        if value_index >= len(argv):
+            return None
+        values.append(argv[value_index])
+    return values
+
+
 def _install_named_skills(names: list[str]) -> int:
     """Install every named skill without the TUI, so `at install --skill <name> ...`
     is a scriptable path that drives the same declarative reconcile the menu does.
@@ -272,17 +287,21 @@ def main(argv: list[str]) -> int:
     if argv and argv[0] == "update":
         return _run_update()
     if argv and argv[0] == "install" and "--skill" in argv:
-        skill_names: list[str] = [
-            argv[i + 1] for i, token in enumerate(argv) if token == "--skill"
-        ]
+        skill_names: list[str] | None = _skill_values(argv)
+        if skill_names is None:
+            print("error: --skill requires a skill name", file=sys.stderr)
+            print("Try 'at --help' for usage.", file=sys.stderr)
+            return 2
         return _install_named_skills(skill_names)
     if argv and argv[0] == "install" and "--all" in argv:
         all_skills: list[str] = list_skills(load_catalog(_catalog_path()))
         return _install_named_skills(all_skills)
-    if argv and argv[0] == "uninstall" and "--skill" in argv:
-        removed_names: list[str] = [
-            argv[i + 1] for i, token in enumerate(argv) if token == "--skill"
-        ]
+    if argv and argv[0] == "uninstall":
+        removed_names: list[str] | None = _skill_values(argv)
+        if "--skill" not in argv or removed_names is None:
+            print("error: uninstall requires --skill <name>", file=sys.stderr)
+            print("Try 'at --help' for usage.", file=sys.stderr)
+            return 2
         return _uninstall_named_skills(removed_names)
     return launch_tui()
 

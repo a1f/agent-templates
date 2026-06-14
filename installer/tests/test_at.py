@@ -1086,3 +1086,36 @@ def test_install_unknown_skill_errors_with_exit_two_and_installs_nothing(
     assert "nonesuch" in captured_err
     assert not skill_link.exists() and not skill_link.is_symlink()
     assert skill_unit_id("nonesuch") not in final_state.units
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["install", "--skill"], ["uninstall", "--skill"], ["uninstall"]],
+)
+def test_malformed_skill_request_exits_two_without_crash_or_tui(
+    argv: list[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr("at.STATE_ROOT", tmp_path / "at")
+    monkeypatch.setattr("at.CLAUDE_ROOT", tmp_path / "claude")
+
+    # A malformed skills request must resolve as a usage error, never by opening the
+    # TUI: route every questionary prompt to a factory that fails loudly, so a fall
+    # through into launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(argv)
+
+    # Today a `--skill` with no value indexes argv past its end and raises IndexError,
+    # while a bare `uninstall` falls through to launch_tui and returns 0: each form is
+    # a crash or a wrong exit code, not the clean exit-2 usage error pinned here.
+    captured_err: str = capsys.readouterr().err
+    assert exit_code == 2
+    assert captured_err.strip() != ""
