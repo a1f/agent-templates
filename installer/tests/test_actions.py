@@ -87,9 +87,8 @@ def test_install_skill_records_staged_content_hash_as_unit_value(
         state=State(version=1, units={}),
     )
 
-    staged_path: Path = state_root / "staged" / "skill" / "demo-skill"
     recorded_hash: str = result.units[skill_unit_id("demo-skill")]
-    assert recorded_hash == hash_unit(staged_path)
+    assert recorded_hash == hash_unit(skill_source)
     assert recorded_hash != ""
 
 

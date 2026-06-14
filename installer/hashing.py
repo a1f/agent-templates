@@ -8,9 +8,14 @@ def hash_unit(path: Path) -> str:
     whether the file on disk still matches what was installed."""
     if not path.is_dir():
         return hashlib.sha256(path.read_bytes()).hexdigest()
-    # Bind each file's content to its relative path, sorted so the digest is
-    # independent of traversal order and changes when bytes move to a new path.
-    files: list[Path] = sorted(p for p in path.rglob("*") if p.is_file())
+    # Bind each file's content to its relative path, sorted by that same
+    # canonical relative-posix key so the sort agrees with the emitted key on
+    # every platform: the digest stays independent of traversal order (and of
+    # platform path-casing) and still changes when bytes move to a new path.
+    files: list[Path] = sorted(
+        (p for p in path.rglob("*") if p.is_file()),
+        key=lambda p: p.relative_to(path).as_posix(),
+    )
     manifest: bytes = b"".join(
         file.relative_to(path).as_posix().encode()
         + b"\0"
