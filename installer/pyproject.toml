@@ -41,6 +41,7 @@ pythonpath = ["."]  # rootdir is installer/, so tests import the module under te
 # a genuinely untested path; don't write a test solely to colour a line.
 addopts = ["--cov=at", "--cov=state", "--cov=catalog", "--cov=placement", "--cov=reconcile", "--cov-report=term-missing"]
 filterwarnings = ["error"]
+markers = ["e2e: end-to-end tests that drive the real `at` via a uv-run subprocess (deselect with -m 'not e2e')"]
 
 [tool.coverage.run]
 branch = true
