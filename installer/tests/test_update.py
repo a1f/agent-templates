@@ -1,10 +1,10 @@
 from pathlib import Path
 
 from actions import install_skill
-from catalog import skill_unit_id
+from catalog import Catalog, Unit, skill_unit_id
 from hashing import hash_unit
 from state import State, load_state
-from update import update_skill
+from update import update_installed_skills, update_skill
 
 
 def test_update_skill_restages_upstream_change_and_refreshes_recorded_hash(
@@ -146,3 +146,57 @@ def test_update_skill_backs_up_local_edit_before_restaging_upstream_change(
     assert result.units[unit_id] == refreshed_hash
     assert result.units[unit_id] != install_hash
     assert load_state(state_root).units[unit_id] == refreshed_hash
+
+
+def test_update_installed_skills_updates_installed_skill_and_skips_uninstalled(
+    tmp_path: Path,
+) -> None:
+    original_a: str = "# Demo A\n\nOriginal upstream copy.\n"
+    updated_a: str = "# Demo A\n\nRevised upstream copy.\n"
+    uninstalled_b: str = "# Demo B\n\nNever installed; an update must not adopt it.\n"
+    source_root: Path = tmp_path / "repo"
+    skill_a_source: Path = source_root / "skills" / "demo-a"
+    skill_b_source: Path = source_root / "skills" / "demo-b"
+    skill_a_source.mkdir(parents=True)
+    skill_b_source.mkdir(parents=True)
+    (skill_a_source / "SKILL.md").write_text(original_a, encoding="utf-8")
+    (skill_b_source / "SKILL.md").write_text(uninstalled_b, encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    # Install only demo-a; demo-b stays a catalog entry that was never installed.
+    installed_state: State = install_skill(
+        name="demo-a",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    install_hash_a: str = installed_state.units[skill_unit_id("demo-a")]
+
+    # An upstream change to demo-a means the orchestrator must re-stage it.
+    (skill_a_source / "SKILL.md").write_text(updated_a, encoding="utf-8")
+
+    # The catalog lists both skills, but only the installed one should be touched.
+    catalog: Catalog = Catalog(
+        units=(Unit(kind="skill", name="demo-a"), Unit(kind="skill", name="demo-b")),
+        packages=(),
+        bundles=(),
+    )
+
+    result: State = update_installed_skills(
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        catalog=catalog,
+        state=installed_state,
+    )
+
+    staged_a: Path = state_root / "staged" / "skill" / "demo-a"
+    staged_b: Path = state_root / "staged" / "skill" / "demo-b"
+
+    assert result.units[skill_unit_id("demo-a")] == hash_unit(skill_a_source)
+    assert result.units[skill_unit_id("demo-a")] != install_hash_a
+    assert (staged_a / "SKILL.md").read_text(encoding="utf-8") == updated_a
+    assert skill_unit_id("demo-b") not in result.units
+    assert not staged_b.exists()

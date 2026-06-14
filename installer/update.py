@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from actions import install_skill
-from catalog import skill_unit, skill_unit_id
+from catalog import Catalog, list_skills, skill_unit, skill_unit_id
 from constants import SKILLS_DIRNAME, STAGED_DIRNAME
 from hashing import Drift, detect_drift
 from placement import backup_staged_unit
@@ -36,3 +36,26 @@ def update_skill(
         claude_root=claude_root,
         state=state,
     )
+
+
+def update_installed_skills(
+    *,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    catalog: Catalog,
+    state: State,
+) -> State:
+    """Refresh every installed skill against upstream in one pass, so one update
+    run reconciles the whole installation instead of one skill at a time."""
+    current: State = state
+    for name in list_skills(catalog):
+        if skill_unit_id(name) in state.units:
+            current = update_skill(
+                name=name,
+                source_root=source_root,
+                state_root=state_root,
+                claude_root=claude_root,
+                state=current,
+            )
+    return current
