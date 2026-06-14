@@ -795,9 +795,9 @@ def test_multiple_skill_flags_install_all_named_skills_additively(
 
     exit_code: int = main(["install", "--skill", "demo-b", "--skill", "demo-c"])
 
-    # Each --skill flag must install its skill while the pre-installed demo-a survives:
-    # today's parser reads only the first --skill (demo-b), so demo-c is never placed
-    # and its assertions are the right-reason RED; demo-a and demo-b already pass.
+    # Each --skill installs its own skill additively: the two named skills (demo-b,
+    # demo-c) both land, and the pre-installed demo-a survives untouched, so all three
+    # end up linked, staged, and recorded in state.
     final_state: State = load_state(state_root)
     assert exit_code == 0
     for name in ("demo-a", "demo-b", "demo-c"):
@@ -846,9 +846,9 @@ def test_install_all_flag_installs_every_catalog_skill_non_interactively(
     exit_code: int = main(["install", "--all", "--non-interactive"])
 
     # Derive the expected set from the catalog so the check tracks every declared skill,
-    # and pin it non-empty so the per-skill loop can't pass vacuously. Today --all is
-    # unhandled, so main falls through to launch_tui and installs nothing: the first
-    # is_symlink assertion below is the right-reason RED.
+    # and pin it non-empty so the per-skill loop can't pass vacuously. `install --all`
+    # selects every catalog skill and installs each non-interactively, so every one
+    # ends up linked, staged, and recorded in state.
     expected_skills: list[str] = list_skills(load_catalog(catalog_file))
     final_state: State = load_state(state_root)
     assert exit_code == 0
@@ -905,9 +905,9 @@ def test_uninstall_skill_flag_removes_named_skill_leaving_others_installed(
 
     exit_code: int = main(["uninstall", "--skill", "demo-a"])
 
-    # Today `uninstall` is an unknown subcommand, so main returns 2 and removes
-    # nothing: demo-a's link, staging, and state entry all survive, making the
-    # exit-zero and demo-a-removed assertions the right-reason RED.
+    # `uninstall --skill demo-a` is subtractive: it removes only demo-a (its link,
+    # staging, and state entry all go), while demo-b stays linked, staged, and
+    # recorded in state, and the command exits zero.
     final_state: State = load_state(state_root)
     demo_a_link: Path = claude_root / "skills" / "demo-a"
     demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
@@ -967,10 +967,10 @@ def test_install_skill_stages_source_from_at_source_root_override(
 
     exit_code: int = main(["install", "--skill", "demo-skill"])
 
-    # Today no AT_SOURCE_ROOT seam exists, so the install still sources from REPO_ROOT
-    # and stages the repo content: the skill installs cleanly (exit 0, live symlink, and
-    # state entry all pass) while the staged SKILL.md holds "# from repo source". The
-    # content equality is the right-reason RED: the source is wrong, not the install.
+    # AT_SOURCE_ROOT wins over REPO_ROOT: the install reads from the fixture tree, so
+    # the staged SKILL.md holds the fixture content, not the repo content. The skill
+    # installs cleanly too (exit 0, live symlink, and state entry), but the staged
+    # content is what pins that the override, not REPO_ROOT, supplied the source.
     final_state: State = load_state(state_root)
     skill_link: Path = claude_root / "skills" / "demo-skill"
     staged_skill_md: Path = state_root / "staged" / "skill" / "demo-skill" / "SKILL.md"
@@ -1030,11 +1030,10 @@ def test_install_skill_loads_catalog_from_at_catalog_override(
 
     exit_code: int = main(["install", "--skill", "target-skill"])
 
-    # Today the CLI always loads CATALOG_PATH (the decoy listing only other-skill), so
-    # target-skill is absent from the catalog, never enters the reconcile plan, and the
-    # empty plan is a clean exit-0 no-op: the is_symlink/staging/state assertions are
-    # the right-reason RED. Once AT_CATALOG is honored, the override catalog lists
-    # target-skill and the install places it.
+    # AT_CATALOG wins over CATALOG_PATH: the install loads the override catalog, which
+    # lists target-skill, so target-skill enters the reconcile plan and is placed
+    # (exit 0, live symlink, staging, and state entry). The decoy default catalog
+    # lists only other-skill, so loading it instead would place nothing.
     final_state: State = load_state(state_root)
     skill_link: Path = claude_root / "skills" / "target-skill"
     skill_staging: Path = state_root / "staged" / "skill" / "target-skill"
@@ -1075,9 +1074,9 @@ def test_install_unknown_skill_errors_with_exit_two_and_installs_nothing(
 
     exit_code: int = main(["install", "--skill", "nonesuch"])
 
-    # Today the unknown name builds an empty plan and main returns 0 having done
-    # nothing — a silent success on a typo. The exit-two and stderr checks are the
-    # right-reason RED; the nothing-installed asserts pin the rest of the behavior.
+    # An unknown --skill name is rejected before any reconcile: main exits 2 and names
+    # the bad skill ('nonesuch') on stderr, and nothing is installed (no link, no
+    # state entry), so a typo fails loudly instead of silently no-opping.
     captured_err: str = capsys.readouterr().err
     final_state: State = load_state(state_root)
     skill_link: Path = claude_root / "skills" / "nonesuch"

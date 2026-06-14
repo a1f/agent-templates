@@ -52,15 +52,21 @@ MENU_CHOICES: Final[tuple[str, ...]] = (
 )
 
 USAGE: Final[str] = """\
-Usage: at [command]
+Usage: at [command] [flags]
 
 Commands:
-  install        Launch the interactive menu
-  update         Pull the repo and refresh installed skills
+  install                      Launch the interactive menu
+  install --skill <name>...    Install the named skills, no menu
+  install --all                Install every catalog skill, no menu
+  uninstall --skill <name>...  Uninstall the named skills, no menu
+  update                       Pull the repo and refresh installed skills
 
 Flags:
-  -h, --help     Show this help screen and exit
-  --version      Show the version and exit
+  --skill <name>     Skill to install or uninstall; repeat to act on several
+  --all              With 'install', act on every catalog skill
+  --non-interactive  Accepted with 'install --all' for scripted, non-TTY runs
+  -h, --help         Show this help screen and exit
+  --version          Show the version and exit
 """
 
 KNOWN_TOKENS: Final[frozenset[str]] = frozenset(
