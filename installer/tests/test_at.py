@@ -1,6 +1,7 @@
 import subprocess
 from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import NoReturn
 
 import pytest
 import questionary
@@ -17,7 +18,7 @@ from at import (
     main,
     skill_rows,
 )
-from catalog import Catalog, Unit, skill_unit_id
+from catalog import Catalog, Unit, list_skills, load_catalog, skill_unit_id
 from hashing import hash_unit
 from state import State, load_state
 
@@ -701,3 +702,419 @@ def test_update_pulls_repo_then_refreshes_installed_skill(
     assert pull_kwargs["cwd"] == repo_root
     assert final_hash == hash_unit(skill_source)
     assert final_hash != install_hash
+
+
+def test_install_skill_flag_installs_named_skill_non_interactively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A real skill source on disk is the only input the non-interactive install needs;
+    # nothing is installed up front, so a clean run must stage, link, and record it.
+    source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The --skill path must place the skill without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls back
+    # through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "demo-skill"])
+
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    skill_staging: Path = state_root / "staged" / "skill" / "demo-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert skill_staging.exists()
+    assert skill_unit_id("demo-skill") in final_state.units
+
+
+def test_multiple_skill_flags_install_all_named_skills_additively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for all three skills exist, but only demo-a is installed up front,
+    # so an additive multi-flag install must keep demo-a and add both demo-b and demo-c.
+    for name in ("demo-a", "demo-b", "demo-c"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-c"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Every named skill must be placed without ever opening the TUI: route each
+    # questionary prompt to a factory that fails loudly, so a regression that falls
+    # back through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "demo-b", "--skill", "demo-c"])
+
+    # Each --skill installs its own skill additively: the two named skills (demo-b,
+    # demo-c) both land, and the pre-installed demo-a survives untouched, so all three
+    # end up linked, staged, and recorded in state.
+    final_state: State = load_state(state_root)
+    assert exit_code == 0
+    for name in ("demo-a", "demo-b", "demo-c"):
+        assert (claude_root / "skills" / name).is_symlink()
+        assert (state_root / "staged" / "skill" / name).exists()
+        assert skill_unit_id(name) in final_state.units
+
+
+def test_install_all_flag_installs_every_catalog_skill_non_interactively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for all three catalog skills exist and nothing is installed up front,
+    # so a clean --all run must stage, link, and record every one of them.
+    for name in ("demo-a", "demo-b", "demo-c"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-c"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Installing every skill must never open the TUI: route each questionary prompt to a
+    # factory that fails loudly, so a regression that falls back through launch_tui's
+    # select/checkbox/confirm trips this guard instead of waiting on a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--all", "--non-interactive"])
+
+    # Derive the expected set from the catalog so the check tracks every declared skill,
+    # and pin it non-empty so the per-skill loop can't pass vacuously. `install --all`
+    # selects every catalog skill and installs each non-interactively, so every one
+    # ends up linked, staged, and recorded in state.
+    expected_skills: list[str] = list_skills(load_catalog(catalog_file))
+    final_state: State = load_state(state_root)
+    assert exit_code == 0
+    assert expected_skills == ["demo-a", "demo-b", "demo-c"]
+    for name in expected_skills:
+        assert (claude_root / "skills" / name).is_symlink()
+        assert (state_root / "staged" / "skill" / name).exists()
+        assert skill_unit_id(name) in final_state.units
+
+
+def test_uninstall_skill_flag_removes_named_skill_leaving_others_installed(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist and both are installed up front, so a
+    # targeted uninstall must drop only demo-a and leave demo-b fully in place.
+    state: State = load_state(state_root)
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+        state = install_skill(
+            name=name,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Uninstall must remove the skill without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls
+    # back through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["uninstall", "--skill", "demo-a"])
+
+    # `uninstall --skill demo-a` is subtractive: it removes only demo-a (its link,
+    # staging, and state entry all go), while demo-b stays linked, staged, and
+    # recorded in state, and the command exits zero.
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert not demo_a_link.exists() and not demo_a_link.is_symlink()
+    assert not demo_a_staging.exists()
+    assert skill_unit_id("demo-a") not in final_state.units
+    assert demo_b_link.is_symlink()
+    assert demo_b_staging.exists()
+    assert skill_unit_id("demo-b") in final_state.units
+
+
+def test_install_skill_stages_source_from_at_source_root_override(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_src: Path = tmp_path / "repo"
+    fixture_src: Path = tmp_path / "fixture"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_src)
+
+    # The same skill name lives under two source roots with deliberately distinct
+    # content, so the staged copy's text alone reveals which root the install read
+    # from. AT_SOURCE_ROOT must win: the e2e harness points it at fixture skills so
+    # the real `at` never sources from the repo's live skills/ tree.
+    fixture_content: str = "# from fixture source\n"
+    repo_content: str = "# from repo source\n"
+    fixture_skill: Path = fixture_src / "skills" / "demo-skill" / "SKILL.md"
+    fixture_skill.parent.mkdir(parents=True)
+    fixture_skill.write_text(fixture_content, encoding="utf-8")
+    repo_skill: Path = repo_src / "skills" / "demo-skill" / "SKILL.md"
+    repo_skill.parent.mkdir(parents=True)
+    repo_skill.write_text(repo_content, encoding="utf-8")
+    monkeypatch.setenv("AT_SOURCE_ROOT", str(fixture_src))
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The override path must place the skill without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls back
+    # through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "demo-skill"])
+
+    # AT_SOURCE_ROOT wins over REPO_ROOT: the install reads from the fixture tree, so
+    # the staged SKILL.md holds the fixture content, not the repo content. The skill
+    # installs cleanly too (exit 0, live symlink, and state entry), but the staged
+    # content is what pins that the override, not REPO_ROOT, supplied the source.
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    staged_skill_md: Path = state_root / "staged" / "skill" / "demo-skill" / "SKILL.md"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert skill_unit_id("demo-skill") in final_state.units
+    assert staged_skill_md.read_text(encoding="utf-8") == fixture_content
+
+
+def test_install_skill_loads_catalog_from_at_catalog_override(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A real source for target-skill lives under REPO_ROOT (AT_SOURCE_ROOT stays unset),
+    # so once the override catalog puts target-skill in the plan the install has a tree
+    # to stage from.
+    source: Path = repo_root / "skills" / "target-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# target-skill\n", encoding="utf-8")
+
+    # The DEFAULT catalog is a decoy: a valid, non-empty catalog that lists only
+    # other-skill and never target-skill. The e2e harness runs the real `at` against a
+    # fixture catalog, so loading CATALOG_PATH instead of AT_CATALOG must place nothing.
+    default_catalog: Path = tmp_path / "default-catalog.toml"
+    default_catalog.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "other-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", default_catalog)
+
+    # The OVERRIDE catalog lists target-skill; pointing AT_CATALOG at it must be what
+    # makes the reconcile see target-skill at all.
+    override_catalog: Path = tmp_path / "override-catalog.toml"
+    override_catalog.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "target-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AT_CATALOG", str(override_catalog))
+
+    # The override path must place the skill without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls back
+    # through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "target-skill"])
+
+    # AT_CATALOG wins over CATALOG_PATH: the install loads the override catalog, which
+    # lists target-skill, so target-skill enters the reconcile plan and is placed
+    # (exit 0, live symlink, staging, and state entry). The decoy default catalog
+    # lists only other-skill, so loading it instead would place nothing.
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "target-skill"
+    skill_staging: Path = state_root / "staged" / "skill" / "target-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert skill_staging.exists()
+    assert skill_unit_id("target-skill") in final_state.units
+
+
+def test_install_unknown_skill_errors_with_exit_two_and_installs_nothing(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # The catalog lists a real skill (demo-a) but never 'nonesuch', so the request
+    # names an unknown skill. No source is staged: a correct run installs nothing.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        'packages = []\nbundles = []\n\n[[units]]\nkind = "skill"\nname = "demo-a"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The error path must stay non-interactive: route every questionary prompt to a
+    # factory that fails loudly, so a regression that falls back into launch_tui's
+    # select/checkbox/confirm trips this guard instead of silently prompting.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "nonesuch"])
+
+    # An unknown --skill name is rejected before any reconcile: main exits 2 and names
+    # the bad skill ('nonesuch') on stderr, and nothing is installed (no link, no
+    # state entry), so a typo fails loudly instead of silently no-opping.
+    captured_err: str = capsys.readouterr().err
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "nonesuch"
+    assert exit_code == 2
+    assert captured_err != ""
+    assert "nonesuch" in captured_err
+    assert not skill_link.exists() and not skill_link.is_symlink()
+    assert skill_unit_id("nonesuch") not in final_state.units
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [["install", "--skill"], ["uninstall", "--skill"], ["uninstall"]],
+)
+def test_malformed_skill_request_exits_two_without_crash_or_tui(
+    argv: list[str],
+    monkeypatch: MonkeyPatch,
+    capsys: CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr("at.STATE_ROOT", tmp_path / "at")
+    monkeypatch.setattr("at.CLAUDE_ROOT", tmp_path / "claude")
+
+    # A malformed skills request must resolve as a usage error, never by opening the
+    # TUI: route every questionary prompt to a factory that fails loudly, so a fall
+    # through into launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(argv)
+
+    # A malformed skills request is a clean usage error: a `--skill` with no value, or
+    # a bare `uninstall` with no `--skill`, exits 2 with a stderr message. It is never
+    # a crash and never the TUI; a bare `install`, by contrast, still opens the menu.
+    captured_err: str = capsys.readouterr().err
+    assert exit_code == 2
+    assert captured_err.strip() != ""
