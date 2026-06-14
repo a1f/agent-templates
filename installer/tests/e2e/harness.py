@@ -1,6 +1,7 @@
 import difflib
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Final
 
@@ -9,6 +10,9 @@ _CLAUDE_DIRNAME: Final[str] = ".claude"
 # separators) so a golden pins the state's meaning rather than the byte order the
 # installer happened to write it in.
 _STATE_RELPATH: Final[str] = ".claude/at/state.json"
+# Setting this env var to any non-empty value flips the golden gate from comparing
+# to regenerating, so a vetted run can re-seed committed goldens without hand-edits.
+_BLESS_ENV: Final[str] = "AT_BLESS"
 
 
 def _descendants(directory: Path) -> list[Path]:
@@ -62,8 +66,16 @@ def snapshot(home: Path) -> str:
 
 def assert_matches_golden(*, name: str, actual: str, goldens_dir: Path) -> None:
     """Gate an e2e scenario's output against its committed golden so drift fails
-    loudly with a diff and a pointer to AT_BLESS, instead of passing silently."""
+    loudly with a diff and a pointer to AT_BLESS, instead of passing silently.
+
+    With AT_BLESS set, the golden is instead regenerated from `actual` (creating
+    `goldens_dir` and its parents) and no comparison runs, re-seeding the committed
+    golden from a vetted run."""
     golden_path: Path = goldens_dir / f"{name}.golden"
+    if os.environ.get(_BLESS_ENV):
+        goldens_dir.mkdir(parents=True, exist_ok=True)
+        golden_path.write_text(actual, encoding="utf-8")
+        return
     golden: str = golden_path.read_text(encoding="utf-8")
     if actual == golden:
         return

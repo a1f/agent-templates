@@ -74,3 +74,28 @@ def test_golden_compare_accepts_match_and_rejects_drift(
     message: str = str(exc_info.value)
     assert "demo" in message
     assert "AT_BLESS" in message
+
+
+def test_bless_regenerates_golden_from_actual(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    # With AT_BLESS set, the gate must regenerate the golden from the fresh run
+    # instead of comparing, so a clean snapshot can re-seed the committed golden.
+    monkeypatch.setenv("AT_BLESS", "1")
+
+    # A goldens dir that does not exist yet proves bless creates it (and parents)
+    # rather than assuming a golden is already on disk to read and diff against.
+    goldens_dir: Path = tmp_path / "goldens"
+    fresh_content: str = "fresh-content\n"
+
+    assert_matches_golden(name="demo", actual=fresh_content, goldens_dir=goldens_dir)
+
+    blessed_path: Path = goldens_dir / "demo.golden"
+    assert blessed_path.exists()
+    assert blessed_path.read_text(encoding="utf-8") == fresh_content
+
+    # Round-trip: with AT_BLESS cleared, the just-blessed golden compares equal, so
+    # a bless followed by a plain run is a no-op rather than a drift failure.
+    monkeypatch.delenv("AT_BLESS", raising=False)
+    assert_matches_golden(name="demo", actual=fresh_content, goldens_dir=goldens_dir)
