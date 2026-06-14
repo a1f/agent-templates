@@ -120,6 +120,7 @@ that plan honest as PRs land.
 | **to-issues** | `/to-issues` | Break the PRD into vertical, tracer-bullet slices in the same issue |
 | **pr-breakdown** | `/pr-breakdown` | Split each slice into ~100-200 LOC PR rows in the same issue |
 | **course-correct** | `/course-correct` | After some PRs land, check merged work against the PRD goal and re-plan: refresh Status, add/remove/re-scope slices and PRs. Checkpoint-aware; run it in a fresh session every few PRs |
+| **explain** | `/explain` | Explain a slice, PR row, or GitHub PR in dead-simple, plain words — why we need it, what it is, what changes — for someone who doesn't code |
 
 ## Language Rules
 
