@@ -2,18 +2,12 @@
 "install this skill" rather than wiring stage + link + record themselves."""
 
 from pathlib import Path
-from typing import Final
 
 from catalog import skill_unit, skill_unit_id
+from constants import SKILLS_DIRNAME, STAGED_DIRNAME
 from hashing import hash_unit
 from placement import link_unit, stage_unit, unlink_unit, unstage_unit
 from state import State, save_state
-
-# The kind→subdir layout lives here, the first concrete caller of the placement
-# primitives: a skill stages under "staged/skill/<name>" and goes live under
-# "<claude>/skills/<name>", matching ~/.claude's per-kind directories.
-_STAGED_DIRNAME: Final[str] = "staged"
-_SKILLS_DIRNAME: Final[str] = "skills"
 
 
 def install_skill(
@@ -29,11 +23,11 @@ def install_skill(
 
     Persists the updated state to state_root (via save_state) and returns a brand-new
     immutable State; the passed-in state is never mutated."""
-    source: Path = source_root / _SKILLS_DIRNAME / name
+    source: Path = source_root / SKILLS_DIRNAME / name
     staged_path: Path = stage_unit(
-        unit=skill_unit(name), source=source, staged_root=state_root / _STAGED_DIRNAME
+        unit=skill_unit(name), source=source, staged_root=state_root / STAGED_DIRNAME
     )
-    link_unit(staged_path=staged_path, link_path=claude_root / _SKILLS_DIRNAME / name)
+    link_unit(staged_path=staged_path, link_path=claude_root / SKILLS_DIRNAME / name)
     content_hash: str = hash_unit(staged_path)
     new_state: State = State(
         version=state.version,
@@ -56,8 +50,8 @@ def uninstall_skill(
 
     Persists the updated state to state_root (via save_state) and returns a brand-new
     immutable State without the skill's unit; the passed-in state is never mutated."""
-    unlink_unit(link_path=claude_root / _SKILLS_DIRNAME / name)
-    unstage_unit(unit=skill_unit(name), staged_root=state_root / _STAGED_DIRNAME)
+    unlink_unit(link_path=claude_root / SKILLS_DIRNAME / name)
+    unstage_unit(unit=skill_unit(name), staged_root=state_root / STAGED_DIRNAME)
     removed_id: str = skill_unit_id(name)
     new_state: State = State(
         version=state.version,
