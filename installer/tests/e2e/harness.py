@@ -1,3 +1,4 @@
+import difflib
 import hashlib
 import json
 from pathlib import Path
@@ -57,3 +58,25 @@ def snapshot(home: Path) -> str:
     entries.sort(key=lambda entry: entry.relative_to(home).as_posix())
     lines: list[str] = [_render_entry(entry=entry, home=home) for entry in entries]
     return "\n".join(lines) + "\n"
+
+
+def assert_matches_golden(*, name: str, actual: str, goldens_dir: Path) -> None:
+    """Gate an e2e scenario's output against its committed golden so drift fails
+    loudly with a diff and a pointer to AT_BLESS, instead of passing silently."""
+    golden_path: Path = goldens_dir / f"{name}.golden"
+    golden: str = golden_path.read_text(encoding="utf-8")
+    if actual == golden:
+        return
+    diff: str = "\n".join(
+        difflib.unified_diff(
+            golden.splitlines(),
+            actual.splitlines(),
+            fromfile=f"{name}.golden",
+            tofile="actual",
+            lineterm="",
+        )
+    )
+    raise AssertionError(
+        f"snapshot does not match golden {name!r}; "
+        f"re-run with AT_BLESS=1 to regenerate it.\n{diff}"
+    )

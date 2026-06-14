@@ -2,7 +2,9 @@ import hashlib
 import json
 from pathlib import Path
 
-from harness import snapshot
+import pytest
+from harness import assert_matches_golden, snapshot
+from pytest import MonkeyPatch
 
 
 def test_snapshot_renders_installed_tree_as_sorted_normalized_lines(
@@ -47,3 +49,28 @@ def test_snapshot_renders_installed_tree_as_sorted_normalized_lines(
     expected: str = "\n".join(expected_lines) + "\n"
 
     assert snapshot(home) == expected
+
+
+def test_golden_compare_accepts_match_and_rejects_drift(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    # A stray AT_BLESS in the developer's shell must never turn this compare into a
+    # silent bless, so pin the environment to the plain compare regime first.
+    monkeypatch.delenv("AT_BLESS", raising=False)
+
+    golden_text: str = "line-a\nline-b\n"
+    golden_path: Path = tmp_path / "demo.golden"
+    golden_path.write_text(golden_text, encoding="utf-8")
+
+    # An identical snapshot is accepted: the gate completes without raising.
+    assert_matches_golden(name="demo", actual=golden_text, goldens_dir=tmp_path)
+
+    # Drift is rejected with a readable error that names the golden and points at
+    # AT_BLESS as the way to regenerate it.
+    drifted_text: str = "line-a\nDIFFERENT\n"
+    with pytest.raises(AssertionError) as exc_info:
+        assert_matches_golden(name="demo", actual=drifted_text, goldens_dir=tmp_path)
+    message: str = str(exc_info.value)
+    assert "demo" in message
+    assert "AT_BLESS" in message
