@@ -2,6 +2,7 @@ import difflib
 import hashlib
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Final
 
@@ -13,6 +14,21 @@ _STATE_RELPATH: Final[str] = ".claude/at/state.json"
 # Setting this env var to any non-empty value flips the golden gate from comparing
 # to regenerating, so a vetted run can re-seed committed goldens without hand-edits.
 _BLESS_ENV: Final[str] = "AT_BLESS"
+# The frozen fixtures (catalog + skill sources) and committed goldens live beside this
+# harness, so scenarios resolve them by file location rather than the process cwd.
+FIXTURES_DIR: Final[Path] = Path(__file__).parent / "fixtures"
+GOLDENS_DIR: Final[Path] = Path(__file__).parent / "goldens"
+# at.py lives in installer/ (two levels up from tests/e2e/), which is also the cwd the
+# real `at` shim runs it from; run_at mirrors that exactly so the subprocess resolves
+# at.py's sibling modules and inline-script deps just as a user's `at` does.
+_INSTALLER_DIR: Final[Path] = Path(__file__).parents[2]
+_AT_SCRIPT: Final[Path] = _INSTALLER_DIR / "at.py"
+# Captured at import, before any per-scenario HOME override, so the subprocess reuses
+# the developer/CI uv cache instead of re-resolving at.py's PEP 723 env under each
+# throwaway temp HOME — keeping e2e runs both fast and deterministic.
+_UV_CACHE_DIR: Final[str] = os.environ.get("UV_CACHE_DIR") or str(
+    Path.home() / ".cache" / "uv"
+)
 
 
 def _descendants(directory: Path) -> list[Path]:
@@ -91,4 +107,27 @@ def assert_matches_golden(*, name: str, actual: str, goldens_dir: Path) -> None:
     raise AssertionError(
         f"snapshot does not match golden {name!r}; "
         f"re-run with AT_BLESS=1 to regenerate it.\n{diff}"
+    )
+
+
+def run_at(
+    *, args: list[str], home: Path, source_root: Path, catalog: Path
+) -> subprocess.CompletedProcess[str]:
+    """Drive the real `at` CLI against an isolated home so e2e scenarios observe an
+    actual install rather than a mocked one, with the env seams pointed at the given
+    fixture source_root and catalog."""
+    env: dict[str, str] = {
+        **os.environ,
+        "HOME": str(home),
+        "AT_SOURCE_ROOT": str(source_root),
+        "AT_CATALOG": str(catalog),
+        "UV_CACHE_DIR": _UV_CACHE_DIR,
+    }
+    return subprocess.run(
+        ["uv", "run", str(_AT_SCRIPT), *args],
+        cwd=_INSTALLER_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
     )

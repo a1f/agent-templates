@@ -1,0 +1,9 @@
+# Frozen fixture catalog for installer e2e scenarios. Deliberately minimal and
+# stable so goldens change only when installer BEHAVIOUR changes, never when a
+# real skill under ../../skills is edited.
+packages = []
+bundles = []
+
+[[units]]
+kind = "skill"
+name = "demo-skill"
