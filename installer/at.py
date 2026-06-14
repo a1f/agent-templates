@@ -220,6 +220,22 @@ def _skill_values(argv: list[str]) -> list[str] | None:
     return values
 
 
+def _reconcile_to(ticked: frozenset[str], *, catalog: Catalog, state: State) -> int:
+    """The one apply path every scriptable install/uninstall shares, so reconcile
+    wiring lives in one place."""
+    plan: ReconcilePlan = plan_skill_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+    apply_skill_reconcile(
+        plan=plan,
+        source_root=_source_root(),
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        state=state,
+    )
+    return 0
+
+
 def _install_named_skills(names: list[str]) -> int:
     """Install every named skill without the TUI, so `at install --skill <name> ...`
     is a scriptable path that drives the same declarative reconcile the menu does.
@@ -233,17 +249,7 @@ def _install_named_skills(names: list[str]) -> int:
         n for n in list_skills(catalog) if skill_unit_id(n) in state.units
     }
     ticked: frozenset[str] = frozenset(installed | set(names))
-    plan: ReconcilePlan = plan_skill_reconcile(
-        ticked=ticked, catalog=catalog, state=state
-    )
-    apply_skill_reconcile(
-        plan=plan,
-        source_root=_source_root(),
-        state_root=STATE_ROOT,
-        claude_root=CLAUDE_ROOT,
-        state=state,
-    )
-    return 0
+    return _reconcile_to(ticked, catalog=catalog, state=state)
 
 
 def _uninstall_named_skills(names: list[str]) -> int:
@@ -260,17 +266,7 @@ def _uninstall_named_skills(names: list[str]) -> int:
         n for n in list_skills(catalog) if skill_unit_id(n) in state.units
     }
     ticked: frozenset[str] = frozenset(installed - set(names))
-    plan: ReconcilePlan = plan_skill_reconcile(
-        ticked=ticked, catalog=catalog, state=state
-    )
-    apply_skill_reconcile(
-        plan=plan,
-        source_root=_source_root(),
-        state_root=STATE_ROOT,
-        claude_root=CLAUDE_ROOT,
-        state=state,
-    )
-    return 0
+    return _reconcile_to(ticked, catalog=catalog, state=state)
 
 
 def main(argv: list[str]) -> int:
