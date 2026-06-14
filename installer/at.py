@@ -191,11 +191,28 @@ def _run_update() -> int:
     return 0
 
 
+def _reject_unknown_skills(names: list[str], catalog: Catalog) -> int | None:
+    """Reject a --skill the catalog doesn't list before any reconcile runs, so a typo
+    fails atomically instead of silently no-opping; names the unknowns on stderr and
+    returns exit code 2, or None when every name is known."""
+    known: frozenset[str] = frozenset(list_skills(catalog))
+    unknown: list[str] = [name for name in names if name not in known]
+    if not unknown:
+        return None
+    for name in unknown:
+        print(f"error: unknown skill '{name}'", file=sys.stderr)
+    print("Try 'at --help' for usage.", file=sys.stderr)
+    return 2
+
+
 def _install_named_skills(names: list[str]) -> int:
     """Install every named skill without the TUI, so `at install --skill <name> ...`
     is a scriptable path that drives the same declarative reconcile the menu does.
     Install is additive: the named skills join whatever is already installed."""
     catalog: Catalog = load_catalog(_catalog_path())
+    rejection: int | None = _reject_unknown_skills(names, catalog)
+    if rejection is not None:
+        return rejection
     state: State = load_state(STATE_ROOT)
     installed: set[str] = {
         n for n in list_skills(catalog) if skill_unit_id(n) in state.units
@@ -220,6 +237,9 @@ def _uninstall_named_skills(names: list[str]) -> int:
     Uninstall is subtractive: the named skills drop out of whatever is installed,
     and every other installed skill stays ticked and thus untouched."""
     catalog: Catalog = load_catalog(_catalog_path())
+    rejection: int | None = _reject_unknown_skills(names, catalog)
+    if rejection is not None:
+        return rejection
     state: State = load_state(STATE_ROOT)
     installed: set[str] = {
         n for n in list_skills(catalog) if skill_unit_id(n) in state.units

@@ -1042,3 +1042,47 @@ def test_install_skill_loads_catalog_from_at_catalog_override(
     assert skill_link.is_symlink()
     assert skill_staging.exists()
     assert skill_unit_id("target-skill") in final_state.units
+
+
+def test_install_unknown_skill_errors_with_exit_two_and_installs_nothing(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # The catalog lists a real skill (demo-a) but never 'nonesuch', so the request
+    # names an unknown skill. No source is staged: a correct run installs nothing.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        'packages = []\nbundles = []\n\n[[units]]\nkind = "skill"\nname = "demo-a"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The error path must stay non-interactive: route every questionary prompt to a
+    # factory that fails loudly, so a regression that falls back into launch_tui's
+    # select/checkbox/confirm trips this guard instead of silently prompting.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "nonesuch"])
+
+    # Today the unknown name builds an empty plan and main returns 0 having done
+    # nothing — a silent success on a typo. The exit-two and stderr checks are the
+    # right-reason RED; the nothing-installed asserts pin the rest of the behavior.
+    captured_err: str = capsys.readouterr().err
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "nonesuch"
+    assert exit_code == 2
+    assert captured_err != ""
+    assert "nonesuch" in captured_err
+    assert not skill_link.exists() and not skill_link.is_symlink()
+    assert skill_unit_id("nonesuch") not in final_state.units
