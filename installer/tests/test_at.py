@@ -920,3 +920,61 @@ def test_uninstall_skill_flag_removes_named_skill_leaving_others_installed(
     assert demo_b_link.is_symlink()
     assert demo_b_staging.exists()
     assert skill_unit_id("demo-b") in final_state.units
+
+
+def test_install_skill_stages_source_from_at_source_root_override(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_src: Path = tmp_path / "repo"
+    fixture_src: Path = tmp_path / "fixture"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_src)
+
+    # The same skill name lives under two source roots with deliberately distinct
+    # content, so the staged copy's text alone reveals which root the install read
+    # from. AT_SOURCE_ROOT must win: the e2e harness points it at fixture skills so
+    # the real `at` never sources from the repo's live skills/ tree.
+    fixture_content: str = "# from fixture source\n"
+    repo_content: str = "# from repo source\n"
+    fixture_skill: Path = fixture_src / "skills" / "demo-skill" / "SKILL.md"
+    fixture_skill.parent.mkdir(parents=True)
+    fixture_skill.write_text(fixture_content, encoding="utf-8")
+    repo_skill: Path = repo_src / "skills" / "demo-skill" / "SKILL.md"
+    repo_skill.parent.mkdir(parents=True)
+    repo_skill.write_text(repo_content, encoding="utf-8")
+    monkeypatch.setenv("AT_SOURCE_ROOT", str(fixture_src))
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The override path must place the skill without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls back
+    # through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "demo-skill"])
+
+    # Today no AT_SOURCE_ROOT seam exists, so the install still sources from REPO_ROOT
+    # and stages the repo content: the skill installs cleanly (exit 0, live symlink, and
+    # state entry all pass) while the staged SKILL.md holds "# from repo source". The
+    # content equality is the right-reason RED: the source is wrong, not the install.
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    staged_skill_md: Path = state_root / "staged" / "skill" / "demo-skill" / "SKILL.md"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert skill_unit_id("demo-skill") in final_state.units
+    assert staged_skill_md.read_text(encoding="utf-8") == fixture_content

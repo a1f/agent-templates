@@ -3,6 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["questionary", "rich"]
 # ///
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -65,6 +66,14 @@ Flags:
 KNOWN_TOKENS: Final[frozenset[str]] = frozenset(
     {"--version", "-h", "--help", "install", "uninstall", "update"}
 )
+
+
+def _source_root() -> Path:
+    """Resolve where skill sources are read from, honoring AT_SOURCE_ROOT so a
+    subprocess (e.g. the e2e harness) can point the installer at a fixture tree;
+    falls back to the repo's REPO_ROOT when the override is unset."""
+    override: str | None = os.environ.get("AT_SOURCE_ROOT")
+    return Path(override) if override else REPO_ROOT
 
 
 def _skill_marker(name: str, installed: frozenset[str]) -> str:
@@ -189,7 +198,7 @@ def _install_named_skills(names: list[str]) -> int:
     )
     apply_skill_reconcile(
         plan=plan,
-        source_root=REPO_ROOT,
+        source_root=_source_root(),
         state_root=STATE_ROOT,
         claude_root=CLAUDE_ROOT,
         state=state,
@@ -213,7 +222,7 @@ def _uninstall_named_skills(names: list[str]) -> int:
     )
     apply_skill_reconcile(
         plan=plan,
-        source_root=REPO_ROOT,
+        source_root=_source_root(),
         state_root=STATE_ROOT,
         claude_root=CLAUDE_ROOT,
         state=state,
