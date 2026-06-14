@@ -18,7 +18,7 @@ from at import (
     main,
     skill_rows,
 )
-from catalog import Catalog, Unit, skill_unit_id
+from catalog import Catalog, Unit, list_skills, load_catalog, skill_unit_id
 from hashing import hash_unit
 from state import State, load_state
 
@@ -801,6 +801,59 @@ def test_multiple_skill_flags_install_all_named_skills_additively(
     final_state: State = load_state(state_root)
     assert exit_code == 0
     for name in ("demo-a", "demo-b", "demo-c"):
+        assert (claude_root / "skills" / name).is_symlink()
+        assert (state_root / "staged" / "skill" / name).exists()
+        assert skill_unit_id(name) in final_state.units
+
+
+def test_install_all_flag_installs_every_catalog_skill_non_interactively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for all three catalog skills exist and nothing is installed up front,
+    # so a clean --all run must stage, link, and record every one of them.
+    for name in ("demo-a", "demo-b", "demo-c"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-c"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Installing every skill must never open the TUI: route each questionary prompt to a
+    # factory that fails loudly, so a regression that falls back through launch_tui's
+    # select/checkbox/confirm trips this guard instead of waiting on a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--all", "--non-interactive"])
+
+    # Derive the expected set from the catalog so the check tracks every declared skill,
+    # and pin it non-empty so the per-skill loop can't pass vacuously. Today --all is
+    # unhandled, so main falls through to launch_tui and installs nothing: the first
+    # is_symlink assertion below is the right-reason RED.
+    expected_skills: list[str] = list_skills(load_catalog(catalog_file))
+    final_state: State = load_state(state_root)
+    assert exit_code == 0
+    assert expected_skills == ["demo-a", "demo-b", "demo-c"]
+    for name in expected_skills:
         assert (claude_root / "skills" / name).is_symlink()
         assert (state_root / "staged" / "skill" / name).exists()
         assert skill_unit_id(name) in final_state.units

@@ -215,6 +215,9 @@ def main(argv: list[str]) -> int:
             argv[i + 1] for i, token in enumerate(argv) if token == "--skill"
         ]
         return _install_named_skills(skill_names)
+    if argv and argv[0] == "install" and "--all" in argv:
+        all_skills: list[str] = list_skills(load_catalog(CATALOG_PATH))
+        return _install_named_skills(all_skills)
     return launch_tui()
 
 
