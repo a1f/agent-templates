@@ -84,3 +84,34 @@ def test_detect_drift_upstream_changed_reflects_whether_source_matches_recorded(
         ).upstream_changed
         is True
     )
+
+
+def test_detect_drift_locally_edited_reflects_whether_staged_matches_recorded(
+    tmp_path: Path,
+) -> None:
+    installed_bytes: bytes = b"# Reviewer\n\nReviews code.\n"
+
+    # `recorded` is the install-time hash; hold the repo `source` equal to it in
+    # both scenarios so only the staged (local-edit) axis can move the result.
+    source: Path = tmp_path / "source.md"
+    source.write_bytes(installed_bytes)
+    recorded: str = hash_unit(source)
+
+    pristine_staged: Path = tmp_path / "pristine.md"
+    pristine_staged.write_bytes(installed_bytes)
+
+    edited_staged: Path = tmp_path / "edited.md"
+    edited_staged.write_bytes(installed_bytes + b"\n## Hand-edited note\n")
+
+    assert (
+        detect_drift(
+            source=source, staged=pristine_staged, recorded=recorded
+        ).locally_edited
+        is False
+    )
+    assert (
+        detect_drift(
+            source=source, staged=edited_staged, recorded=recorded
+        ).locally_edited
+        is True
+    )

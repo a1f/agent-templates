@@ -32,6 +32,7 @@ class Drift:
 def detect_drift(*, source: Path, staged: Path, recorded: str) -> Drift:
     """Reports how an installed unit diverges from its recorded install-time hash
     so a reconcile step can choose between updating it and preserving it."""
-    # Only the upstream axis is pinned by a test so far; the staged-vs-recorded
-    # local-edit axis lands in a later slice.
-    return Drift(upstream_changed=hash_unit(source) != recorded, locally_edited=False)
+    return Drift(
+        upstream_changed=hash_unit(source) != recorded,
+        locally_edited=hash_unit(staged) != recorded,
+    )
