@@ -6,7 +6,11 @@ name = "at-installer"
 version = "0.2.0"
 description = "Interactive installer for agent-templates."
 requires-python = ">=3.11"
-dependencies = ["questionary>=2", "rich>=13"]
+dependencies = [
+    "click>=8.4.1",
+    "questionary>=2",
+    "rich>=13",
+]
 
 [dependency-groups]
 dev = [
