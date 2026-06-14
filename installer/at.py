@@ -63,7 +63,7 @@ Flags:
 """
 
 KNOWN_TOKENS: Final[frozenset[str]] = frozenset(
-    {"--version", "-h", "--help", "install", "update"}
+    {"--version", "-h", "--help", "install", "uninstall", "update"}
 )
 
 
@@ -197,6 +197,30 @@ def _install_named_skills(names: list[str]) -> int:
     return 0
 
 
+def _uninstall_named_skills(names: list[str]) -> int:
+    """Remove every named skill without the TUI, so `at uninstall --skill <name> ...`
+    is a scriptable path that drives the same declarative reconcile the menu does.
+    Uninstall is subtractive: the named skills drop out of whatever is installed,
+    and every other installed skill stays ticked and thus untouched."""
+    catalog: Catalog = load_catalog(CATALOG_PATH)
+    state: State = load_state(STATE_ROOT)
+    installed: set[str] = {
+        n for n in list_skills(catalog) if skill_unit_id(n) in state.units
+    }
+    ticked: frozenset[str] = frozenset(installed - set(names))
+    plan: ReconcilePlan = plan_skill_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+    apply_skill_reconcile(
+        plan=plan,
+        source_root=REPO_ROOT,
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        state=state,
+    )
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if "--version" in argv:
         print(f"at {AT_VERSION}")
@@ -218,6 +242,11 @@ def main(argv: list[str]) -> int:
     if argv and argv[0] == "install" and "--all" in argv:
         all_skills: list[str] = list_skills(load_catalog(CATALOG_PATH))
         return _install_named_skills(all_skills)
+    if argv and argv[0] == "uninstall" and "--skill" in argv:
+        removed_names: list[str] = [
+            argv[i + 1] for i, token in enumerate(argv) if token == "--skill"
+        ]
+        return _uninstall_named_skills(removed_names)
     return launch_tui()
 
 

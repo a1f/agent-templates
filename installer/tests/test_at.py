@@ -857,3 +857,66 @@ def test_install_all_flag_installs_every_catalog_skill_non_interactively(
         assert (claude_root / "skills" / name).is_symlink()
         assert (state_root / "staged" / "skill" / name).exists()
         assert skill_unit_id(name) in final_state.units
+
+
+def test_uninstall_skill_flag_removes_named_skill_leaving_others_installed(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for both skills exist and both are installed up front, so a
+    # targeted uninstall must drop only demo-a and leave demo-b fully in place.
+    state: State = load_state(state_root)
+    for name in ("demo-a", "demo-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+        state = install_skill(
+            name=name,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Uninstall must remove the skill without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls
+    # back through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["uninstall", "--skill", "demo-a"])
+
+    # Today `uninstall` is an unknown subcommand, so main returns 2 and removes
+    # nothing: demo-a's link, staging, and state entry all survive, making the
+    # exit-zero and demo-a-removed assertions the right-reason RED.
+    final_state: State = load_state(state_root)
+    demo_a_link: Path = claude_root / "skills" / "demo-a"
+    demo_a_staging: Path = state_root / "staged" / "skill" / "demo-a"
+    demo_b_link: Path = claude_root / "skills" / "demo-b"
+    demo_b_staging: Path = state_root / "staged" / "skill" / "demo-b"
+    assert exit_code == 0
+    assert not demo_a_link.exists() and not demo_a_link.is_symlink()
+    assert not demo_a_staging.exists()
+    assert skill_unit_id("demo-a") not in final_state.units
+    assert demo_b_link.is_symlink()
+    assert demo_b_staging.exists()
+    assert skill_unit_id("demo-b") in final_state.units
