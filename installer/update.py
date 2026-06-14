@@ -4,6 +4,7 @@ from typing import Final
 from actions import install_skill
 from catalog import skill_unit, skill_unit_id
 from hashing import Drift, detect_drift
+from placement import backup_staged_unit
 from state import State
 
 # The kind→subdir layout is mirrored from actions.py for now; a follow-up
@@ -20,15 +21,19 @@ def update_skill(
     claude_root: Path,
     state: State,
 ) -> State:
-    """Skip re-staging a skill whose upstream source is unchanged, so a user's
-    local edit to the staged copy survives an update instead of being clobbered
-    by an identical re-stage."""
+    """Reconcile a skill against its upstream source: leave a local edit to the
+    staged copy untouched when upstream is unchanged, otherwise rescue it to
+    "<name>.bak" before re-staging the new source, so an edit is never lost."""
     source: Path = source_root / _SKILLS_DIRNAME / name
     staged: Path = state_root / _STAGED_DIRNAME / skill_unit(name).kind / name
     recorded: str = state.units[skill_unit_id(name)]
     drift: Drift = detect_drift(source=source, staged=staged, recorded=recorded)
     if not drift.upstream_changed:
         return state
+    if drift.locally_edited:
+        backup_staged_unit(
+            unit=skill_unit(name), staged_root=state_root / _STAGED_DIRNAME
+        )
     return install_skill(
         name=name,
         source_root=source_root,

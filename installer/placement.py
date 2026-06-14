@@ -4,8 +4,9 @@ from typing import Final
 
 from catalog import Unit
 
-# A real file/dir displaced by linking is moved aside to "<name>.bak" so its
-# contents survive the install rather than being clobbered by our symlink.
+# The shared "<name>.bak" convention: an entry about to be overwritten is moved
+# aside so its contents survive — a real file displaced by our symlink, or a
+# hand-edited staged tree rescued before a re-stage — rather than being clobbered.
 _BACKUP_SUFFIX: Final[str] = ".bak"
 
 
@@ -42,6 +43,19 @@ def unstage_unit(*, unit: Unit, staged_root: Path) -> None:
     tree or the single file it laid down."""
     staged_path: Path = staged_root / unit.kind / unit.name
     _remove_staged_entry(staged_path)
+
+
+def backup_staged_unit(*, unit: Unit, staged_root: Path) -> Path | None:
+    """Move a hand-edited staged unit aside to "<name>.bak" so the user's local
+    edit survives a following re-stage that overwrites the staged tree, returning
+    None when nothing is staged to rescue."""
+    staged_path: Path = staged_root / unit.kind / unit.name
+    if not staged_path.exists():
+        return None
+    backup_path: Path = staged_path.with_name(staged_path.name + _BACKUP_SUFFIX)
+    _remove_staged_entry(backup_path)  # supersede any prior .bak, idempotently
+    staged_path.replace(backup_path)
+    return backup_path
 
 
 def link_unit(*, staged_path: Path, link_path: Path) -> Path:

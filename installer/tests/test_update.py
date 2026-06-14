@@ -95,3 +95,54 @@ def test_update_skill_preserves_local_edit_when_upstream_unchanged(
     assert not backup_path.exists()
     assert result.units[unit_id] == install_hash
     assert load_state(state_root).units[unit_id] == install_hash
+
+
+def test_update_skill_backs_up_local_edit_before_restaging_upstream_change(
+    tmp_path: Path,
+) -> None:
+    original_content: str = "# Demo Skill\n\nOriginal upstream copy.\n"
+    hand_edited_content: str = "# Demo Skill\n\nHand-edited; must be rescued.\n"
+    updated_content: str = "# Demo Skill\n\nRevised upstream copy.\n"
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo-skill"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text(original_content, encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    installed_state: State = install_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    unit_id: str = skill_unit_id("demo-skill")
+    install_hash: str = installed_state.units[unit_id]
+
+    # A user's edit to their installed skill lands in the staged tree (the source
+    # of truth behind the live symlink); here upstream changes too, so the update
+    # must rescue the hand-edit to .bak before the re-stage overwrites it.
+    staged_path: Path = state_root / "staged" / "skill" / "demo-skill"
+    staged_skill_md: Path = staged_path / "SKILL.md"
+    staged_skill_md.write_text(hand_edited_content, encoding="utf-8")
+    (skill_source / "SKILL.md").write_text(updated_content, encoding="utf-8")
+
+    result: State = update_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    backup_path: Path = staged_path.with_name(staged_path.name + ".bak")
+    refreshed_hash: str = hash_unit(skill_source)
+
+    assert staged_skill_md.read_text(encoding="utf-8") == updated_content
+    assert backup_path.exists()
+    assert (backup_path / "SKILL.md").read_text(encoding="utf-8") == hand_edited_content
+    assert result.units[unit_id] == refreshed_hash
+    assert result.units[unit_id] != install_hash
+    assert load_state(state_root).units[unit_id] == refreshed_hash
