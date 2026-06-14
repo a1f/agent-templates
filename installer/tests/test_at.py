@@ -747,3 +747,60 @@ def test_install_skill_flag_installs_named_skill_non_interactively(
     assert skill_link.is_symlink()
     assert skill_staging.exists()
     assert skill_unit_id("demo-skill") in final_state.units
+
+
+def test_multiple_skill_flags_install_all_named_skills_additively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real sources for all three skills exist, but only demo-a is installed up front,
+    # so an additive multi-flag install must keep demo-a and add both demo-b and demo-c.
+    for name in ("demo-a", "demo-b", "demo-c"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+    install_skill(
+        name="demo-a",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-b"\n\n'
+        '[[units]]\nkind = "skill"\nname = "demo-c"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Every named skill must be placed without ever opening the TUI: route each
+    # questionary prompt to a factory that fails loudly, so a regression that falls
+    # back through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "demo-b", "--skill", "demo-c"])
+
+    # Each --skill flag must install its skill while the pre-installed demo-a survives:
+    # today's parser reads only the first --skill (demo-b), so demo-c is never placed
+    # and its assertions are the right-reason RED; demo-a and demo-b already pass.
+    final_state: State = load_state(state_root)
+    assert exit_code == 0
+    for name in ("demo-a", "demo-b", "demo-c"):
+        assert (claude_root / "skills" / name).is_symlink()
+        assert (state_root / "staged" / "skill" / name).exists()
+        assert skill_unit_id(name) in final_state.units
