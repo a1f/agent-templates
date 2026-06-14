@@ -978,3 +978,67 @@ def test_install_skill_stages_source_from_at_source_root_override(
     assert skill_link.is_symlink()
     assert skill_unit_id("demo-skill") in final_state.units
     assert staged_skill_md.read_text(encoding="utf-8") == fixture_content
+
+
+def test_install_skill_loads_catalog_from_at_catalog_override(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A real source for target-skill lives under REPO_ROOT (AT_SOURCE_ROOT stays unset),
+    # so once the override catalog puts target-skill in the plan the install has a tree
+    # to stage from.
+    source: Path = repo_root / "skills" / "target-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# target-skill\n", encoding="utf-8")
+
+    # The DEFAULT catalog is a decoy: a valid, non-empty catalog that lists only
+    # other-skill and never target-skill. The e2e harness runs the real `at` against a
+    # fixture catalog, so loading CATALOG_PATH instead of AT_CATALOG must place nothing.
+    default_catalog: Path = tmp_path / "default-catalog.toml"
+    default_catalog.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "other-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", default_catalog)
+
+    # The OVERRIDE catalog lists target-skill; pointing AT_CATALOG at it must be what
+    # makes the reconcile see target-skill at all.
+    override_catalog: Path = tmp_path / "override-catalog.toml"
+    override_catalog.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "target-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AT_CATALOG", str(override_catalog))
+
+    # The override path must place the skill without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls back
+    # through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "target-skill"])
+
+    # Today the CLI always loads CATALOG_PATH (the decoy listing only other-skill), so
+    # target-skill is absent from the catalog, never enters the reconcile plan, and the
+    # empty plan is a clean exit-0 no-op: the is_symlink/staging/state assertions are
+    # the right-reason RED. Once AT_CATALOG is honored, the override catalog lists
+    # target-skill and the install places it.
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "target-skill"
+    skill_staging: Path = state_root / "staged" / "skill" / "target-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert skill_staging.exists()
+    assert skill_unit_id("target-skill") in final_state.units

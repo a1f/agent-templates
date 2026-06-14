@@ -76,6 +76,14 @@ def _source_root() -> Path:
     return Path(override) if override else REPO_ROOT
 
 
+def _catalog_path() -> Path:
+    """Resolve which catalog the non-interactive CLI loads, honoring AT_CATALOG so a
+    subprocess (e.g. the e2e harness) can point at a fixture catalog; falls back to the
+    repo's CATALOG_PATH when the override is unset."""
+    override: str | None = os.environ.get("AT_CATALOG")
+    return Path(override) if override else CATALOG_PATH
+
+
 def _skill_marker(name: str, installed: frozenset[str]) -> str:
     if skill_unit_id(name) in installed:
         return MARKER_INSTALLED
@@ -187,7 +195,7 @@ def _install_named_skills(names: list[str]) -> int:
     """Install every named skill without the TUI, so `at install --skill <name> ...`
     is a scriptable path that drives the same declarative reconcile the menu does.
     Install is additive: the named skills join whatever is already installed."""
-    catalog: Catalog = load_catalog(CATALOG_PATH)
+    catalog: Catalog = load_catalog(_catalog_path())
     state: State = load_state(STATE_ROOT)
     installed: set[str] = {
         n for n in list_skills(catalog) if skill_unit_id(n) in state.units
@@ -211,7 +219,7 @@ def _uninstall_named_skills(names: list[str]) -> int:
     is a scriptable path that drives the same declarative reconcile the menu does.
     Uninstall is subtractive: the named skills drop out of whatever is installed,
     and every other installed skill stays ticked and thus untouched."""
-    catalog: Catalog = load_catalog(CATALOG_PATH)
+    catalog: Catalog = load_catalog(_catalog_path())
     state: State = load_state(STATE_ROOT)
     installed: set[str] = {
         n for n in list_skills(catalog) if skill_unit_id(n) in state.units
@@ -249,7 +257,7 @@ def main(argv: list[str]) -> int:
         ]
         return _install_named_skills(skill_names)
     if argv and argv[0] == "install" and "--all" in argv:
-        all_skills: list[str] = list_skills(load_catalog(CATALOG_PATH))
+        all_skills: list[str] = list_skills(load_catalog(_catalog_path()))
         return _install_named_skills(all_skills)
     if argv and argv[0] == "uninstall" and "--skill" in argv:
         removed_names: list[str] = [
