@@ -174,6 +174,29 @@ def _run_update() -> int:
     return 0
 
 
+def _install_named_skill(name: str) -> int:
+    """Install one named skill without the TUI, so `at install --skill <name>` is a
+    scriptable path that drives the same declarative reconcile the menu does. Install
+    is additive: the named skill joins whatever is already installed."""
+    catalog: Catalog = load_catalog(CATALOG_PATH)
+    state: State = load_state(STATE_ROOT)
+    installed: set[str] = {
+        n for n in list_skills(catalog) if skill_unit_id(n) in state.units
+    }
+    ticked: frozenset[str] = frozenset(installed | {name})
+    plan: ReconcilePlan = plan_skill_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+    apply_skill_reconcile(
+        plan=plan,
+        source_root=REPO_ROOT,
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        state=state,
+    )
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if "--version" in argv:
         print(f"at {AT_VERSION}")
@@ -187,6 +210,9 @@ def main(argv: list[str]) -> int:
         return 2
     if argv and argv[0] == "update":
         return _run_update()
+    if argv and argv[0] == "install" and "--skill" in argv:
+        skill_name: str = argv[argv.index("--skill") + 1]
+        return _install_named_skill(skill_name)
     return launch_tui()
 
 
