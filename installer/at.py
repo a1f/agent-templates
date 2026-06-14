@@ -3,6 +3,7 @@
 # requires-python = ">=3.11"
 # dependencies = ["questionary", "rich"]
 # ///
+import subprocess
 import sys
 from pathlib import Path
 from typing import Final
@@ -21,6 +22,7 @@ from rich.panel import Panel
 from catalog import Catalog, list_skills, load_catalog, skill_unit_id
 from reconcile import ReconcilePlan, apply_skill_reconcile, plan_skill_reconcile
 from state import State, load_state
+from update import update_installed_skills
 
 AT_VERSION: Final[str] = "0.2.0"
 
@@ -53,6 +55,7 @@ Usage: at [command]
 
 Commands:
   install        Launch the interactive menu
+  update         Pull the repo and refresh installed skills
 
 Flags:
   -h, --help     Show this help screen and exit
@@ -60,7 +63,7 @@ Flags:
 """
 
 KNOWN_TOKENS: Final[frozenset[str]] = frozenset(
-    {"--version", "-h", "--help", "install"}
+    {"--version", "-h", "--help", "install", "update"}
 )
 
 
@@ -155,6 +158,22 @@ def launch_tui() -> int:
         return 0
 
 
+def _run_update() -> int:
+    """Fast-forward the repo, then refresh only the installed skills whose upstream
+    content changed, so `at update` is a single non-interactive sync."""
+    subprocess.run(["git", "pull", "--ff-only"], cwd=REPO_ROOT, check=True)
+    catalog: Catalog = load_catalog(CATALOG_PATH)
+    state: State = load_state(STATE_ROOT)
+    update_installed_skills(
+        source_root=REPO_ROOT,
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        catalog=catalog,
+        state=state,
+    )
+    return 0
+
+
 def main(argv: list[str]) -> int:
     if "--version" in argv:
         print(f"at {AT_VERSION}")
@@ -166,6 +185,8 @@ def main(argv: list[str]) -> int:
         print(f"error: unknown argument '{argv[0]}'", file=sys.stderr)
         print("Try 'at --help' for usage.", file=sys.stderr)
         return 2
+    if argv and argv[0] == "update":
+        return _run_update()
     return launch_tui()
 
 

@@ -1,3 +1,4 @@
+import subprocess
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from at import (
     skill_rows,
 )
 from catalog import Catalog, Unit, skill_unit_id
+from hashing import hash_unit
 from state import State, load_state
 
 
@@ -638,3 +640,64 @@ def test_esc_at_tab_menu_exits_cleanly(
     captured: str = capsys.readouterr().out
     assert exit_code == 0
     assert TAB_PLACEHOLDER not in captured
+
+
+def test_update_pulls_repo_then_refreshes_installed_skill(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Install demo-skill from its repo source through the real public action, so
+    # state, staging, and the live symlink all exist before the update runs.
+    source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# demo-skill\n", encoding="utf-8")
+    install_skill(
+        name="demo-skill",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+    install_hash: str = load_state(state_root).units[skill_unit_id("demo-skill")]
+
+    # Stand in for what `git pull` fetched: the faked run below shells out to
+    # nothing, so rewriting the source here is the only "upstream" change, leaving
+    # the installed skill stale against its now-updated repo source.
+    source.write_text("# demo-skill upstream change\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # subprocess.run is the one true external boundary (process exec + network):
+    # record each call and hand back a success so the faked pull never runs git.
+    recorded_runs: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        recorded_runs.append((args, kwargs))
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    exit_code: int = main(["update"])
+
+    skill_source: Path = repo_root / "skills" / "demo-skill"
+    final_hash: str = load_state(state_root).units[skill_unit_id("demo-skill")]
+    assert exit_code == 0
+    assert len(recorded_runs) == 1
+    pull_args: tuple[object, ...] = recorded_runs[0][0]
+    pull_kwargs: dict[str, object] = recorded_runs[0][1]
+    assert pull_args[0] == ["git", "pull", "--ff-only"]
+    assert pull_kwargs["cwd"] == repo_root
+    assert final_hash == hash_unit(skill_source)
+    assert final_hash != install_hash
