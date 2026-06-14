@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Final
 
 from catalog import skill_unit, skill_unit_id
+from hashing import hash_unit
 from placement import link_unit, stage_unit, unlink_unit, unstage_unit
 from state import State, save_state
 
@@ -13,10 +14,6 @@ from state import State, save_state
 # "<claude>/skills/<name>", matching ~/.claude's per-kind directories.
 _STAGED_DIRNAME: Final[str] = "staged"
 _SKILLS_DIRNAME: Final[str] = "skills"
-
-# content hash is recorded in the update slice (4.1); presence of the unit id is
-# what marks a skill "installed" today, so the value is a deliberate placeholder.
-_UNHASHED: Final[str] = ""
 
 
 def install_skill(
@@ -37,9 +34,10 @@ def install_skill(
         unit=skill_unit(name), source=source, staged_root=state_root / _STAGED_DIRNAME
     )
     link_unit(staged_path=staged_path, link_path=claude_root / _SKILLS_DIRNAME / name)
+    content_hash: str = hash_unit(staged_path)
     new_state: State = State(
         version=state.version,
-        units={**state.units, skill_unit_id(name): _UNHASHED},
+        units={**state.units, skill_unit_id(name): content_hash},
     )
     save_state(new_state, state_root)
     return new_state
