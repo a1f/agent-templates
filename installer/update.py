@@ -4,7 +4,7 @@ from actions import install_skill
 from catalog import Catalog, list_skills, skill_unit, skill_unit_id
 from constants import SKILLS_DIRNAME, STAGED_DIRNAME
 from hashing import Drift, detect_drift
-from placement import backup_staged_unit
+from placement import backup_staged_unit, staged_unit_path
 from state import State
 
 
@@ -20,7 +20,9 @@ def update_skill(
     staged copy untouched when upstream is unchanged, otherwise rescue it to
     "<name>.bak" before re-staging the new source, so an edit is never lost."""
     source: Path = source_root / SKILLS_DIRNAME / name
-    staged: Path = state_root / STAGED_DIRNAME / skill_unit(name).kind / name
+    staged: Path = staged_unit_path(
+        unit=skill_unit(name), staged_root=state_root / STAGED_DIRNAME
+    )
     recorded: str = state.units[skill_unit_id(name)]
     drift: Drift = detect_drift(source=source, staged=staged, recorded=recorded)
     if not drift.upstream_changed:

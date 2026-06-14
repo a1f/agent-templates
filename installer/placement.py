@@ -20,10 +20,16 @@ def _remove_staged_entry(path: Path) -> None:
         path.unlink()
 
 
+def staged_unit_path(*, unit: Unit, staged_root: Path) -> Path:
+    """Own the "<kind>/<name>" staged-layout decision in one place, so callers
+    locate a unit's staged copy without re-encoding the path this module lays down."""
+    return staged_root / unit.kind / unit.name
+
+
 def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
     """Lay a unit out under "<kind>/<name>" in a staging area first, so the real
     install can swap a fully-built tree into place instead of writing live."""
-    destination: Path = staged_root / unit.kind / unit.name
+    destination: Path = staged_unit_path(unit=unit, staged_root=staged_root)
     destination.parent.mkdir(parents=True, exist_ok=True)
     # Clear any prior staging of this unit so a re-stage fully supersedes it,
     # leaving no stale files behind, rather than colliding with the old tree.
@@ -41,7 +47,7 @@ def unstage_unit(*, unit: Unit, staged_root: Path) -> None:
     """Tear down a unit's staged entry at "<kind>/<name>" so the staging area no
     longer holds it — the inverse of stage_unit, dropping either the directory
     tree or the single file it laid down."""
-    staged_path: Path = staged_root / unit.kind / unit.name
+    staged_path: Path = staged_unit_path(unit=unit, staged_root=staged_root)
     _remove_staged_entry(staged_path)
 
 
@@ -49,7 +55,7 @@ def backup_staged_unit(*, unit: Unit, staged_root: Path) -> Path | None:
     """Move a hand-edited staged unit aside to "<name>.bak" so the user's local
     edit survives a following re-stage that overwrites the staged tree, returning
     None when nothing is staged to rescue."""
-    staged_path: Path = staged_root / unit.kind / unit.name
+    staged_path: Path = staged_unit_path(unit=unit, staged_root=staged_root)
     if not staged_path.exists():
         return None
     backup_path: Path = staged_path.with_name(staged_path.name + _BACKUP_SUFFIX)
