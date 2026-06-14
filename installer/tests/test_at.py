@@ -1112,9 +1112,9 @@ def test_malformed_skill_request_exits_two_without_crash_or_tui(
 
     exit_code: int = main(argv)
 
-    # Today a `--skill` with no value indexes argv past its end and raises IndexError,
-    # while a bare `uninstall` falls through to launch_tui and returns 0: each form is
-    # a crash or a wrong exit code, not the clean exit-2 usage error pinned here.
+    # A malformed skills request is a clean usage error: a `--skill` with no value, or
+    # a bare `uninstall` with no `--skill`, exits 2 with a stderr message. It is never
+    # a crash and never the TUI; a bare `install`, by contrast, still opens the menu.
     captured_err: str = capsys.readouterr().err
     assert exit_code == 2
     assert captured_err.strip() != ""
