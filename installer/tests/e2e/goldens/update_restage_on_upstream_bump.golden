@@ -1,0 +1,8 @@
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/skill
+dir .claude/at/staged/skill/demo-skill
+file .claude/at/staged/skill/demo-skill/SKILL.md 472737eb2b385b9628a95e727f43e775281c2488e42dc86727a5e664efcc2c98
+json .claude/at/state.json {"units":{"skill/demo-skill":"01f24f5f7ed336e9818978b3728528f84728ad76be4bf3e36f111a3282c9bf35"},"version":1}
+dir .claude/skills
+link .claude/skills/demo-skill -> .claude/at/staged/skill/demo-skill
