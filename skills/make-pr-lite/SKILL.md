@@ -24,13 +24,15 @@ guarantees that.)
 
 ## Runtime resolution
 
-- **repo_root** — this repo; source of `gates/` and `rules/`.
-- **rules_root** — `<repo_root>/rules`; pass rule files as absolute paths (a subagent's cwd is the
+- **skill_root** — the directory this `SKILL.md` lives in. It bundles the `rules/` and `gates/`
+  this skill needs, so they travel with the skill on install — resolve both from here, never from
+  the target repo or a repo checkout.
+- **rules_root** — `<skill_root>/rules`; pass rule files as absolute paths (a subagent's cwd is the
   target repo, so bare names won't resolve).
 - **target_cwd** — the repo being changed; run every `git`/gate command there.
 - **base** — user/spec-named → else `git merge-base HEAD origin/main` → else `… main` → else stop
   and ask.
-- **gates** — preflight: pick `<repo_root>/gates/<lang>.json` by the task's language(s) /
+- **gates** — preflight: pick `<skill_root>/gates/<lang>.json` by the task's language(s) /
   `allowed_paths`. After the coder runs, re-check against `git diff --name-only <base>...HEAD`. A
   changed language with no profile → stop and report.
 - **rules to pass** — always `design-principles.md`; `tdd.md` for behavioral work; the language
