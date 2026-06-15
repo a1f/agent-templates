@@ -1,0 +1,6 @@
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/skill
+json .claude/at/state.json {"units":{},"version":1}
+dir .claude/skills
+file .claude/skills/demo-skill bee99ef5c0168550bd69824c01c1b21194da49546240e48354ff1f16c6f61b95

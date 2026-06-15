@@ -1,0 +1,10 @@
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/skill
+dir .claude/at/staged/skill/demo-skill
+dir .claude/at/staged/skill/demo-skill.bak
+file .claude/at/staged/skill/demo-skill.bak/SKILL.md 11d91c57ebd2e6bb00143179f043a745217c7bc41947757d42e8029fc6f965e2
+file .claude/at/staged/skill/demo-skill/SKILL.md e6cb6d49688214ac8c404cc20587ebe74c513df17ef9b211adb94073d04418f2
+json .claude/at/state.json {"units":{"skill/demo-skill":"b1a55afd6a4b67a2d99ddb4a949b7c49d5ccb0165967c72e0e9a4ab40a711451"},"version":1}
+dir .claude/skills
+link .claude/skills/demo-skill -> .claude/at/staged/skill/demo-skill

@@ -167,13 +167,18 @@ def launch_tui() -> int:
 
 
 def _run_update() -> int:
-    """Fast-forward the repo, then refresh only the installed skills whose upstream
-    content changed, so `at update` is a single non-interactive sync."""
-    subprocess.run(["git", "pull", "--ff-only"], cwd=REPO_ROOT, check=True)
-    catalog: Catalog = load_catalog(CATALOG_PATH)
+    """Fast-forward the repo when sourcing from the real checkout, then refresh only
+    the installed skills whose upstream content changed, so `at update` is a single
+    non-interactive sync."""
+    source_root: Path = _source_root()
+    # Only pull against the real repo checkout: an AT_SOURCE_ROOT override points the
+    # update at a fixture tree that has no upstream remote to fast-forward.
+    if source_root == REPO_ROOT:
+        subprocess.run(["git", "pull", "--ff-only"], cwd=REPO_ROOT, check=True)
+    catalog: Catalog = load_catalog(_catalog_path())
     state: State = load_state(STATE_ROOT)
     update_installed_skills(
-        source_root=REPO_ROOT,
+        source_root=source_root,
         state_root=STATE_ROOT,
         claude_root=CLAUDE_ROOT,
         catalog=catalog,

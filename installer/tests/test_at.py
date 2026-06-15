@@ -704,6 +704,85 @@ def test_update_pulls_repo_then_refreshes_installed_skill(
     assert final_hash != install_hash
 
 
+def test_update_restages_from_at_source_root_override_without_pulling(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    override_source: Path = tmp_path / "override"
+    repo_decoy: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_decoy)
+
+    # The same skill lives under the override and the REPO_ROOT decoy with deliberately
+    # distinct content, so the staged copy's text alone reveals which root the update
+    # re-staged from. AT_SOURCE_ROOT must win: the e2e harness points it at a fixture
+    # tree, so `at update` sources from the fixture and has no checkout to `git pull`.
+    original_content: str = "# demo-skill original override\n"
+    decoy_content: str = "# demo-skill decoy repo\n"
+    override_skill: Path = override_source / "skills" / "demo-skill" / "SKILL.md"
+    override_skill.parent.mkdir(parents=True)
+    override_skill.write_text(original_content, encoding="utf-8")
+    decoy_skill: Path = repo_decoy / "skills" / "demo-skill" / "SKILL.md"
+    decoy_skill.parent.mkdir(parents=True)
+    decoy_skill.write_text(decoy_content, encoding="utf-8")
+    monkeypatch.setenv("AT_SOURCE_ROOT", str(override_source))
+
+    # Install demo-skill from the override through the real public action, so state,
+    # staging, and the live symlink all exist — staged from the override — before the
+    # update runs.
+    install_skill(
+        name="demo-skill",
+        source_root=override_source,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    # Simulate an upstream bump in the override fixture: rewrite the source to content
+    # distinct from both the original install and the REPO_ROOT decoy, leaving the
+    # installed skill stale against its now-updated override source.
+    new_content: str = "# demo-skill new override\n"
+    override_skill.write_text(new_content, encoding="utf-8")
+
+    # Hold the catalog identical on both seams (module constant and AT_CATALOG env) so
+    # it is never the variable under test: only the source root is.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setenv("AT_CATALOG", str(catalog_file))
+
+    # subprocess.run is the one true external boundary (process exec + network):
+    # record each call and hand back a success, so a stray `git pull` is observed here
+    # rather than shelling out.
+    recorded_runs: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        recorded_runs.append((args, kwargs))
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    exit_code: int = main(["update"])
+
+    # AT_SOURCE_ROOT wins over REPO_ROOT: the update re-stages from the override, so the
+    # staged SKILL.md holds the new override content (not the decoy) and state records
+    # the override's hash. With the source root overridden there is no repo to
+    # fast-forward, so `git pull` never runs and no subprocess is spawned at all.
+    override_skill_dir: Path = override_source / "skills" / "demo-skill"
+    staged_skill_md: Path = state_root / "staged" / "skill" / "demo-skill" / "SKILL.md"
+    final_hash: str = load_state(state_root).units[skill_unit_id("demo-skill")]
+    assert exit_code == 0
+    assert recorded_runs == []
+    assert staged_skill_md.read_text(encoding="utf-8") == new_content
+    assert final_hash == hash_unit(override_skill_dir)
+
+
 def test_install_skill_flag_installs_named_skill_non_interactively(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
