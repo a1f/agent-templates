@@ -63,3 +63,56 @@ def test_update_restages_installed_skill_on_upstream_bump(tmp_path: Path) -> Non
         actual=snapshot_after,
         goldens_dir=GOLDENS_DIR,
     )
+
+
+# A user's own real file that happens to occupy the skill's live path before
+# install, kept deterministic so the backup/restore goldens pin its exact bytes.
+_USER_COLLIDING_NOTE: Final[str] = (
+    "My own demo-skill notes, written before the installer ever ran.\n"
+)
+
+
+@pytest.mark.e2e
+def test_real_file_collision_is_backed_up_and_restored(tmp_path: Path) -> None:
+    home: Path = tmp_path / "home"
+    home.mkdir()
+    catalog: Path = FIXTURES_DIR / "catalog.toml"
+
+    # Seed a real (non-symlink) file exactly where demo-skill will link, so install
+    # must move it aside to "<name>.bak" instead of clobbering the user's data.
+    live_skills_dir: Path = home / ".claude" / "skills"
+    live_skills_dir.mkdir(parents=True)
+    colliding_path: Path = live_skills_dir / "demo-skill"
+    colliding_path.write_text(_USER_COLLIDING_NOTE, encoding="utf-8")
+
+    install_result: subprocess.CompletedProcess[str] = run_at(
+        args=["install", "--skill", "demo-skill", "--non-interactive"],
+        home=home,
+        source_root=FIXTURES_DIR,
+        catalog=catalog,
+    )
+    assert install_result.returncode == 0, install_result.stderr
+
+    # Install moved the user's file to demo-skill.bak and put our symlink in place.
+    snapshot_after_install: str = snapshot(home)
+    assert_matches_golden(
+        name="collision_backup",
+        actual=snapshot_after_install,
+        goldens_dir=GOLDENS_DIR,
+    )
+
+    uninstall_result: subprocess.CompletedProcess[str] = run_at(
+        args=["uninstall", "--skill", "demo-skill"],
+        home=home,
+        source_root=FIXTURES_DIR,
+        catalog=catalog,
+    )
+    assert uninstall_result.returncode == 0, uninstall_result.stderr
+
+    # Uninstall dropped the symlink and restored the user's original file in place.
+    snapshot_after_uninstall: str = snapshot(home)
+    assert_matches_golden(
+        name="collision_restore",
+        actual=snapshot_after_uninstall,
+        goldens_dir=GOLDENS_DIR,
+    )
