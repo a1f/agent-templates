@@ -7,3 +7,7 @@ bundles = []
 [[units]]
 kind = "skill"
 name = "demo-skill"
+
+[[units]]
+kind = "skill"
+name = "demo-skill-two"
