@@ -92,6 +92,10 @@ def assert_matches_golden(*, name: str, actual: str, goldens_dir: Path) -> None:
         goldens_dir.mkdir(parents=True, exist_ok=True)
         golden_path.write_text(actual, encoding="utf-8")
         return
+    if not golden_path.exists():
+        raise AssertionError(
+            f"no golden {name!r}; re-run with AT_BLESS=1 to create it."
+        )
     golden: str = golden_path.read_text(encoding="utf-8")
     if actual == golden:
         return

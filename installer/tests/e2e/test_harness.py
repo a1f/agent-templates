@@ -99,3 +99,22 @@ def test_bless_regenerates_golden_from_actual(
     # a bless followed by a plain run is a no-op rather than a drift failure.
     monkeypatch.delenv("AT_BLESS", raising=False)
     assert_matches_golden(name="demo", actual=fresh_content, goldens_dir=goldens_dir)
+
+
+def test_golden_compare_rejects_missing_golden_with_bless_guidance(
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    # A stray AT_BLESS in the developer's shell would silently bless the absent
+    # golden instead of comparing, so pin the plain compare regime first.
+    monkeypatch.delenv("AT_BLESS", raising=False)
+
+    # Authoring a brand-new scenario begins with no committed golden on disk — the
+    # most common first-run state. Compare mode must meet that with the same
+    # actionable guidance the drift path gives (naming the golden and pointing at
+    # AT_BLESS), not a raw FileNotFoundError leaking out of read_text.
+    with pytest.raises(AssertionError) as exc_info:
+        assert_matches_golden(name="absent", actual="anything\n", goldens_dir=tmp_path)
+    message: str = str(exc_info.value)
+    assert "absent" in message
+    assert "AT_BLESS" in message
