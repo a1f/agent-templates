@@ -1,0 +1,66 @@
+name: installer
+
+# CI for the installer/ uv project. The unit and e2e jobs together run the same gates as
+# locally: `unit` runs ruff-format, ruff-check, mypy, and the non-e2e tests; `e2e` runs only
+# the e2e tests. The e2e job runs without AT_BLESS so a golden-snapshot drift fails the build
+# instead of silently re-blessing.
+# These mirror the gate commands in gates/python.json (the local make-pr gate profile); keep in sync.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "installer/**"
+      - ".github/workflows/installer.yml"
+  pull_request:
+    paths:
+      - "installer/**"
+      - ".github/workflows/installer.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    working-directory: installer
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: installer/uv.lock
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: Check formatting
+        run: uv run ruff format --check .
+      - name: Lint
+        run: uv run ruff check .
+      - name: Type-check
+        run: uv run mypy --strict .
+      - name: Unit tests
+        run: uv run pytest -m "not e2e"
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: installer/uv.lock
+      - name: Sync dependencies
+        run: uv sync --frozen
+      - name: End-to-end tests
+        run: uv run pytest -m e2e
