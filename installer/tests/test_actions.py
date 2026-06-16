@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from actions import install_skill, uninstall_skill
-from catalog import skill_unit_id
+from actions import install_agent, install_skill, uninstall_skill
+from catalog import agent_unit_id, skill_unit_id
 from hashing import hash_unit
 from state import State, load_state
 
@@ -121,3 +121,36 @@ def test_uninstall_skill_undoes_install_and_forgets_unit(tmp_path: Path) -> None
     assert unit_id not in result.units
     assert unit_id not in load_state(state_root).units
     assert unit_id in installed_state.units
+
+
+def test_install_agent_stages_md_file_and_links_into_claude_agents(
+    tmp_path: Path,
+) -> None:
+    agent_content: str = "# Demo Agent\n\nDemonstrates installation.\n"
+    name: str = "demo-agent"
+    source_root: Path = tmp_path / "repo"
+    agent_source: Path = source_root / "agents" / f"{name}.md"
+    agent_source.parent.mkdir(parents=True)
+    agent_source.write_text(agent_content, encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_agent(
+        name=name,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    staged_path: Path = state_root / "staged" / "agent" / name
+    assert staged_path.is_file()
+    assert staged_path.read_text(encoding="utf-8") == agent_content
+
+    link_path: Path = claude_root / "agents" / f"{name}.md"
+    assert link_path.is_symlink()
+    assert link_path.resolve() == staged_path.resolve()
+    assert link_path.read_text(encoding="utf-8") == agent_content
+
+    assert agent_unit_id(name) in result.units
