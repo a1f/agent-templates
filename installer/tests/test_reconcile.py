@@ -2,7 +2,12 @@ from pathlib import Path
 
 from actions import install_skill
 from catalog import Catalog, Unit, skill_unit_id
-from reconcile import ReconcilePlan, apply_skill_reconcile, plan_skill_reconcile
+from reconcile import (
+    ReconcilePlan,
+    apply_skill_reconcile,
+    plan_agent_reconcile,
+    plan_skill_reconcile,
+)
 from state import State, load_state
 
 
@@ -20,6 +25,27 @@ def test_plan_classifies_skills_by_tick_against_installed_state() -> None:
     ticked: frozenset[str] = frozenset({"alpha", "gamma"})
 
     plan: ReconcilePlan = plan_skill_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+
+    assert plan.to_install == ("alpha",)
+    assert plan.to_remove == ("beta",)
+
+
+def test_plan_classifies_agents_by_tick_against_installed_state() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="agent", name="alpha"),
+            Unit(kind="agent", name="beta"),
+            Unit(kind="agent", name="gamma"),
+        ),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={"agent/beta": "hash", "agent/gamma": "hash"})
+    ticked: frozenset[str] = frozenset({"alpha", "gamma"})
+
+    plan: ReconcilePlan = plan_agent_reconcile(
         ticked=ticked, catalog=catalog, state=state
     )
 

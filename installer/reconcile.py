@@ -2,7 +2,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from actions import install_skill, uninstall_skill
-from catalog import Catalog, list_skills, skill_unit_id
+from catalog import (
+    Catalog,
+    agent_unit_id,
+    list_agents,
+    list_skills,
+    skill_unit_id,
+)
 from state import State
 
 
@@ -34,6 +40,24 @@ def plan_skill_reconcile(
     )
     to_remove: tuple[str, ...] = tuple(
         name for name in skills if name in installed and name not in ticked
+    )
+    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+
+
+def plan_agent_reconcile(
+    *, ticked: frozenset[str], catalog: Catalog, state: State
+) -> ReconcilePlan:
+    """Diff the ticked selection against installed state over the catalog's agents,
+    so the apply step works from a decided plan instead of re-deriving the diff."""
+    agents: list[str] = list_agents(catalog)
+    installed: set[str] = {
+        name for name in agents if agent_unit_id(name) in state.units
+    }
+    to_install: tuple[str, ...] = tuple(
+        name for name in agents if name in ticked and name not in installed
+    )
+    to_remove: tuple[str, ...] = tuple(
+        name for name in agents if name in installed and name not in ticked
     )
     return ReconcilePlan(to_install=to_install, to_remove=to_remove)
 
