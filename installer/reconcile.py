@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from actions import install_agent, install_skill, uninstall_agent, uninstall_skill
 from catalog import (
@@ -26,22 +28,36 @@ class ReconcilePlan:
         return not self.to_install and not self.to_remove
 
 
+def _plan_reconcile(
+    *,
+    ticked: frozenset[str],
+    names: list[str],
+    unit_id_of: Callable[[str], str],
+    state: State,
+) -> ReconcilePlan:
+    """Diff the ticked selection against installed state over one kind's units, so
+    both public plan wrappers share one diff instead of re-deriving it per kind."""
+    installed: set[str] = {name for name in names if unit_id_of(name) in state.units}
+    to_install: tuple[str, ...] = tuple(
+        name for name in names if name in ticked and name not in installed
+    )
+    to_remove: tuple[str, ...] = tuple(
+        name for name in names if name in installed and name not in ticked
+    )
+    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+
+
 def plan_skill_reconcile(
     *, ticked: frozenset[str], catalog: Catalog, state: State
 ) -> ReconcilePlan:
     """Diff the ticked selection against installed state over the catalog's skills,
     so the apply step works from a decided plan instead of re-deriving the diff."""
-    skills: list[str] = list_skills(catalog)
-    installed: set[str] = {
-        name for name in skills if skill_unit_id(name) in state.units
-    }
-    to_install: tuple[str, ...] = tuple(
-        name for name in skills if name in ticked and name not in installed
+    return _plan_reconcile(
+        ticked=ticked,
+        names=list_skills(catalog),
+        unit_id_of=skill_unit_id,
+        state=state,
     )
-    to_remove: tuple[str, ...] = tuple(
-        name for name in skills if name in installed and name not in ticked
-    )
-    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
 
 
 def plan_agent_reconcile(
@@ -49,17 +65,70 @@ def plan_agent_reconcile(
 ) -> ReconcilePlan:
     """Diff the ticked selection against installed state over the catalog's agents,
     so the apply step works from a decided plan instead of re-deriving the diff."""
-    agents: list[str] = list_agents(catalog)
-    installed: set[str] = {
-        name for name in agents if agent_unit_id(name) in state.units
-    }
-    to_install: tuple[str, ...] = tuple(
-        name for name in agents if name in ticked and name not in installed
+    return _plan_reconcile(
+        ticked=ticked,
+        names=list_agents(catalog),
+        unit_id_of=agent_unit_id,
+        state=state,
     )
-    to_remove: tuple[str, ...] = tuple(
-        name for name in agents if name in installed and name not in ticked
-    )
-    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+
+
+class _InstallAction(Protocol):
+    """One kind's install primitive: stage the named unit's source and link it live."""
+
+    def __call__(
+        self,
+        *,
+        name: str,
+        source_root: Path,
+        state_root: Path,
+        claude_root: Path,
+        state: State,
+    ) -> State: ...
+
+
+class _UninstallAction(Protocol):
+    """One kind's uninstall primitive: drop the named unit's link and staged copy."""
+
+    def __call__(
+        self,
+        *,
+        name: str,
+        state_root: Path,
+        claude_root: Path,
+        state: State,
+    ) -> State: ...
+
+
+def _apply_reconcile(
+    *,
+    plan: ReconcilePlan,
+    install: _InstallAction,
+    uninstall: _UninstallAction,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned diff by installing then uninstalling each named unit,
+    threading the persisted State through so the final return reflects every action."""
+    current: State = state
+    for name in plan.to_install:
+        current = install(
+            name=name,
+            source_root=source_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    for name in plan.to_remove:
+        current = uninstall(
+            name=name,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    return current
 
 
 def apply_skill_reconcile(
@@ -72,23 +141,15 @@ def apply_skill_reconcile(
 ) -> State:
     """Carry out a planned diff by installing then uninstalling each named skill,
     threading the persisted State through so the final return reflects every action."""
-    current: State = state
-    for name in plan.to_install:
-        current = install_skill(
-            name=name,
-            source_root=source_root,
-            state_root=state_root,
-            claude_root=claude_root,
-            state=current,
-        )
-    for name in plan.to_remove:
-        current = uninstall_skill(
-            name=name,
-            state_root=state_root,
-            claude_root=claude_root,
-            state=current,
-        )
-    return current
+    return _apply_reconcile(
+        plan=plan,
+        install=install_skill,
+        uninstall=uninstall_skill,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state,
+    )
 
 
 def apply_agent_reconcile(
@@ -101,20 +162,12 @@ def apply_agent_reconcile(
 ) -> State:
     """Carry out a planned diff by installing then uninstalling each named agent,
     threading the persisted State through so the final return reflects every action."""
-    current: State = state
-    for name in plan.to_install:
-        current = install_agent(
-            name=name,
-            source_root=source_root,
-            state_root=state_root,
-            claude_root=claude_root,
-            state=current,
-        )
-    for name in plan.to_remove:
-        current = uninstall_agent(
-            name=name,
-            state_root=state_root,
-            claude_root=claude_root,
-            state=current,
-        )
-    return current
+    return _apply_reconcile(
+        plan=plan,
+        install=install_agent,
+        uninstall=uninstall_agent,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state,
+    )
