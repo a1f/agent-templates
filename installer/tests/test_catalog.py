@@ -8,6 +8,7 @@ from catalog import (
     Catalog,
     Package,
     Unit,
+    list_agents,
     list_skills,
     load_catalog,
     skill_unit_id,
@@ -33,6 +34,35 @@ name = "helper"
 [[packages]]
 name = "pack"
 units = ["skill/alpha", "agent/helper"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+
+
+# Two agent units declared out of order (zeta before alpha) plus a skill and a
+# rule, so a single catalog pins both the sort and the non-agent exclusion.
+_AGENTS_FIXTURE: Final[str] = """
+[[units]]
+kind = "agent"
+name = "zeta"
+
+[[units]]
+kind = "agent"
+name = "alpha"
+
+[[units]]
+kind = "skill"
+name = "beta"
+
+[[units]]
+kind = "rule"
+name = "python"
+
+[[packages]]
+name = "pack"
+units = ["agent/alpha"]
 
 [[bundles]]
 name = "everything"
@@ -70,6 +100,14 @@ def test_list_skills_returns_only_skill_names_sorted(tmp_path: Path) -> None:
 
     # Only skill-kind units, and sorted (declaration order is beta, alpha).
     assert list_skills(catalog) == ["alpha", "beta"]
+
+
+def test_list_agents_returns_only_agent_names_sorted(tmp_path: Path) -> None:
+    catalog: Catalog = load_catalog(_write(tmp_path, _AGENTS_FIXTURE))
+
+    # Only agent-kind units, and sorted (declaration order is zeta, alpha); the
+    # skill and rule units must not leak into the agent listing.
+    assert list_agents(catalog) == ["alpha", "zeta"]
 
 
 def test_skill_unit_id_joins_kind_and_name() -> None:

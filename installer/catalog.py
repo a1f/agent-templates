@@ -47,6 +47,7 @@ class Catalog:
 
 
 _SKILL_KIND: Final[str] = "skill"
+_AGENT_KIND: Final[str] = "agent"
 
 
 def _unit_id(unit: Unit) -> str:
@@ -69,6 +70,12 @@ def list_skills(catalog: Catalog) -> list[str]:
     """Surface the installable skills by name in a stable order, so a UI listing
     doesn't depend on declaration order in the toml."""
     return sorted(unit.name for unit in catalog.units if unit.kind == _SKILL_KIND)
+
+
+def list_agents(catalog: Catalog) -> list[str]:
+    """Surface the installable agents by name in a stable order, so a UI listing
+    doesn't depend on declaration order in the toml."""
+    return sorted(unit.name for unit in catalog.units if unit.kind == _AGENT_KIND)
 
 
 def _resolve(ref: str, by_id: dict[str, Unit], package: str) -> Unit:
