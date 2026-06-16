@@ -10,7 +10,8 @@ killed — by a caller list re-traced blind.
 
 **Proposes, never edits** — `reviewer` and `critic` judge a diff; this audits existing
 code, seeding `/breakdown` or `/make-pr` on approval.
-**Rubric: `rules/design-principles.md`** — defines *deep* vs *shallow* and every red
+**Rubric: `rules/design-principles.md` bundled beside this `SKILL.md`** (resolve it from the
+skill's own directory, not the audited repo) — defines *deep* vs *shallow* and every red
 flag or principle below.
 
 ```
@@ -64,7 +65,8 @@ A candidate failing its test is dropped in Phase 3.
 (path, package, subsystem); if none, ask. If the inventory below would exceed ~6
 clusters, sub-partition and audit one per run rather than skim.
 
-Read `rules/design-principles.md`, and `docs/adr/` first if present —
+Read `rules/design-principles.md` (bundled beside this `SKILL.md`), and the audited repo's
+`docs/adr/` first if present —
 **never re-propose a decision already rejected there**. `CONTEXT.md`, if present,
 records the team's own names and each boundary's rationale — propose in their
 vocabulary, not yours.

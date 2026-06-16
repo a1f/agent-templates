@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "tdd-runner.schema.json",
+  "title": "TDD-runner agent return",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role",
+    "status",
+    "behavior",
+    "test_file",
+    "test_name",
+    "commands",
+    "right_reason",
+    "right_reason_note",
+    "notes"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
+    "role": { "const": "tdd-runner" },
+    "status": { "enum": ["red", "error"] },
+    "behavior": { "type": "string" },
+    "test_file": { "type": "string" },
+    "test_name": { "type": "string" },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cmd", "exit_code", "outcome", "key_output"],
+        "properties": {
+          "cmd": { "type": "string" },
+          "exit_code": { "type": "integer" },
+          "outcome": { "type": "string", "enum": ["red", "error"] },
+          "key_output": { "type": "string" }
+        }
+      }
+    },
+    "right_reason": { "type": "boolean" },
+    "right_reason_note": { "type": "string" },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "$comment": "A red status is a witnessed right-reason RED: right_reason true and a command observed red.",
+      "if": { "required": ["status"], "properties": { "status": { "const": "red" } } },
+      "then": {
+        "properties": {
+          "right_reason": { "const": true },
+          "commands": { "contains": { "required": ["outcome"], "properties": { "outcome": { "const": "red" } } } }
+        }
+      }
+    },
+    {
+      "$comment": "An error status did not reach a meaningful RED.",
+      "if": { "required": ["status"], "properties": { "status": { "const": "error" } } },
+      "then": { "properties": { "right_reason": { "const": false } } }
+    }
+  ]
+}
