@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-from actions import install_skill, uninstall_skill
+from actions import install_agent, install_skill, uninstall_agent, uninstall_skill
 from catalog import (
     Catalog,
     agent_unit_id,
@@ -83,6 +83,35 @@ def apply_skill_reconcile(
         )
     for name in plan.to_remove:
         current = uninstall_skill(
+            name=name,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    return current
+
+
+def apply_agent_reconcile(
+    *,
+    plan: ReconcilePlan,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned diff by installing then uninstalling each named agent,
+    threading the persisted State through so the final return reflects every action."""
+    current: State = state
+    for name in plan.to_install:
+        current = install_agent(
+            name=name,
+            source_root=source_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    for name in plan.to_remove:
+        current = uninstall_agent(
             name=name,
             state_root=state_root,
             claude_root=claude_root,
