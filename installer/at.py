@@ -6,8 +6,10 @@
 import os
 import subprocess
 import sys
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 import click
 import questionary
@@ -114,6 +116,74 @@ def agent_rows(*, catalog: Catalog, state: State) -> list[str]:
     return [f"{_agent_marker(name, installed)} {name}" for name in list_agents(catalog)]
 
 
+class _RowsFn(Protocol):
+    """One unit kind's status renderer: catalog rows with install markers."""
+
+    def __call__(self, *, catalog: Catalog, state: State) -> list[str]: ...
+
+
+class _PlanFn(Protocol):
+    """One unit kind's planner: diff a ticked selection into a reconcile plan."""
+
+    def __call__(
+        self, *, ticked: frozenset[str], catalog: Catalog, state: State
+    ) -> ReconcilePlan: ...
+
+
+class _ApplyFn(Protocol):
+    """One unit kind's applier: carry out a reconcile plan and return new state."""
+
+    def __call__(
+        self,
+        *,
+        plan: ReconcilePlan,
+        source_root: Path,
+        state_root: Path,
+        claude_root: Path,
+        state: State,
+    ) -> State: ...
+
+
+@dataclass(frozen=True)
+class _UnitTab:
+    """The per-kind pieces the Skills and Agents tabs vary over, so one generic
+    runner drives both from data instead of two parallel branches."""
+
+    rows: _RowsFn
+    names: Callable[[Catalog], list[str]]
+    unit_id_of: Callable[[str], str]
+    plan: _PlanFn
+    apply: _ApplyFn
+    select_prompt: str
+    confirm_prompt: str
+
+
+_SKILLS_TAB: Final[_UnitTab] = _UnitTab(
+    rows=skill_rows,
+    names=list_skills,
+    unit_id_of=skill_unit_id,
+    plan=plan_skill_reconcile,
+    apply=apply_skill_reconcile,
+    select_prompt="Select installed skills",
+    confirm_prompt="Apply skill changes?",
+)
+
+_AGENTS_TAB: Final[_UnitTab] = _UnitTab(
+    rows=agent_rows,
+    names=list_agents,
+    unit_id_of=agent_unit_id,
+    plan=plan_agent_reconcile,
+    apply=apply_agent_reconcile,
+    select_prompt="Select installed agents",
+    confirm_prompt="Apply agent changes?",
+)
+
+_UNIT_TABS: Final[dict[str, _UnitTab]] = {
+    "Skills": _SKILLS_TAB,
+    "Agents": _AGENTS_TAB,
+}
+
+
 def abort_on_esc(question: questionary.Question) -> questionary.Question:
     """Let Esc abort a prompt exactly like Ctrl-C, so a user can back out with the
     key they reach for first; returns the question for chaining."""
@@ -137,6 +207,43 @@ def abort_on_esc(question: questionary.Question) -> questionary.Question:
     return question
 
 
+def _run_unit_tab(*, tab: _UnitTab, console: Console) -> None:
+    """Drive one installed-units tab end to end — render status, take the ticked
+    selection, plan the diff, confirm, apply, then re-render — the body the Skills
+    and Agents tabs share, differing only by the functions and prompts in `tab`."""
+    catalog: Catalog = load_catalog(CATALOG_PATH)
+    state: State = load_state(STATE_ROOT)
+    for row in tab.rows(catalog=catalog, state=state):
+        console.print(row, markup=False)
+    installed: frozenset[str] = frozenset(state.units)
+    choices: list[questionary.Choice] = [
+        questionary.Choice(name, checked=tab.unit_id_of(name) in installed)
+        for name in tab.names(catalog)
+    ]
+    ticked: list[str] | None = abort_on_esc(
+        questionary.checkbox(tab.select_prompt, choices=choices)
+    ).ask()
+    if ticked is None:
+        return
+    plan: ReconcilePlan = tab.plan(
+        ticked=frozenset(ticked), catalog=catalog, state=state
+    )
+    if plan.is_empty:
+        return
+    confirmed: bool | None = abort_on_esc(questionary.confirm(tab.confirm_prompt)).ask()
+    if not confirmed:
+        return
+    state = tab.apply(
+        plan=plan,
+        source_root=REPO_ROOT,
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        state=state,
+    )
+    for row in tab.rows(catalog=catalog, state=state):
+        console.print(row, markup=False)
+
+
 def launch_tui() -> int:
     """Bail out on non-interactive stdin: questionary's prompt would otherwise
     block forever waiting on input no CI session can supply."""
@@ -152,75 +259,9 @@ def launch_tui() -> int:
             ).ask()
             if choice is None or choice == "Exit":
                 return 0
-            if choice == "Skills":
-                catalog: Catalog = load_catalog(CATALOG_PATH)
-                state: State = load_state(STATE_ROOT)
-                for row in skill_rows(catalog=catalog, state=state):
-                    console.print(row, markup=False)
-                installed: frozenset[str] = frozenset(state.units)
-                choices: list[questionary.Choice] = [
-                    questionary.Choice(name, checked=skill_unit_id(name) in installed)
-                    for name in list_skills(catalog)
-                ]
-                ticked: list[str] | None = abort_on_esc(
-                    questionary.checkbox("Select installed skills", choices=choices)
-                ).ask()
-                if ticked is None:
-                    continue
-                plan: ReconcilePlan = plan_skill_reconcile(
-                    ticked=frozenset(ticked), catalog=catalog, state=state
-                )
-                if plan.is_empty:
-                    continue
-                confirmed: bool | None = abort_on_esc(
-                    questionary.confirm("Apply skill changes?")
-                ).ask()
-                if not confirmed:
-                    continue
-                state = apply_skill_reconcile(
-                    plan=plan,
-                    source_root=REPO_ROOT,
-                    state_root=STATE_ROOT,
-                    claude_root=CLAUDE_ROOT,
-                    state=state,
-                )
-                for row in skill_rows(catalog=catalog, state=state):
-                    console.print(row, markup=False)
-                continue
-            if choice == "Agents":
-                catalog = load_catalog(CATALOG_PATH)
-                state = load_state(STATE_ROOT)
-                for row in agent_rows(catalog=catalog, state=state):
-                    console.print(row, markup=False)
-                installed = frozenset(state.units)
-                choices = [
-                    questionary.Choice(name, checked=agent_unit_id(name) in installed)
-                    for name in list_agents(catalog)
-                ]
-                ticked = abort_on_esc(
-                    questionary.checkbox("Select installed agents", choices=choices)
-                ).ask()
-                if ticked is None:
-                    continue
-                plan = plan_agent_reconcile(
-                    ticked=frozenset(ticked), catalog=catalog, state=state
-                )
-                if plan.is_empty:
-                    continue
-                confirmed = abort_on_esc(
-                    questionary.confirm("Apply agent changes?")
-                ).ask()
-                if not confirmed:
-                    continue
-                state = apply_agent_reconcile(
-                    plan=plan,
-                    source_root=REPO_ROOT,
-                    state_root=STATE_ROOT,
-                    claude_root=CLAUDE_ROOT,
-                    state=state,
-                )
-                for row in agent_rows(catalog=catalog, state=state):
-                    console.print(row, markup=False)
+            tab: _UnitTab | None = _UNIT_TABS.get(choice)
+            if tab is not None:
+                _run_unit_tab(tab=tab, console=console)
                 continue
             console.print(TAB_PLACEHOLDER)
     except KeyboardInterrupt:
