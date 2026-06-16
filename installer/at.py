@@ -90,36 +90,38 @@ def _catalog_path() -> Path:
     return _env_path("AT_CATALOG", CATALOG_PATH)
 
 
-def _skill_marker(name: str, installed: frozenset[str]) -> str:
-    if skill_unit_id(name) in installed:
-        return MARKER_INSTALLED
-    return MARKER_NOT_INSTALLED
+def _unit_rows(
+    *,
+    names: Callable[[Catalog], list[str]],
+    unit_id_of: Callable[[str], str],
+    catalog: Catalog,
+    state: State,
+) -> list[str]:
+    """Pair each catalog unit with its on-disk install marker, the one row-rendering
+    the Skills and Agents tabs share, keying install state by the unit id catalog.py
+    owns."""
+    installed: frozenset[str] = frozenset(state.units)
+    return [
+        (MARKER_INSTALLED if unit_id_of(name) in installed else MARKER_NOT_INSTALLED)
+        + f" {name}"
+        for name in names(catalog)
+    ]
 
 
 def skill_rows(*, catalog: Catalog, state: State) -> list[str]:
     """Pair each catalog skill with its on-disk install marker so the Skills tab
     renders status, keying install state by the unit id catalog.py owns."""
-    installed: frozenset[str] = frozenset(state.units)
-    return [f"{_skill_marker(name, installed)} {name}" for name in list_skills(catalog)]
-
-
-def _agent_marker(name: str, installed: frozenset[str]) -> str:
-    if agent_unit_id(name) in installed:
-        return MARKER_INSTALLED
-    return MARKER_NOT_INSTALLED
+    return _unit_rows(
+        names=list_skills, unit_id_of=skill_unit_id, catalog=catalog, state=state
+    )
 
 
 def agent_rows(*, catalog: Catalog, state: State) -> list[str]:
     """Pair each catalog agent with its on-disk install marker so the Agents tab
     renders status, keying install state by the unit id catalog.py owns."""
-    installed: frozenset[str] = frozenset(state.units)
-    return [f"{_agent_marker(name, installed)} {name}" for name in list_agents(catalog)]
-
-
-class _RowsFn(Protocol):
-    """One unit kind's status renderer: catalog rows with install markers."""
-
-    def __call__(self, *, catalog: Catalog, state: State) -> list[str]: ...
+    return _unit_rows(
+        names=list_agents, unit_id_of=agent_unit_id, catalog=catalog, state=state
+    )
 
 
 class _PlanFn(Protocol):
@@ -149,7 +151,6 @@ class _UnitTab:
     """The per-kind pieces the Skills and Agents tabs vary over, so one generic
     runner drives both from data instead of two parallel branches."""
 
-    rows: _RowsFn
     names: Callable[[Catalog], list[str]]
     unit_id_of: Callable[[str], str]
     plan: _PlanFn
@@ -159,7 +160,6 @@ class _UnitTab:
 
 
 _SKILLS_TAB: Final[_UnitTab] = _UnitTab(
-    rows=skill_rows,
     names=list_skills,
     unit_id_of=skill_unit_id,
     plan=plan_skill_reconcile,
@@ -169,7 +169,6 @@ _SKILLS_TAB: Final[_UnitTab] = _UnitTab(
 )
 
 _AGENTS_TAB: Final[_UnitTab] = _UnitTab(
-    rows=agent_rows,
     names=list_agents,
     unit_id_of=agent_unit_id,
     plan=plan_agent_reconcile,
@@ -213,7 +212,9 @@ def _run_unit_tab(*, tab: _UnitTab, console: Console) -> None:
     and Agents tabs share, differing only by the functions and prompts in `tab`."""
     catalog: Catalog = load_catalog(CATALOG_PATH)
     state: State = load_state(STATE_ROOT)
-    for row in tab.rows(catalog=catalog, state=state):
+    for row in _unit_rows(
+        names=tab.names, unit_id_of=tab.unit_id_of, catalog=catalog, state=state
+    ):
         console.print(row, markup=False)
     installed: frozenset[str] = frozenset(state.units)
     choices: list[questionary.Choice] = [
@@ -240,7 +241,9 @@ def _run_unit_tab(*, tab: _UnitTab, console: Console) -> None:
         claude_root=CLAUDE_ROOT,
         state=state,
     )
-    for row in tab.rows(catalog=catalog, state=state):
+    for row in _unit_rows(
+        names=tab.names, unit_id_of=tab.unit_id_of, catalog=catalog, state=state
+    ):
         console.print(row, markup=False)
 
 

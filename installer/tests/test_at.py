@@ -215,8 +215,7 @@ def test_agents_tab_installs_ticked_agent_through_reconcile(
 
     # Ticking demo-agent applies plan_agent_reconcile then apply_agent_reconcile, so
     # the agent ends up linked live and recorded in state, and the rows re-render with
-    # the installed marker. Today the Agents branch is a TAB_PLACEHOLDER that installs
-    # nothing, so the symlink/state/marker assertions fail.
+    # the installed marker.
     captured: str = capsys.readouterr().out
     final_state: State = load_state(state_root)
     agent_link: Path = claude_root / "agents" / "demo-agent.md"
