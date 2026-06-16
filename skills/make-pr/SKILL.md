@@ -35,12 +35,12 @@ give `worker-coder` its **`mode`** (`green` | `refactor` | `non_behavioral`) plu
 `dependencies_allowed` (and any named dependency/version) when the task permits dependencies —
 otherwise the coder blocks on any new dependency. Keep each dispatch
 prompt tight and scoped to one job. Require each agent to return exactly the JSON object defined
-in its prompt, and **validate that return against `<repo_root>/schemas/<role>.schema.json`**
+in its prompt, and **validate that return against `<skill_root>/schemas/<role>.schema.json`**
 (keyed by the `role` field in the return). The validator reads the instance from a **file**, so
 first write the agent's raw return verbatim with `Write` (not `echo`/heredoc — those mangle the
 embedded quotes and newlines) to `<run_root>/<run-id>.<role>.json`, then run:
 
-`uv run --no-project --with jsonschema python <repo_root>/scripts/validate_return.py <repo_root>/schemas/<role>.schema.json <run_root>/<run-id>.<role>.json`
+`uv run --no-project --with jsonschema python <skill_root>/scripts/validate_return.py <skill_root>/schemas/<role>.schema.json <run_root>/<run-id>.<role>.json`
 
 (The validator depends on `jsonschema`; `uv run --no-project --with jsonschema` supplies it on first run and caches it — no separate install step.)
 
@@ -61,27 +61,28 @@ stage it unchanged with your production code. Module boundary: `cart` only. Base
 
 Resolve these values before the first dispatch:
 
-- **repo_root**: the absolute path to the `agent-templates` repo root. Use it for the immutable
-  template assets: `schemas/`, `scripts/`, and `gates/`.
-- **rules_root**: the `rules/` directory at the repo root (`<repo_root>/rules`). Use it for the
-  rule files the agents read.
+- **skill_root**: the directory this `SKILL.md` lives in. It bundles the immutable template
+  assets — `schemas/`, `scripts/`, `gates/`, and `rules/` — so they travel with the skill on
+  install; resolve them here, never from the target repo or a repo checkout.
+- **rules_root**: the bundled `rules/` directory beside this `SKILL.md` (`<skill_root>/rules`). Use
+  it for the rule files the agents read.
 - **target_cwd**: the absolute path to the repository being changed. Run every target-repo
   command there: `git`, verification commands, package-manager setup, and gate runs.
 - **run_root**: a writable directory for logs and transient return JSON, defaulting to
   `<target_cwd>/.v1-runs`. Use this for JSONL logs and `<run-id>.<role>.json`; do not write
-  runtime state into `repo_root`.
+  runtime state into `skill_root`.
 - **Base**: use a base named by the user or task spec. Otherwise use `git merge-base HEAD
   origin/main`; if `origin/main` is unavailable, use `git merge-base HEAD main`. If no base
   can be resolved, stop and ask for one.
 - **Run id**: use the branch name or task id, replacing `/` and whitespace with `_`.
 - **Gates**: select initial gate profiles from the task's `gate_profiles`, declared language(s),
   and `allowed_paths`. After workers change files, expand the selected profiles from
-  `git diff --name-only <base>...HEAD`. Match paths against each `<repo_root>/gates/*.json`
+  `git diff --name-only <base>...HEAD`. Match paths against each `<skill_root>/gates/*.json`
   profile's `triggers` globs; both root and nested paths must match. If a changed language has
   no gate, stop and report the missing gate instead of declaring done.
-- **Rules**: resolve rule files to **absolute** paths (the top-level `rules/` directory of this
-  agent-templates repo, `rules_root`) before passing them — a subagent's working directory is the user's
-  project, not this repo, so bare or repo-relative names will not resolve. Always pass
+- **Rules**: resolve rule files to **absolute** paths (the bundled `rules/` directory beside this
+  `SKILL.md`, `rules_root`) before passing them — a subagent's working directory is the user's
+  project, not this skill's directory, so bare or repo-relative names will not resolve. Always pass
   `design-principles.md`; add `tdd.md` for behavioral RED/GREEN steps; add the matching
   language rule (`python.md`, `typescript.md`, `rust.md`) for each changed file type.
 
@@ -91,7 +92,7 @@ Resolve these values before the first dispatch:
   `<run-id>.<role>.json` return files you write for validation). Do not edit production source, tests,
   rules, or gates directly while acting as architect; route every code or test change to `worker-coder`.
 - Use `Bash` only for `git`, `date`, JSONL validation, the schema validator
-  (`<repo_root>/scripts/validate_return.py`), **re-running a worker's reported verification (e.g. the
+  (`<skill_root>/scripts/validate_return.py`), **re-running a worker's reported verification (e.g. the
   named GREEN test) to confirm its result**, the task-provided baseline command, and the selected
   gate `setup`/`run` commands. Run all target-repo commands in `target_cwd`. Do not run gate
   `fix` commands directly; route fixes to `worker-coder`.
@@ -142,7 +143,7 @@ Resolve these values before the first dispatch:
       with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).
 5. **Gate (objective — run before any LLM judgment).** Run the selected gates from
-   `<repo_root>/gates/<lang>.json`. Each gate file is
+   `<skill_root>/gates/<lang>.json`. Each gate file is
    `{"setup": <cmd>, "triggers": [<glob>], "gates": [{"name","run","fix"}]}` where `fix` may be
    `null` for checks that need a human/coder change rather than a mechanical command. Run `setup`
    once, then each `gates[].run` in order. If setup fails because the repo does not use the
