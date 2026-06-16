@@ -29,7 +29,13 @@ from catalog import (
     load_catalog,
     skill_unit_id,
 )
-from reconcile import ReconcilePlan, apply_skill_reconcile, plan_skill_reconcile
+from reconcile import (
+    ReconcilePlan,
+    apply_agent_reconcile,
+    apply_skill_reconcile,
+    plan_agent_reconcile,
+    plan_skill_reconcile,
+)
 from state import State, load_state
 from update import update_installed_skills
 
@@ -179,6 +185,41 @@ def launch_tui() -> int:
                     state=state,
                 )
                 for row in skill_rows(catalog=catalog, state=state):
+                    console.print(row, markup=False)
+                continue
+            if choice == "Agents":
+                catalog = load_catalog(CATALOG_PATH)
+                state = load_state(STATE_ROOT)
+                for row in agent_rows(catalog=catalog, state=state):
+                    console.print(row, markup=False)
+                installed = frozenset(state.units)
+                choices = [
+                    questionary.Choice(name, checked=agent_unit_id(name) in installed)
+                    for name in list_agents(catalog)
+                ]
+                ticked = abort_on_esc(
+                    questionary.checkbox("Select installed agents", choices=choices)
+                ).ask()
+                if ticked is None:
+                    continue
+                plan = plan_agent_reconcile(
+                    ticked=frozenset(ticked), catalog=catalog, state=state
+                )
+                if plan.is_empty:
+                    continue
+                confirmed = abort_on_esc(
+                    questionary.confirm("Apply agent changes?")
+                ).ask()
+                if not confirmed:
+                    continue
+                state = apply_agent_reconcile(
+                    plan=plan,
+                    source_root=REPO_ROOT,
+                    state_root=STATE_ROOT,
+                    claude_root=CLAUDE_ROOT,
+                    state=state,
+                )
+                for row in agent_rows(catalog=catalog, state=state):
                     console.print(row, markup=False)
                 continue
             console.print(TAB_PLACEHOLDER)

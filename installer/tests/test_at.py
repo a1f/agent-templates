@@ -166,6 +166,67 @@ def test_skills_tab_renders_skill_rows_instead_of_placeholder(
     assert TAB_PLACEHOLDER not in captured
 
 
+def test_agents_tab_installs_ticked_agent_through_reconcile(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A real agent source on disk is the only input the install needs; nothing is
+    # installed up front, so ticking demo-agent through the Agents tab must stage,
+    # link, and record it — mirroring how the Skills tab installs a ticked skill.
+    agent_source: Path = repo_root / "agents" / "demo-agent.md"
+    agent_source.parent.mkdir(parents=True)
+    agent_source.write_text("# demo-agent\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "agent"\nname = "demo-agent"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Agents tab, then closes it after the reconcile applies.
+    select_answers: Iterator[str] = iter(["Agents", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Tick the lone catalog agent so the desired set installs demo-agent.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-agent"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Ticking demo-agent applies plan_agent_reconcile then apply_agent_reconcile, so
+    # the agent ends up linked live and recorded in state, and the rows re-render with
+    # the installed marker. Today the Agents branch is a TAB_PLACEHOLDER that installs
+    # nothing, so the symlink/state/marker assertions fail.
+    captured: str = capsys.readouterr().out
+    final_state: State = load_state(state_root)
+    agent_link: Path = claude_root / "agents" / "demo-agent.md"
+    assert exit_code == 0
+    assert agent_link.is_symlink()
+    assert agent_unit_id("demo-agent") in final_state.units
+    assert f"{MARKER_INSTALLED} demo-agent" in captured
+    assert TAB_PLACEHOLDER not in captured
+
+
 def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
