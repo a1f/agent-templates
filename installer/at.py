@@ -21,7 +21,14 @@ from prompt_toolkit.keys import Keys
 from rich.console import Console
 from rich.panel import Panel
 
-from catalog import Catalog, list_skills, load_catalog, skill_unit_id
+from catalog import (
+    Catalog,
+    agent_unit_id,
+    list_agents,
+    list_skills,
+    load_catalog,
+    skill_unit_id,
+)
 from reconcile import ReconcilePlan, apply_skill_reconcile, plan_skill_reconcile
 from state import State, load_state
 from update import update_installed_skills
@@ -86,6 +93,19 @@ def skill_rows(*, catalog: Catalog, state: State) -> list[str]:
     renders status, keying install state by the unit id catalog.py owns."""
     installed: frozenset[str] = frozenset(state.units)
     return [f"{_skill_marker(name, installed)} {name}" for name in list_skills(catalog)]
+
+
+def _agent_marker(name: str, installed: frozenset[str]) -> str:
+    if agent_unit_id(name) in installed:
+        return MARKER_INSTALLED
+    return MARKER_NOT_INSTALLED
+
+
+def agent_rows(*, catalog: Catalog, state: State) -> list[str]:
+    """Pair each catalog agent with its on-disk install marker so the Agents tab
+    renders status, keying install state by the unit id catalog.py owns."""
+    installed: frozenset[str] = frozenset(state.units)
+    return [f"{_agent_marker(name, installed)} {name}" for name in list_agents(catalog)]
 
 
 def abort_on_esc(question: questionary.Question) -> questionary.Question:

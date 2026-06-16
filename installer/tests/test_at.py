@@ -15,10 +15,18 @@ from at import (
     MARKER_NOT_INSTALLED,
     TAB_PLACEHOLDER,
     abort_on_esc,
+    agent_rows,
     main,
     skill_rows,
 )
-from catalog import Catalog, Unit, list_skills, load_catalog, skill_unit_id
+from catalog import (
+    Catalog,
+    Unit,
+    agent_unit_id,
+    list_skills,
+    load_catalog,
+    skill_unit_id,
+)
 from hashing import hash_unit
 from state import State, load_state
 
@@ -99,6 +107,23 @@ def test_skill_rows_lists_every_skill_sorted_and_excludes_non_skills() -> None:
     rows: list[str] = skill_rows(catalog=catalog, state=state)
 
     assert rows == [f"{MARKER_NOT_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
+
+
+def test_agent_rows_marks_installed_sorted_and_excludes_non_agents() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="agent", name="zeta"),
+            Unit(kind="agent", name="alpha"),
+            Unit(kind="skill", name="some-skill"),
+        ),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={agent_unit_id("alpha"): "hash"})
+
+    rows: list[str] = agent_rows(catalog=catalog, state=state)
+
+    assert rows == [f"{MARKER_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
 
 
 def test_skills_tab_renders_skill_rows_instead_of_placeholder(
