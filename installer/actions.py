@@ -96,3 +96,31 @@ def uninstall_skill(
     )
     save_state(new_state, state_root)
     return new_state
+
+
+def uninstall_agent(
+    *,
+    name: str,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Take an agent back off disk by dropping its live symlink then its staged
+    file, so neither a dangling link nor an orphaned staging area survives — the
+    inverse of install_agent.
+
+    Persists the updated state to state_root (via save_state) and returns a brand-new
+    immutable State without the agent's unit; the passed-in state is never mutated."""
+    unlink_unit(link_path=claude_root / AGENTS_DIRNAME / f"{name}.md")
+    unstage_unit(unit=agent_unit(name), staged_root=state_root / STAGED_DIRNAME)
+    removed_id: str = agent_unit_id(name)
+    new_state: State = State(
+        version=state.version,
+        units={
+            unit_id: content
+            for unit_id, content in state.units.items()
+            if unit_id != removed_id
+        },
+    )
+    save_state(new_state, state_root)
+    return new_state
