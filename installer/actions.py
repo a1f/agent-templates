@@ -3,8 +3,8 @@
 
 from pathlib import Path
 
-from catalog import Unit, agent_unit, skill_unit, unit_id
-from constants import AGENTS_DIRNAME, SKILLS_DIRNAME, STAGED_DIRNAME
+from catalog import Unit, agent_unit, rule_unit, skill_unit, unit_id
+from constants import AGENTS_DIRNAME, RULES_DIRNAME, SKILLS_DIRNAME, STAGED_DIRNAME
 from hashing import hash_unit
 from placement import link_unit, stage_unit, unlink_unit, unstage_unit
 from state import State, save_state
@@ -104,6 +104,26 @@ def install_agent(
     )
 
 
+def install_rule(
+    *,
+    name: str,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Install the named rule, staging its single "<name>.md" source and linking
+    it live under ~/.claude/rules/. The staged copy is keyed by bare
+    "<kind>/<name>" (no ".md"), while the live symlink keeps the ".md" suffix."""
+    return _install_unit(
+        unit=rule_unit(name),
+        source=source_root / RULES_DIRNAME / f"{name}.md",
+        link_path=claude_root / RULES_DIRNAME / f"{name}.md",
+        state_root=state_root,
+        state=state,
+    )
+
+
 def uninstall_skill(
     *,
     name: str,
@@ -133,6 +153,23 @@ def uninstall_agent(
     return _uninstall_unit(
         unit=agent_unit(name),
         link_path=claude_root / AGENTS_DIRNAME / f"{name}.md",
+        state_root=state_root,
+        state=state,
+    )
+
+
+def uninstall_rule(
+    *,
+    name: str,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Uninstall the named rule, the inverse of install_rule: drop its live
+    symlink then its staged file."""
+    return _uninstall_unit(
+        unit=rule_unit(name),
+        link_path=claude_root / RULES_DIRNAME / f"{name}.md",
         state_root=state_root,
         state=state,
     )

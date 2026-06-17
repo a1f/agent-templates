@@ -3,12 +3,21 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from actions import install_agent, install_skill, uninstall_agent, uninstall_skill
+from actions import (
+    install_agent,
+    install_rule,
+    install_skill,
+    uninstall_agent,
+    uninstall_rule,
+    uninstall_skill,
+)
 from catalog import (
     Catalog,
     agent_unit_id,
     list_agents,
+    list_rules,
     list_skills,
+    rule_unit_id,
     skill_unit_id,
 )
 from state import State
@@ -69,6 +78,19 @@ def plan_agent_reconcile(
         ticked=ticked,
         names=list_agents(catalog),
         unit_id_of=agent_unit_id,
+        state=state,
+    )
+
+
+def plan_rule_reconcile(
+    *, ticked: frozenset[str], catalog: Catalog, state: State
+) -> ReconcilePlan:
+    """Diff the ticked selection against installed state over the catalog's rules,
+    so the apply step works from a decided plan instead of re-deriving the diff."""
+    return _plan_reconcile(
+        ticked=ticked,
+        names=list_rules(catalog),
+        unit_id_of=rule_unit_id,
         state=state,
     )
 
@@ -166,6 +188,27 @@ def apply_agent_reconcile(
         plan=plan,
         install=install_agent,
         uninstall=uninstall_agent,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state,
+    )
+
+
+def apply_rule_reconcile(
+    *,
+    plan: ReconcilePlan,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned diff by installing then uninstalling each named rule,
+    threading the persisted State through so the final return reflects every action."""
+    return _apply_reconcile(
+        plan=plan,
+        install=install_rule,
+        uninstall=uninstall_rule,
         source_root=source_root,
         state_root=state_root,
         claude_root=claude_root,

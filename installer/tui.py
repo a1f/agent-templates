@@ -23,16 +23,20 @@ from catalog import (
     Catalog,
     agent_unit_id,
     list_agents,
+    list_rules,
     list_skills,
     load_catalog,
+    rule_unit_id,
     skill_unit_id,
 )
 from paths import CATALOG_PATH, CLAUDE_ROOT, REPO_ROOT, STATE_ROOT
 from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
+    apply_rule_reconcile,
     apply_skill_reconcile,
     plan_agent_reconcile,
+    plan_rule_reconcile,
     plan_skill_reconcile,
 )
 from state import State, load_state
@@ -93,8 +97,8 @@ class _ApplyFn(Protocol):
 
 @dataclass(frozen=True)
 class _UnitTab:
-    """The per-kind pieces the Skills and Agents tabs vary over, so one generic
-    runner drives both from data instead of two parallel branches."""
+    """The per-kind pieces every installed-unit tab varies over, so one generic
+    runner drives them all from data instead of parallel branches."""
 
     names: Callable[[Catalog], list[str]]
     unit_id_of: Callable[[str], str]
@@ -117,7 +121,7 @@ def _unit_rows(
     state: State,
 ) -> list[str]:
     """Pair each catalog unit with its on-disk install marker, the one row-rendering
-    the Skills and Agents tabs share, keying install state by the unit id catalog.py
+    every installed-unit tab shares, keying install state by the unit id catalog.py
     owns."""
     installed: frozenset[str] = frozenset(state.units)
     return [
@@ -143,6 +147,14 @@ def agent_rows(*, catalog: Catalog, state: State) -> list[str]:
     )
 
 
+def rule_rows(*, catalog: Catalog, state: State) -> list[str]:
+    """Pair each catalog rule with its on-disk install marker so the Rules tab
+    renders status, keying install state by the unit id catalog.py owns."""
+    return _unit_rows(
+        names=list_rules, unit_id_of=rule_unit_id, catalog=catalog, state=state
+    )
+
+
 # ---------------------------------------------------------------------------
 # Data instances
 # ---------------------------------------------------------------------------
@@ -165,9 +177,19 @@ _AGENTS_TAB: Final[_UnitTab] = _UnitTab(
     confirm_prompt="Apply agent changes?",
 )
 
+_RULES_TAB: Final[_UnitTab] = _UnitTab(
+    names=list_rules,
+    unit_id_of=rule_unit_id,
+    plan=plan_rule_reconcile,
+    apply=apply_rule_reconcile,
+    select_prompt="Select installed rules",
+    confirm_prompt="Apply rule changes?",
+)
+
 _UNIT_TABS: Final[dict[str, _UnitTab]] = {
     "Skills": _SKILLS_TAB,
     "Agents": _AGENTS_TAB,
+    "Rules": _RULES_TAB,
 }
 
 
@@ -201,8 +223,8 @@ def abort_on_esc(question: questionary.Question) -> questionary.Question:
 
 def _run_unit_tab(*, tab: _UnitTab, console: Console) -> None:
     """Drive one installed-units tab end to end — render status, take the ticked
-    selection, plan the diff, confirm, apply, then re-render — the body the Skills
-    and Agents tabs share, differing only by the functions and prompts in `tab`."""
+    selection, plan the diff, confirm, apply, then re-render — the body every
+    installed-unit tab shares, differing only by the functions and prompts in `tab`."""
     catalog: Catalog = load_catalog(CATALOG_PATH)
     state: State = load_state(STATE_ROOT)
     for row in _unit_rows(
