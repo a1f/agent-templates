@@ -10,15 +10,7 @@ from prompt_toolkit.output import DummyOutput
 from pytest import CaptureFixture, MonkeyPatch
 
 from actions import install_skill
-from at import (
-    MARKER_INSTALLED,
-    MARKER_NOT_INSTALLED,
-    TAB_PLACEHOLDER,
-    abort_on_esc,
-    agent_rows,
-    main,
-    skill_rows,
-)
+from at import main
 from catalog import (
     Catalog,
     Unit,
@@ -29,6 +21,14 @@ from catalog import (
 )
 from hashing import hash_unit
 from state import State, load_state
+from tui import (
+    MARKER_INSTALLED,
+    MARKER_NOT_INSTALLED,
+    TAB_PLACEHOLDER,
+    abort_on_esc,
+    agent_rows,
+    skill_rows,
+)
 
 
 def test_version_flag_prints_version_and_exits_zero(
@@ -130,14 +130,14 @@ def test_skills_tab_renders_skill_rows_instead_of_placeholder(
     monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
 ) -> None:
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("at.STATE_ROOT", tmp_path)
+    monkeypatch.setattr("tui.STATE_ROOT", tmp_path)
     catalog_file: Path = tmp_path / "catalog.toml"
     catalog_file.write_text(
         "packages = []\nbundles = []\n\n"
         '[[units]]\nkind = "skill"\nname = "demo-skill"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # Enter the Skills tab, then close it; the empty tick set is an unchanged
     # selection, so this read-only test installs nothing and falls through.
     answers: Iterator[str] = iter(["Skills", "Exit"])
@@ -173,9 +173,9 @@ def test_agents_tab_installs_ticked_agent_through_reconcile(
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
     repo_root: Path = tmp_path / "repo"
-    monkeypatch.setattr("at.STATE_ROOT", state_root)
-    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
-    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
 
     # A real agent source on disk is the only input the install needs; nothing is
     # installed up front, so ticking demo-agent through the Agents tab must stage,
@@ -190,7 +190,7 @@ def test_agents_tab_installs_ticked_agent_through_reconcile(
         '[[units]]\nkind = "agent"\nname = "demo-agent"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # The tab menu opens the Agents tab, then closes it after the reconcile applies.
     select_answers: Iterator[str] = iter(["Agents", "Exit"])
 
@@ -233,9 +233,9 @@ def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
     repo_root: Path = tmp_path / "repo"
-    monkeypatch.setattr("at.STATE_ROOT", state_root)
-    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
-    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
 
     # Pre-install both skills through the real public install action, so on-disk
     # state, staging, and live symlinks all exist before the reconcile runs.
@@ -259,7 +259,7 @@ def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
         '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # The tab menu opens the Skills tab, then closes it after the reconcile.
     select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
@@ -301,9 +301,9 @@ def test_skills_tab_declining_confirm_leaves_install_state_untouched(
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
     repo_root: Path = tmp_path / "repo"
-    monkeypatch.setattr("at.STATE_ROOT", state_root)
-    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
-    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
 
     # Real sources for both skills exist, but only demo-a is installed up front, so
     # the declined reconcile must neither remove demo-a nor add demo-b.
@@ -326,7 +326,7 @@ def test_skills_tab_declining_confirm_leaves_install_state_untouched(
         '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # The tab menu opens the Skills tab, then closes it after the declined reconcile.
     select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
@@ -371,9 +371,9 @@ def test_esc_at_apply_confirm_discards_selection_change(
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
     repo_root: Path = tmp_path / "repo"
-    monkeypatch.setattr("at.STATE_ROOT", state_root)
-    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
-    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
 
     # Real sources for both skills exist, but only demo-a is installed up front, so an
     # Esc-cancelled confirm must neither remove demo-a nor add demo-b.
@@ -396,7 +396,7 @@ def test_esc_at_apply_confirm_discards_selection_change(
         '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # The tab menu opens the Skills tab, then closes it after the cancelled confirm.
     select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
@@ -455,9 +455,9 @@ def test_skills_tab_unchanged_selection_asks_no_confirm_and_changes_nothing(
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
     repo_root: Path = tmp_path / "repo"
-    monkeypatch.setattr("at.STATE_ROOT", state_root)
-    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
-    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
 
     # Real sources for both skills exist, but only demo-a is installed up front.
     for name in ("demo-a", "demo-b"):
@@ -479,7 +479,7 @@ def test_skills_tab_unchanged_selection_asks_no_confirm_and_changes_nothing(
         '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # The tab menu opens the Skills tab, then closes it after the no-op reconcile.
     select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
@@ -529,9 +529,9 @@ def test_skills_tab_checkbox_pre_ticks_installed_skills_and_cancel_is_noop(
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
     repo_root: Path = tmp_path / "repo"
-    monkeypatch.setattr("at.STATE_ROOT", state_root)
-    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
-    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
 
     # Real sources for both skills exist, but only demo-a is installed up front, so
     # the checkbox must offer demo-a pre-ticked and demo-b unticked.
@@ -554,7 +554,7 @@ def test_skills_tab_checkbox_pre_ticks_installed_skills_and_cancel_is_noop(
         '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # The tab menu opens the Skills tab, then closes it after the cancelled prompt.
     select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
@@ -604,9 +604,9 @@ def test_skills_tab_esc_in_checkbox_cancels_reconcile_without_confirm(
     state_root: Path = tmp_path / "at"
     claude_root: Path = tmp_path / "claude"
     repo_root: Path = tmp_path / "repo"
-    monkeypatch.setattr("at.STATE_ROOT", state_root)
-    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
-    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
 
     # Real sources for both skills exist, but only demo-a is installed up front, so
     # an Esc-cancelled reconcile must leave that install exactly as it stands.
@@ -629,7 +629,7 @@ def test_skills_tab_esc_in_checkbox_cancels_reconcile_without_confirm(
         '[[units]]\nkind = "skill"\nname = "demo-b"\n',
         encoding="utf-8",
     )
-    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
     # The tab menu opens the Skills tab, then closes it after the cancelled reconcile.
     select_answers: Iterator[str] = iter(["Skills", "Exit"])
 
