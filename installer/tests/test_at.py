@@ -17,6 +17,7 @@ from catalog import (
     agent_unit_id,
     list_skills,
     load_catalog,
+    rule_unit_id,
     skill_unit_id,
 )
 from hashing import hash_unit
@@ -27,6 +28,7 @@ from tui import (
     TAB_PLACEHOLDER,
     abort_on_esc,
     agent_rows,
+    rule_rows,
     skill_rows,
 )
 
@@ -122,6 +124,23 @@ def test_agent_rows_marks_installed_sorted_and_excludes_non_agents() -> None:
     state: State = State(version=1, units={agent_unit_id("alpha"): "hash"})
 
     rows: list[str] = agent_rows(catalog=catalog, state=state)
+
+    assert rows == [f"{MARKER_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
+
+
+def test_rule_rows_marks_installed_sorted_and_excludes_non_rules() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="rule", name="zeta"),
+            Unit(kind="rule", name="alpha"),
+            Unit(kind="skill", name="some-skill"),
+        ),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={rule_unit_id("alpha"): "hash"})
+
+    rows: list[str] = rule_rows(catalog=catalog, state=state)
 
     assert rows == [f"{MARKER_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
 
@@ -223,6 +242,65 @@ def test_agents_tab_installs_ticked_agent_through_reconcile(
     assert agent_link.is_symlink()
     assert agent_unit_id("demo-agent") in final_state.units
     assert f"{MARKER_INSTALLED} demo-agent" in captured
+    assert TAB_PLACEHOLDER not in captured
+
+
+def test_rules_tab_installs_ticked_rule_through_reconcile(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
+
+    # A real rule source on disk is the only input the install needs; nothing is
+    # installed up front, so ticking demo-rule through the Rules tab must stage,
+    # link, and record it — mirroring how the Agents tab installs a ticked agent.
+    rule_source: Path = repo_root / "rules" / "demo-rule.md"
+    rule_source.parent.mkdir(parents=True)
+    rule_source.write_text("# demo-rule\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        'packages = []\nbundles = []\n\n[[units]]\nkind = "rule"\nname = "demo-rule"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Rules tab, then closes it after the reconcile applies.
+    select_answers: Iterator[str] = iter(["Rules", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Tick the lone catalog rule so the desired set installs demo-rule.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-rule"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Ticking demo-rule applies plan_rule_reconcile then apply_rule_reconcile, so the
+    # rule ends up linked live and recorded in state, and the rows re-render with the
+    # installed marker.
+    captured: str = capsys.readouterr().out
+    final_state: State = load_state(state_root)
+    rule_link: Path = claude_root / "rules" / "demo-rule.md"
+    assert exit_code == 0
+    assert rule_link.is_symlink()
+    assert rule_unit_id("demo-rule") in final_state.units
+    assert f"{MARKER_INSTALLED} demo-rule" in captured
     assert TAB_PLACEHOLDER not in captured
 
 
