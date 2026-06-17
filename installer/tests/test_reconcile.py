@@ -1,8 +1,14 @@
 from pathlib import Path
 
-from actions import install_skill
-from catalog import Catalog, Unit, skill_unit_id
-from reconcile import ReconcilePlan, apply_skill_reconcile, plan_skill_reconcile
+from actions import install_agent, install_skill
+from catalog import Catalog, Unit, agent_unit_id, skill_unit_id
+from reconcile import (
+    ReconcilePlan,
+    apply_agent_reconcile,
+    apply_skill_reconcile,
+    plan_agent_reconcile,
+    plan_skill_reconcile,
+)
 from state import State, load_state
 
 
@@ -20,6 +26,27 @@ def test_plan_classifies_skills_by_tick_against_installed_state() -> None:
     ticked: frozenset[str] = frozenset({"alpha", "gamma"})
 
     plan: ReconcilePlan = plan_skill_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+
+    assert plan.to_install == ("alpha",)
+    assert plan.to_remove == ("beta",)
+
+
+def test_plan_classifies_agents_by_tick_against_installed_state() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="agent", name="alpha"),
+            Unit(kind="agent", name="beta"),
+            Unit(kind="agent", name="gamma"),
+        ),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={"agent/beta": "hash", "agent/gamma": "hash"})
+    ticked: frozenset[str] = frozenset({"alpha", "gamma"})
+
+    plan: ReconcilePlan = plan_agent_reconcile(
         ticked=ticked, catalog=catalog, state=state
     )
 
@@ -68,5 +95,50 @@ def test_apply_installs_planned_skills_and_uninstalls_removed_ones(
 
     assert not (claude_root / "skills" / "old-skill").is_symlink()
     assert not (state_root / "staged" / "skill" / "old-skill").exists()
+    assert old_id not in result.units
+    assert old_id not in persisted.units
+
+
+def test_apply_installs_planned_agents_and_uninstalls_removed_ones(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    agents_source: Path = source_root / "agents"
+    agents_source.mkdir(parents=True)
+    for name in ("old-agent", "new-agent"):
+        (agents_source / f"{name}.md").write_text(f"# {name}\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    installed_state: State = install_agent(
+        name="old-agent",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    plan: ReconcilePlan = ReconcilePlan(
+        to_install=("new-agent",), to_remove=("old-agent",)
+    )
+    result: State = apply_agent_reconcile(
+        plan=plan,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    persisted: State = load_state(state_root)
+    new_id: str = agent_unit_id("new-agent")
+    old_id: str = agent_unit_id("old-agent")
+
+    assert (claude_root / "agents" / "new-agent.md").is_symlink()
+    assert (state_root / "staged" / "agent" / "new-agent").is_file()
+    assert new_id in result.units
+    assert new_id in persisted.units
+
+    assert not (claude_root / "agents" / "old-agent.md").is_symlink()
+    assert not (state_root / "staged" / "agent" / "old-agent").exists()
     assert old_id not in result.units
     assert old_id not in persisted.units

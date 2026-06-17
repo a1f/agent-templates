@@ -47,9 +47,12 @@ class Catalog:
 
 
 _SKILL_KIND: Final[str] = "skill"
+_AGENT_KIND: Final[str] = "agent"
 
 
-def _unit_id(unit: Unit) -> str:
+def unit_id(unit: Unit) -> str:
+    """Own the "<kind>/<name>" join key in one place, so callers key state and
+    resolve packages without re-encoding the id format this module defines."""
     return f"{unit.kind}{_REF_SEP}{unit.name}"
 
 
@@ -62,13 +65,31 @@ def skill_unit(name: str) -> Unit:
 def skill_unit_id(name: str) -> str:
     """Expose the id a skill unit is keyed by, so callers render install status
     without re-encoding the "<kind>/<name>" join this module owns."""
-    return _unit_id(skill_unit(name))
+    return unit_id(skill_unit(name))
+
+
+def agent_unit(name: str) -> Unit:
+    """Own the agent-kind decision here, so callers stage agents without
+    re-encoding the "agent" kind token this module is the source of truth for."""
+    return Unit(kind=_AGENT_KIND, name=name)
+
+
+def agent_unit_id(name: str) -> str:
+    """Expose the id an agent unit is keyed by, so callers render install status
+    without re-encoding the "<kind>/<name>" join this module owns."""
+    return unit_id(agent_unit(name))
 
 
 def list_skills(catalog: Catalog) -> list[str]:
     """Surface the installable skills by name in a stable order, so a UI listing
     doesn't depend on declaration order in the toml."""
     return sorted(unit.name for unit in catalog.units if unit.kind == _SKILL_KIND)
+
+
+def list_agents(catalog: Catalog) -> list[str]:
+    """Surface the installable agents by name in a stable order, so a UI listing
+    doesn't depend on declaration order in the toml."""
+    return sorted(unit.name for unit in catalog.units if unit.kind == _AGENT_KIND)
 
 
 def _resolve(ref: str, by_id: dict[str, Unit], package: str) -> Unit:
@@ -98,7 +119,7 @@ def load_catalog(path: Path) -> Catalog:
         Unit(kind=cast("str", row["kind"]), name=cast("str", row["name"]))
         for row in cast("list[dict[str, object]]", raw["units"])
     )
-    by_id: dict[str, Unit] = {_unit_id(unit): unit for unit in units}
+    by_id: dict[str, Unit] = {unit_id(unit): unit for unit in units}
 
     packages: tuple[Package, ...] = tuple(
         _build_package(row, by_id)

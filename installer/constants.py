@@ -5,3 +5,4 @@ from typing import Final
 # sources live in the repo (~/.claude's per-kind dirs and the repo's skills/ tree).
 STAGED_DIRNAME: Final[str] = "staged"
 SKILLS_DIRNAME: Final[str] = "skills"
+AGENTS_DIRNAME: Final[str] = "agents"

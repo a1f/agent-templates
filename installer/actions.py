@@ -3,11 +3,66 @@
 
 from pathlib import Path
 
-from catalog import skill_unit, skill_unit_id
-from constants import SKILLS_DIRNAME, STAGED_DIRNAME
+from catalog import Unit, agent_unit, skill_unit, unit_id
+from constants import AGENTS_DIRNAME, SKILLS_DIRNAME, STAGED_DIRNAME
 from hashing import hash_unit
 from placement import link_unit, stage_unit, unlink_unit, unstage_unit
 from state import State, save_state
+
+
+def _install_unit(
+    *,
+    unit: Unit,
+    source: Path,
+    link_path: Path,
+    state_root: Path,
+    state: State,
+) -> State:
+    """Place one unit on disk by staging its source then linking the staged copy
+    live, so the staged tree stays the single source of truth behind the symlink.
+
+    Persists the updated state to state_root (via save_state) and returns a brand-new
+    immutable State recording the unit's content hash; the passed-in state is never
+    mutated."""
+    staged_path: Path = stage_unit(
+        unit=unit, source=source, staged_root=state_root / STAGED_DIRNAME
+    )
+    link_unit(staged_path=staged_path, link_path=link_path)
+    content_hash: str = hash_unit(staged_path)
+    new_state: State = State(
+        version=state.version,
+        units={**state.units, unit_id(unit): content_hash},
+    )
+    save_state(new_state, state_root)
+    return new_state
+
+
+def _uninstall_unit(
+    *,
+    unit: Unit,
+    link_path: Path,
+    state_root: Path,
+    state: State,
+) -> State:
+    """Take one unit back off disk by dropping its live symlink then its staged
+    copy, so neither a dangling link nor an orphaned staging area survives — the
+    inverse of _install_unit.
+
+    Persists the updated state to state_root (via save_state) and returns a brand-new
+    immutable State without the unit; the passed-in state is never mutated."""
+    unlink_unit(link_path=link_path)
+    unstage_unit(unit=unit, staged_root=state_root / STAGED_DIRNAME)
+    removed_id: str = unit_id(unit)
+    new_state: State = State(
+        version=state.version,
+        units={
+            existing_id: content
+            for existing_id, content in state.units.items()
+            if existing_id != removed_id
+        },
+    )
+    save_state(new_state, state_root)
+    return new_state
 
 
 def install_skill(
@@ -18,23 +73,35 @@ def install_skill(
     claude_root: Path,
     state: State,
 ) -> State:
-    """Place a skill on disk by staging its source then linking the staged tree
-    live, so the staged copy stays the single source of truth behind the symlink.
+    """Install the named skill, staging its source tree and linking it live under
+    ~/.claude/skills/<name>."""
+    return _install_unit(
+        unit=skill_unit(name),
+        source=source_root / SKILLS_DIRNAME / name,
+        link_path=claude_root / SKILLS_DIRNAME / name,
+        state_root=state_root,
+        state=state,
+    )
 
-    Persists the updated state to state_root (via save_state) and returns a brand-new
-    immutable State; the passed-in state is never mutated."""
-    source: Path = source_root / SKILLS_DIRNAME / name
-    staged_path: Path = stage_unit(
-        unit=skill_unit(name), source=source, staged_root=state_root / STAGED_DIRNAME
+
+def install_agent(
+    *,
+    name: str,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Install the named agent, staging its single "<name>.md" source and linking
+    it live under ~/.claude/agents/. The staged copy is keyed by bare
+    "<kind>/<name>" (no ".md"), while the live symlink keeps the ".md" suffix."""
+    return _install_unit(
+        unit=agent_unit(name),
+        source=source_root / AGENTS_DIRNAME / f"{name}.md",
+        link_path=claude_root / AGENTS_DIRNAME / f"{name}.md",
+        state_root=state_root,
+        state=state,
     )
-    link_unit(staged_path=staged_path, link_path=claude_root / SKILLS_DIRNAME / name)
-    content_hash: str = hash_unit(staged_path)
-    new_state: State = State(
-        version=state.version,
-        units={**state.units, skill_unit_id(name): content_hash},
-    )
-    save_state(new_state, state_root)
-    return new_state
 
 
 def uninstall_skill(
@@ -44,22 +111,28 @@ def uninstall_skill(
     claude_root: Path,
     state: State,
 ) -> State:
-    """Take a skill back off disk by dropping its live symlink then its staged
-    tree, so neither a dangling link nor an orphaned staging area survives — the
-    inverse of install_skill.
-
-    Persists the updated state to state_root (via save_state) and returns a brand-new
-    immutable State without the skill's unit; the passed-in state is never mutated."""
-    unlink_unit(link_path=claude_root / SKILLS_DIRNAME / name)
-    unstage_unit(unit=skill_unit(name), staged_root=state_root / STAGED_DIRNAME)
-    removed_id: str = skill_unit_id(name)
-    new_state: State = State(
-        version=state.version,
-        units={
-            unit_id: content
-            for unit_id, content in state.units.items()
-            if unit_id != removed_id
-        },
+    """Uninstall the named skill, the inverse of install_skill: drop its live
+    symlink then its staged tree."""
+    return _uninstall_unit(
+        unit=skill_unit(name),
+        link_path=claude_root / SKILLS_DIRNAME / name,
+        state_root=state_root,
+        state=state,
     )
-    save_state(new_state, state_root)
-    return new_state
+
+
+def uninstall_agent(
+    *,
+    name: str,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Uninstall the named agent, the inverse of install_agent: drop its live
+    symlink then its staged file."""
+    return _uninstall_unit(
+        unit=agent_unit(name),
+        link_path=claude_root / AGENTS_DIRNAME / f"{name}.md",
+        state_root=state_root,
+        state=state,
+    )
