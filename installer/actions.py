@@ -3,8 +3,14 @@
 
 from pathlib import Path
 
-from catalog import Unit, agent_unit, rule_unit, skill_unit, unit_id
-from constants import AGENTS_DIRNAME, RULES_DIRNAME, SKILLS_DIRNAME, STAGED_DIRNAME
+from catalog import Unit, agent_unit, hook_unit, rule_unit, skill_unit, unit_id
+from constants import (
+    AGENTS_DIRNAME,
+    HOOKS_DIRNAME,
+    RULES_DIRNAME,
+    SKILLS_DIRNAME,
+    STAGED_DIRNAME,
+)
 from hashing import hash_unit
 from placement import link_unit, stage_unit, unlink_unit, unstage_unit
 from state import State, save_state
@@ -124,6 +130,27 @@ def install_rule(
     )
 
 
+def install_hook(
+    *,
+    name: str,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Install the named hook, staging its single "<name>.sh" source and linking
+    it live under ~/.claude/hooks/. The staged copy is keyed by bare
+    "<kind>/<name>" (no ".sh"), while the live symlink keeps the ".sh" suffix;
+    the source's executable mode is preserved through staging."""
+    return _install_unit(
+        unit=hook_unit(name),
+        source=source_root / HOOKS_DIRNAME / f"{name}.sh",
+        link_path=claude_root / HOOKS_DIRNAME / f"{name}.sh",
+        state_root=state_root,
+        state=state,
+    )
+
+
 def uninstall_skill(
     *,
     name: str,
@@ -170,6 +197,23 @@ def uninstall_rule(
     return _uninstall_unit(
         unit=rule_unit(name),
         link_path=claude_root / RULES_DIRNAME / f"{name}.md",
+        state_root=state_root,
+        state=state,
+    )
+
+
+def uninstall_hook(
+    *,
+    name: str,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Uninstall the named hook, the inverse of install_hook: drop its live
+    symlink then its staged file."""
+    return _uninstall_unit(
+        unit=hook_unit(name),
+        link_path=claude_root / HOOKS_DIRNAME / f"{name}.sh",
         state_root=state_root,
         state=state,
     )

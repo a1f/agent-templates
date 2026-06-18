@@ -5,16 +5,20 @@ from typing import Protocol
 
 from actions import (
     install_agent,
+    install_hook,
     install_rule,
     install_skill,
     uninstall_agent,
+    uninstall_hook,
     uninstall_rule,
     uninstall_skill,
 )
 from catalog import (
     Catalog,
     agent_unit_id,
+    hook_unit_id,
     list_agents,
+    list_hooks,
     list_rules,
     list_skills,
     rule_unit_id,
@@ -91,6 +95,19 @@ def plan_rule_reconcile(
         ticked=ticked,
         names=list_rules(catalog),
         unit_id_of=rule_unit_id,
+        state=state,
+    )
+
+
+def plan_hook_reconcile(
+    *, ticked: frozenset[str], catalog: Catalog, state: State
+) -> ReconcilePlan:
+    """Diff the ticked selection against installed state over the catalog's hooks,
+    so the apply step works from a decided plan instead of re-deriving the diff."""
+    return _plan_reconcile(
+        ticked=ticked,
+        names=list_hooks(catalog),
+        unit_id_of=hook_unit_id,
         state=state,
     )
 
@@ -209,6 +226,27 @@ def apply_rule_reconcile(
         plan=plan,
         install=install_rule,
         uninstall=uninstall_rule,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state,
+    )
+
+
+def apply_hook_reconcile(
+    *,
+    plan: ReconcilePlan,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned diff by installing then uninstalling each named hook,
+    threading the persisted State through so the final return reflects every action."""
+    return _apply_reconcile(
+        plan=plan,
+        install=install_hook,
+        uninstall=uninstall_hook,
         source_root=source_root,
         state_root=state_root,
         claude_root=claude_root,

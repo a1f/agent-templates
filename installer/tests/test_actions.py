@@ -1,10 +1,13 @@
+import stat
 from pathlib import Path
 
 from actions import (
     install_agent,
+    install_hook,
     install_rule,
     install_skill,
     uninstall_agent,
+    uninstall_hook,
     uninstall_rule,
     uninstall_skill,
 )
@@ -229,6 +232,41 @@ def test_install_rule_stages_md_file_and_links_into_claude_rules(
     assert rule_unit_id(name) in result.units
 
 
+def test_install_hook_stages_executable_sh_and_links_into_claude_hooks(
+    tmp_path: Path,
+) -> None:
+    hook_content: str = "#!/usr/bin/env bash\necho demo\n"
+    name: str = "demo-hook"
+    source_root: Path = tmp_path / "repo"
+    hook_source: Path = source_root / "hooks" / f"{name}.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text(hook_content, encoding="utf-8")
+    hook_source.chmod(0o755)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_hook(
+        name=name,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    staged_path: Path = state_root / "staged" / "hook" / name
+    assert staged_path.is_file()
+    assert staged_path.read_text(encoding="utf-8") == hook_content
+    assert staged_path.stat().st_mode & stat.S_IXUSR
+
+    link_path: Path = claude_root / "hooks" / f"{name}.sh"
+    assert link_path.is_symlink()
+    assert link_path.resolve() == staged_path.resolve()
+    assert link_path.read_text(encoding="utf-8") == hook_content
+
+    assert f"hook/{name}" in result.units
+
+
 def test_uninstall_rule_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
     rule_content: str = "# Demo Rule\n\nDemonstrates installation.\n"
     name: str = "demo-rule"
@@ -257,6 +295,40 @@ def test_uninstall_rule_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
     unit_id: str = rule_unit_id(name)
     assert not (claude_root / "rules" / f"{name}.md").is_symlink()
     assert not (state_root / "staged" / "rule" / name).exists()
+    assert unit_id not in result.units
+    assert unit_id not in load_state(state_root).units
+    assert unit_id in installed_state.units
+
+
+def test_uninstall_hook_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
+    hook_content: str = "#!/usr/bin/env bash\necho demo\n"
+    name: str = "demo-hook"
+    source_root: Path = tmp_path / "repo"
+    hook_source: Path = source_root / "hooks" / f"{name}.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text(hook_content, encoding="utf-8")
+    hook_source.chmod(0o755)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    installed_state: State = install_hook(
+        name=name,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    result: State = uninstall_hook(
+        name=name,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    unit_id: str = f"hook/{name}"
+    assert not (claude_root / "hooks" / f"{name}.sh").is_symlink()
+    assert not (state_root / "staged" / "hook" / name).exists()
     assert unit_id not in result.units
     assert unit_id not in load_state(state_root).units
     assert unit_id in installed_state.units

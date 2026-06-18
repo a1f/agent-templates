@@ -9,6 +9,7 @@ from catalog import (
     Package,
     Unit,
     list_agents,
+    list_hooks,
     list_rules,
     list_skills,
     load_catalog,
@@ -100,6 +101,35 @@ packages = ["pack"]
 """
 
 
+# Two hook units declared out of order (zeta before alpha) plus a skill and an
+# agent, so a single catalog pins both the sort and the non-hook exclusion.
+_HOOKS_FIXTURE: Final[str] = """
+[[units]]
+kind = "hook"
+name = "zeta"
+
+[[units]]
+kind = "hook"
+name = "alpha"
+
+[[units]]
+kind = "skill"
+name = "beta"
+
+[[units]]
+kind = "agent"
+name = "helper"
+
+[[packages]]
+name = "pack"
+units = ["hook/alpha"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+
+
 def _write(tmp_path: Path, body: str) -> Path:
     catalog: Path = tmp_path / "catalog.toml"
     catalog.write_text(body, encoding="utf-8")
@@ -146,6 +176,14 @@ def test_list_rules_returns_only_rule_names_sorted(tmp_path: Path) -> None:
     # Only rule-kind units, and sorted (declaration order is zeta, alpha); the
     # skill and agent units must not leak into the rule listing.
     assert list_rules(catalog) == ["alpha", "zeta"]
+
+
+def test_list_hooks_returns_only_hook_names_sorted(tmp_path: Path) -> None:
+    catalog: Catalog = load_catalog(_write(tmp_path, _HOOKS_FIXTURE))
+
+    # Only hook-kind units, and sorted (declaration order is zeta, alpha); the
+    # skill and agent units must not leak into the hook listing.
+    assert list_hooks(catalog) == ["alpha", "zeta"]
 
 
 def test_skill_unit_id_joins_kind_and_name() -> None:

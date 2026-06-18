@@ -9,12 +9,13 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from pytest import CaptureFixture, MonkeyPatch
 
-from actions import install_agent, install_rule, install_skill
+from actions import install_agent, install_hook, install_rule, install_skill
 from at import main
 from catalog import (
     Catalog,
     Unit,
     agent_unit_id,
+    hook_unit_id,
     list_skills,
     load_catalog,
     rule_unit_id,
@@ -28,6 +29,7 @@ from tui import (
     TAB_PLACEHOLDER,
     abort_on_esc,
     agent_rows,
+    hook_rows,
     rule_rows,
     skill_rows,
 )
@@ -141,6 +143,23 @@ def test_rule_rows_marks_installed_sorted_and_excludes_non_rules() -> None:
     state: State = State(version=1, units={rule_unit_id("alpha"): "hash"})
 
     rows: list[str] = rule_rows(catalog=catalog, state=state)
+
+    assert rows == [f"{MARKER_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
+
+
+def test_hook_rows_marks_installed_sorted_and_excludes_non_hooks() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="hook", name="zeta"),
+            Unit(kind="hook", name="alpha"),
+            Unit(kind="skill", name="some-skill"),
+        ),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={hook_unit_id("alpha"): "hash"})
+
+    rows: list[str] = hook_rows(catalog=catalog, state=state)
 
     assert rows == [f"{MARKER_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
 
@@ -301,6 +320,69 @@ def test_rules_tab_installs_ticked_rule_through_reconcile(
     assert rule_link.is_symlink()
     assert rule_unit_id("demo-rule") in final_state.units
     assert f"{MARKER_INSTALLED} demo-rule" in captured
+    assert TAB_PLACEHOLDER not in captured
+
+
+def test_hooks_tab_installs_ticked_hook_through_reconcile(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
+
+    # A real, executable hook source on disk is the only input the install needs;
+    # nothing is installed up front, so ticking demo-hook through the Hooks tab must
+    # stage, link, and record it — mirroring how the Agents/Rules tabs install a
+    # ticked unit. A real hook script carries the executable bit, so set it here.
+    hook_source: Path = repo_root / "hooks" / "demo-hook.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text("#!/bin/sh\necho demo-hook\n", encoding="utf-8")
+    hook_source.chmod(0o755)
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        'packages = []\nbundles = []\n\n[[units]]\nkind = "hook"\nname = "demo-hook"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Hooks tab, then closes it after the reconcile applies.
+    select_answers: Iterator[str] = iter(["Hooks", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Tick the lone catalog hook so the desired set installs demo-hook.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-hook"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Ticking demo-hook applies plan_hook_reconcile then apply_hook_reconcile, so the
+    # hook ends up linked live into the staged tree and recorded in state, and the rows
+    # re-render with the installed marker.
+    captured: str = capsys.readouterr().out
+    final_state: State = load_state(state_root)
+    hook_link: Path = claude_root / "hooks" / "demo-hook.sh"
+    staged_hook: Path = state_root / "staged" / "hook" / "demo-hook"
+    assert exit_code == 0
+    assert hook_link.is_symlink()
+    assert hook_link.resolve() == staged_hook.resolve()
+    assert hook_unit_id("demo-hook") in final_state.units
+    assert f"{MARKER_INSTALLED} demo-hook" in captured
     assert TAB_PLACEHOLDER not in captured
 
 
@@ -1420,6 +1502,57 @@ def test_install_non_skill_flag_installs_named_unit_non_interactively(
     assert unit_id_of(name) in final_state.units
 
 
+def test_install_hook_flag_installs_named_hook_non_interactively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A hook source is a single executable .sh file (skills are directories, agents and
+    # rules are bare .md), and the CLI accepts only --skill/--agent/--rule today, so
+    # nothing is installed up front: a clean `install --hook` run must stage, link, and
+    # record this hook. A real hook script carries the executable bit, so set it here.
+    hook_source: Path = repo_root / "hooks" / "demo-hook.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text("#!/bin/sh\necho demo-hook\n", encoding="utf-8")
+    hook_source.chmod(0o755)
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        'packages = []\nbundles = []\n\n[[units]]\nkind = "hook"\nname = "demo-hook"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The --hook path must place the hook without ever opening the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls back
+    # through launch_tui's select/checkbox/confirm trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--hook", "demo-hook"])
+
+    # Routed through the same declarative reconcile as the other kinds, the named hook
+    # lands: exit 0, the live symlink at claude_root/hooks/demo-hook.sh, the staged copy
+    # at state_root/staged/hook/demo-hook (bare name, no .sh), and a "hook/demo-hook"
+    # state entry.
+    final_state: State = load_state(state_root)
+    hook_link: Path = claude_root / "hooks" / "demo-hook.sh"
+    hook_staging: Path = state_root / "staged" / "hook" / "demo-hook"
+    assert exit_code == 0
+    assert hook_link.is_symlink()
+    assert hook_staging.exists()
+    assert hook_unit_id("demo-hook") in final_state.units
+
+
 @pytest.mark.parametrize(
     ("kind", "subdir", "install_action", "unit_id_of"),
     [
@@ -1488,6 +1621,68 @@ def test_uninstall_non_skill_flag_removes_named_unit_non_interactively(
     assert not unit_link.exists() and not unit_link.is_symlink()
     assert not unit_staging.exists()
     assert unit_id_of(name) not in final_state.units
+
+
+def test_uninstall_hook_flag_removes_named_hook_non_interactively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A hook source is a single executable .sh file (skills are directories, agents and
+    # rules are bare .md). Install the hook up front through the real public action so
+    # on-disk state, staging, and the live symlink all exist before the targeted
+    # uninstall must wipe every trace of it. A real hook script carries the executable
+    # bit, so set it here.
+    name: str = "demo-hook"
+    hook_source: Path = repo_root / "hooks" / f"{name}.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text("#!/bin/sh\necho demo-hook\n", encoding="utf-8")
+    hook_source.chmod(0o755)
+    install_hook(
+        name=name,
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        f'packages = []\nbundles = []\n\n[[units]]\nkind = "hook"\nname = "{name}"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The --hook uninstall must remove the hook without ever opening the TUI:
+    # route every questionary prompt to a factory that fails loudly, so a
+    # regression that falls back through launch_tui's select/checkbox/confirm
+    # trips this guard, not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["uninstall", "--hook", name])
+
+    # Routed through the same declarative reconcile as the other kinds, an `uninstall
+    # --hook <name>` is subtractive: the hook's live symlink at
+    # claude_root/hooks/<name>.sh, its staged copy at
+    # state_root/staged/hook/<name> (bare name, no .sh), and its "hook/<name>" state
+    # entry all go, and the command exits zero.
+    final_state: State = load_state(state_root)
+    hook_link: Path = claude_root / "hooks" / f"{name}.sh"
+    hook_staging: Path = state_root / "staged" / "hook" / name
+    assert exit_code == 0
+    assert not hook_link.exists() and not hook_link.is_symlink()
+    assert not hook_staging.exists()
+    assert hook_unit_id(name) not in final_state.units
 
 
 def test_install_rejects_unknown_name_in_any_kind_before_applying_any(
