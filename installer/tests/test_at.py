@@ -1360,3 +1360,61 @@ def test_malformed_skill_request_exits_two_without_crash_or_tui(
     captured_err: str = capsys.readouterr().err
     assert exit_code == 2
     assert captured_err.strip() != ""
+
+
+@pytest.mark.parametrize(
+    ("kind", "subdir", "unit_id_of"),
+    [("agent", "agents", agent_unit_id), ("rule", "rules", rule_unit_id)],
+)
+def test_install_non_skill_flag_installs_named_unit_non_interactively(
+    kind: str,
+    subdir: str,
+    unit_id_of: Callable[[str], str],
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # An agent/rule source is a single .md file (skills are directories), and the
+    # CLI accepts only --skill today, so nothing is installed up front: a clean
+    # `install --<kind>` run must stage, link, and record this non-skill unit.
+    name: str = f"demo-{kind}"
+    source: Path = repo_root / subdir / f"{name}.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        f'packages = []\nbundles = []\n\n[[units]]\nkind = "{kind}"\nname = "{name}"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The --agent/--rule path must place the unit without ever opening the TUI: route
+    # every questionary prompt to a factory that fails loudly, so a regression that
+    # falls back through launch_tui's select/checkbox/confirm trips this guard, not a
+    # prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", f"--{kind}", name])
+
+    # Routed through the same declarative reconcile as skills, the named non-skill unit
+    # lands: exit 0, the live symlink at claude_root/<subdir>/<name>.md, the staged copy
+    # at state_root/staged/<kind>/<name> (bare name, no .md), and a state entry.
+    final_state: State = load_state(state_root)
+    unit_link: Path = claude_root / subdir / f"{name}.md"
+    unit_staging: Path = state_root / "staged" / kind / name
+    assert exit_code == 0
+    assert unit_link.is_symlink()
+    assert unit_staging.exists()
+    assert unit_id_of(name) in final_state.units
