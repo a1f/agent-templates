@@ -11,3 +11,11 @@ name = "demo-skill"
 [[units]]
 kind = "skill"
 name = "demo-skill-two"
+
+[[units]]
+kind = "agent"
+name = "demo-agent"
+
+[[units]]
+kind = "rule"
+name = "demo-rule"
