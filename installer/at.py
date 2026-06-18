@@ -9,7 +9,7 @@ import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 import click
 
@@ -83,6 +83,32 @@ def _run_update() -> int:
     return 0
 
 
+class _PlanReconcile(Protocol):
+    """One kind's planner: diff a ticked selection against state into a ReconcilePlan.
+    A Protocol (not bare `Callable[..., ReconcilePlan]`) so mypy checks the keyword-only
+    call sites in `_run_per_kind` instead of accepting any argument shape."""
+
+    def __call__(
+        self, *, ticked: frozenset[str], catalog: Catalog, state: State
+    ) -> ReconcilePlan: ...
+
+
+class _ApplyReconcile(Protocol):
+    """One kind's apply: carry out a ReconcilePlan and return the persisted State.
+    A Protocol (not bare `Callable[..., State]`) so mypy checks the keyword-only call
+    sites in `_run_per_kind` instead of accepting any argument shape."""
+
+    def __call__(
+        self,
+        *,
+        plan: ReconcilePlan,
+        source_root: Path,
+        state_root: Path,
+        claude_root: Path,
+        state: State,
+    ) -> State: ...
+
+
 @dataclass(frozen=True)
 class _Kind:
     """Binds one unit kind's catalog/reconcile entry points so the scriptable
@@ -93,8 +119,8 @@ class _Kind:
     label: str
     list_names: Callable[[Catalog], list[str]]
     unit_id_of: Callable[[str], str]
-    plan: Callable[..., ReconcilePlan]
-    apply: Callable[..., State]
+    plan: _PlanReconcile
+    apply: _ApplyReconcile
 
 
 _SKILL: Final[_Kind] = _Kind(
@@ -136,59 +162,50 @@ def _reject_unknown_units(
     return 2
 
 
-def _reconcile_to(
-    ticked: frozenset[str], *, kind: _Kind, catalog: Catalog, state: State
+def _run_per_kind(
+    requested: tuple[tuple[_Kind, tuple[str, ...]], ...], *, additive: bool
 ) -> int:
-    """The one apply path every scriptable install/uninstall shares, so reconcile
-    wiring lives in one place regardless of unit kind."""
-    plan: ReconcilePlan = kind.plan(ticked=ticked, catalog=catalog, state=state)
-    kind.apply(
-        plan=plan,
-        source_root=_source_root(),
-        state_root=STATE_ROOT,
-        claude_root=CLAUDE_ROOT,
-        state=state,
-    )
+    """The one scriptable (non-TUI) install/uninstall path every flag routes through,
+    so install and uninstall share one dispatch instead of near-identical per-kind
+    loops. `additive` picks the ticked set: install joins the named units to what's
+    installed (`installed | names`), uninstall drops them (`installed - names`).
+
+    Atomic across kinds: every requested kind's names are validated up front, so a
+    typo in any flag rejects the whole command (exit 2) before any kind is applied —
+    nothing is installed or removed. The returned State is threaded from each kind's
+    apply into the next so the persisted store is the union over all kinds, not the
+    last kind clobbering the rest."""
+    catalog: Catalog = load_catalog(_catalog_path())
+    for kind, names in requested:
+        if not names:
+            continue
+        rejection: int | None = _reject_unknown_units(
+            list(names), kind=kind, catalog=catalog
+        )
+        if rejection is not None:
+            return rejection
+    state: State = load_state(STATE_ROOT)
+    for kind, names in requested:
+        if not names:
+            continue
+        installed: set[str] = {
+            name
+            for name in kind.list_names(catalog)
+            if kind.unit_id_of(name) in state.units
+        }
+        selected: set[str] = set(names)
+        ticked: frozenset[str] = frozenset(
+            installed | selected if additive else installed - selected
+        )
+        plan: ReconcilePlan = kind.plan(ticked=ticked, catalog=catalog, state=state)
+        state = kind.apply(
+            plan=plan,
+            source_root=_source_root(),
+            state_root=STATE_ROOT,
+            claude_root=CLAUDE_ROOT,
+            state=state,
+        )
     return 0
-
-
-def _install_named_units(names: list[str], *, kind: _Kind) -> int:
-    """Install every named unit of one kind without the TUI, so
-    `at install --<kind> <name> ...` is a scriptable path that drives the same
-    declarative reconcile the menu does. Install is additive: the named units join
-    whatever is already installed."""
-    catalog: Catalog = load_catalog(_catalog_path())
-    rejection: int | None = _reject_unknown_units(names, kind=kind, catalog=catalog)
-    if rejection is not None:
-        return rejection
-    state: State = load_state(STATE_ROOT)
-    installed: set[str] = {
-        name
-        for name in kind.list_names(catalog)
-        if kind.unit_id_of(name) in state.units
-    }
-    ticked: frozenset[str] = frozenset(installed | set(names))
-    return _reconcile_to(ticked, kind=kind, catalog=catalog, state=state)
-
-
-def _uninstall_named_units(names: list[str], *, kind: _Kind) -> int:
-    """Remove every named unit of one kind without the TUI, so
-    `at uninstall --<kind> <name> ...` is a scriptable path that drives the same
-    declarative reconcile the menu does. Uninstall is subtractive: the named units
-    drop out of whatever is installed, and every other installed unit stays ticked
-    and thus untouched."""
-    catalog: Catalog = load_catalog(_catalog_path())
-    rejection: int | None = _reject_unknown_units(names, kind=kind, catalog=catalog)
-    if rejection is not None:
-        return rejection
-    state: State = load_state(STATE_ROOT)
-    installed: set[str] = {
-        name
-        for name in kind.list_names(catalog)
-        if kind.unit_id_of(name) in state.units
-    }
-    ticked: frozenset[str] = frozenset(installed - set(names))
-    return _reconcile_to(ticked, kind=kind, catalog=catalog, state=state)
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -215,24 +232,18 @@ def install(
 ) -> int:
     """Install named units (--skill/--agent/--rule/--all) without the menu,
     else open it."""
-    requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
-        (_SKILL, skills),
-        (_AGENT, agents),
-        (_RULE, rules),
-    )
     if skills or agents or rules:
-        # Each kind reconciles against its own catalog slice, so a flagged install
-        # runs one reconcile per kind and stops at the first that rejects a name.
-        for kind, names in requested:
-            if not names:
-                continue
-            kind_exit: int = _install_named_units(list(names), kind=kind)
-            if kind_exit != 0:
-                return kind_exit
-        return 0
+        requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
+            (_SKILL, skills),
+            (_AGENT, agents),
+            (_RULE, rules),
+        )
+        return _run_per_kind(requested, additive=True)
     if install_all:
-        catalog_skills: list[str] = list_skills(load_catalog(_catalog_path()))
-        return _install_named_units(catalog_skills, kind=_SKILL)
+        catalog_skills: tuple[str, ...] = tuple(
+            list_skills(load_catalog(_catalog_path()))
+        )
+        return _run_per_kind(((_SKILL, catalog_skills),), additive=True)
     return launch_tui()
 
 
@@ -255,15 +266,7 @@ def uninstall(
         (_AGENT, agents),
         (_RULE, rules),
     )
-    # Each kind reconciles against its own catalog slice, so a flagged uninstall
-    # runs one reconcile per kind and stops at the first that rejects a name.
-    for kind, names in requested:
-        if not names:
-            continue
-        kind_exit: int = _uninstall_named_units(list(names), kind=kind)
-        if kind_exit != 0:
-            return kind_exit
-    return 0
+    return _run_per_kind(requested, additive=False)
 
 
 @cli.command()

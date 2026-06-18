@@ -1488,3 +1488,55 @@ def test_uninstall_non_skill_flag_removes_named_unit_non_interactively(
     assert not unit_link.exists() and not unit_link.is_symlink()
     assert not unit_staging.exists()
     assert unit_id_of(name) not in final_state.units
+
+
+def test_install_rejects_unknown_name_in_any_kind_before_applying_any(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # The catalog lists a real skill (good-skill) with a source on disk so it *could*
+    # install, but names no rule 'nonesuch'. The request mixes both kinds: a valid
+    # --skill alongside an unknown --rule, so validation must span all kinds.
+    source: Path = repo_root / "skills" / "good-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# good-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "good-skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The rejection path must stay non-interactive: route every questionary prompt to a
+    # factory that fails loudly, so a regression that falls back into launch_tui's
+    # select/checkbox/confirm trips this guard instead of silently prompting.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--skill", "good-skill", "--rule", "nonesuch"])
+
+    # Validation is atomic across kinds: an unknown name in *any* requested kind aborts
+    # before *any* kind is applied, so main exits 2 naming the bad rule ('nonesuch') and
+    # the valid skill is never installed — no live symlink, no staged copy, no state
+    # entry — rather than landing the skill and only then catching the typo.
+    captured_err: str = capsys.readouterr().err
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "good-skill"
+    skill_staging: Path = state_root / "staged" / "skill" / "good-skill"
+    assert exit_code == 2
+    assert "nonesuch" in captured_err
+    assert not skill_link.exists() and not skill_link.is_symlink()
+    assert not skill_staging.exists()
+    assert skill_unit_id("good-skill") not in final_state.units
