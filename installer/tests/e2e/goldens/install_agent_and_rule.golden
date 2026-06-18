@@ -1,0 +1,11 @@
+dir .claude/agents
+link .claude/agents/demo-agent.md -> .claude/at/staged/agent/demo-agent
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/agent
+file .claude/at/staged/agent/demo-agent b5ab887c16f11fd42f38c3972bb7019d601a4686b12069ba3e4ef87ac5c5f831
+dir .claude/at/staged/rule
+file .claude/at/staged/rule/demo-rule 94b4fcca183f1a395b2231260530d3d608b66d70206d8eff1d0000d680d65d6a
+json .claude/at/state.json {"units":{"agent/demo-agent":"b5ab887c16f11fd42f38c3972bb7019d601a4686b12069ba3e4ef87ac5c5f831","rule/demo-rule":"94b4fcca183f1a395b2231260530d3d608b66d70206d8eff1d0000d680d65d6a"},"version":1}
+dir .claude/rules
+link .claude/rules/demo-rule.md -> .claude/at/staged/rule/demo-rule

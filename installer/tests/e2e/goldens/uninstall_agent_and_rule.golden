@@ -1,0 +1,7 @@
+dir .claude/agents
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/agent
+dir .claude/at/staged/rule
+json .claude/at/state.json {"units":{},"version":1}
+dir .claude/rules
