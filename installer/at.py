@@ -238,11 +238,32 @@ def install(
 
 @cli.command()
 @click.option("--skill", "skills", multiple=True, metavar="<name>")
-def uninstall(skills: tuple[str, ...]) -> int:
-    """Uninstall the named skills; at least one --skill is required."""
-    if not skills:
-        raise click.UsageError("uninstall requires at least one --skill <name>")
-    return _uninstall_named_units(list(skills), kind=_SKILL)
+@click.option("--agent", "agents", multiple=True, metavar="<name>")
+@click.option("--rule", "rules", multiple=True, metavar="<name>")
+def uninstall(
+    skills: tuple[str, ...],
+    agents: tuple[str, ...],
+    rules: tuple[str, ...],
+) -> int:
+    """Uninstall named units (--skill/--agent/--rule); at least one is required."""
+    if not skills and not agents and not rules:
+        raise click.UsageError(
+            "uninstall requires at least one --skill/--agent/--rule <name>"
+        )
+    requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
+        (_SKILL, skills),
+        (_AGENT, agents),
+        (_RULE, rules),
+    )
+    # Each kind reconciles against its own catalog slice, so a flagged uninstall
+    # runs one reconcile per kind and stops at the first that rejects a name.
+    for kind, names in requested:
+        if not names:
+            continue
+        kind_exit: int = _uninstall_named_units(list(names), kind=kind)
+        if kind_exit != 0:
+            return kind_exit
+    return 0
 
 
 @cli.command()

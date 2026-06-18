@@ -9,7 +9,7 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from pytest import CaptureFixture, MonkeyPatch
 
-from actions import install_skill
+from actions import install_agent, install_rule, install_skill
 from at import main
 from catalog import (
     Catalog,
@@ -1418,3 +1418,73 @@ def test_install_non_skill_flag_installs_named_unit_non_interactively(
     assert unit_link.is_symlink()
     assert unit_staging.exists()
     assert unit_id_of(name) in final_state.units
+
+
+@pytest.mark.parametrize(
+    ("kind", "subdir", "install_action", "unit_id_of"),
+    [
+        ("agent", "agents", install_agent, agent_unit_id),
+        ("rule", "rules", install_rule, rule_unit_id),
+    ],
+)
+def test_uninstall_non_skill_flag_removes_named_unit_non_interactively(
+    kind: str,
+    subdir: str,
+    install_action: Callable[..., State],
+    unit_id_of: Callable[[str], str],
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # An agent/rule source is a single .md file (skills are directories). Install the
+    # unit up front through the real public action so on-disk state, staging, and the
+    # live symlink all exist before the targeted uninstall must wipe every trace of it.
+    name: str = f"demo-{kind}"
+    source: Path = repo_root / subdir / f"{name}.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(f"# {name}\n", encoding="utf-8")
+    install_action(
+        name=name,
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        f'packages = []\nbundles = []\n\n[[units]]\nkind = "{kind}"\nname = "{name}"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The --agent/--rule uninstall must remove the unit without ever opening the TUI:
+    # route every questionary prompt to a factory that fails loudly, so a regression
+    # that falls back through launch_tui's select/checkbox/confirm trips this guard,
+    # not a prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["uninstall", f"--{kind}", name])
+
+    # Routed through the same declarative reconcile as skills, an `uninstall --<kind>
+    # <name>` is subtractive: the unit's live symlink at claude_root/<subdir>/<name>.md,
+    # its staged copy at state_root/staged/<kind>/<name>, and its state entry all go,
+    # and the command exits zero.
+    final_state: State = load_state(state_root)
+    unit_link: Path = claude_root / subdir / f"{name}.md"
+    unit_staging: Path = state_root / "staged" / kind / name
+    assert exit_code == 0
+    assert not unit_link.exists() and not unit_link.is_symlink()
+    assert not unit_staging.exists()
+    assert unit_id_of(name) not in final_state.units
