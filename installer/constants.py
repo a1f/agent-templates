@@ -6,3 +6,4 @@ from typing import Final
 STAGED_DIRNAME: Final[str] = "staged"
 SKILLS_DIRNAME: Final[str] = "skills"
 AGENTS_DIRNAME: Final[str] = "agents"
+RULES_DIRNAME: Final[str] = "rules"

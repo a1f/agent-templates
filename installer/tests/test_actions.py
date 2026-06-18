@@ -1,7 +1,14 @@
 from pathlib import Path
 
-from actions import install_agent, install_skill, uninstall_agent, uninstall_skill
-from catalog import agent_unit_id, skill_unit_id
+from actions import (
+    install_agent,
+    install_rule,
+    install_skill,
+    uninstall_agent,
+    uninstall_rule,
+    uninstall_skill,
+)
+from catalog import agent_unit_id, rule_unit_id, skill_unit_id
 from hashing import hash_unit
 from state import State, load_state
 
@@ -184,6 +191,72 @@ def test_uninstall_agent_undoes_install_and_forgets_unit(tmp_path: Path) -> None
     unit_id: str = agent_unit_id(name)
     assert not (claude_root / "agents" / f"{name}.md").is_symlink()
     assert not (state_root / "staged" / "agent" / name).exists()
+    assert unit_id not in result.units
+    assert unit_id not in load_state(state_root).units
+    assert unit_id in installed_state.units
+
+
+def test_install_rule_stages_md_file_and_links_into_claude_rules(
+    tmp_path: Path,
+) -> None:
+    rule_content: str = "# Demo Rule\n\nDemonstrates installation.\n"
+    name: str = "demo-rule"
+    source_root: Path = tmp_path / "repo"
+    rule_source: Path = source_root / "rules" / f"{name}.md"
+    rule_source.parent.mkdir(parents=True)
+    rule_source.write_text(rule_content, encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_rule(
+        name=name,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    staged_path: Path = state_root / "staged" / "rule" / name
+    assert staged_path.is_file()
+    assert staged_path.read_text(encoding="utf-8") == rule_content
+
+    link_path: Path = claude_root / "rules" / f"{name}.md"
+    assert link_path.is_symlink()
+    assert link_path.resolve() == staged_path.resolve()
+    assert link_path.read_text(encoding="utf-8") == rule_content
+
+    assert rule_unit_id(name) in result.units
+
+
+def test_uninstall_rule_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
+    rule_content: str = "# Demo Rule\n\nDemonstrates installation.\n"
+    name: str = "demo-rule"
+    source_root: Path = tmp_path / "repo"
+    rule_source: Path = source_root / "rules" / f"{name}.md"
+    rule_source.parent.mkdir(parents=True)
+    rule_source.write_text(rule_content, encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    installed_state: State = install_rule(
+        name=name,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    result: State = uninstall_rule(
+        name=name,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    unit_id: str = rule_unit_id(name)
+    assert not (claude_root / "rules" / f"{name}.md").is_symlink()
+    assert not (state_root / "staged" / "rule" / name).exists()
     assert unit_id not in result.units
     assert unit_id not in load_state(state_root).units
     assert unit_id in installed_state.units

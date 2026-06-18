@@ -48,6 +48,7 @@ class Catalog:
 
 _SKILL_KIND: Final[str] = "skill"
 _AGENT_KIND: Final[str] = "agent"
+_RULE_KIND: Final[str] = "rule"
 
 
 def unit_id(unit: Unit) -> str:
@@ -80,6 +81,18 @@ def agent_unit_id(name: str) -> str:
     return unit_id(agent_unit(name))
 
 
+def rule_unit(name: str) -> Unit:
+    """Own the rule-kind decision here, so callers stage rules without
+    re-encoding the "rule" kind token this module is the source of truth for."""
+    return Unit(kind=_RULE_KIND, name=name)
+
+
+def rule_unit_id(name: str) -> str:
+    """Expose the id a rule unit is keyed by, so callers render install status
+    without re-encoding the "<kind>/<name>" join this module owns."""
+    return unit_id(rule_unit(name))
+
+
 def list_skills(catalog: Catalog) -> list[str]:
     """Surface the installable skills by name in a stable order, so a UI listing
     doesn't depend on declaration order in the toml."""
@@ -90,6 +103,12 @@ def list_agents(catalog: Catalog) -> list[str]:
     """Surface the installable agents by name in a stable order, so a UI listing
     doesn't depend on declaration order in the toml."""
     return sorted(unit.name for unit in catalog.units if unit.kind == _AGENT_KIND)
+
+
+def list_rules(catalog: Catalog) -> list[str]:
+    """Surface the installable rules by name in a stable order, so a UI listing
+    doesn't depend on declaration order in the toml."""
+    return sorted(unit.name for unit in catalog.units if unit.kind == _RULE_KIND)
 
 
 def _resolve(ref: str, by_id: dict[str, Unit], package: str) -> Unit:
