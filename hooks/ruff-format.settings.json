@@ -1,0 +1,13 @@
+{
+  "PostToolUse": [
+    {
+      "matcher": "Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/ruff-format.sh"
+        }
+      ]
+    }
+  ]
+}
