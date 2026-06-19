@@ -108,6 +108,11 @@ name = "tdd"
 kind = "rule"
 name = "typescript"
 
+# --- hooks (hooks/<name>.sh) ---
+[[units]]
+kind = "hook"
+name = "ruff-format"
+
 # --- packages (provisional curation; mirrors issue #74's examples) ---
 [[packages]]
 name = "architect-pr"

@@ -1,13 +1,22 @@
 from pathlib import Path
 
-from actions import install_agent, install_rule, install_skill
-from catalog import Catalog, Unit, agent_unit_id, rule_unit_id, skill_unit_id
+from actions import install_agent, install_hook, install_rule, install_skill
+from catalog import (
+    Catalog,
+    Unit,
+    agent_unit_id,
+    hook_unit_id,
+    rule_unit_id,
+    skill_unit_id,
+)
 from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
+    apply_hook_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
     plan_agent_reconcile,
+    plan_hook_reconcile,
     plan_rule_reconcile,
     plan_skill_reconcile,
 )
@@ -70,6 +79,27 @@ def test_plan_classifies_rules_by_tick_against_installed_state() -> None:
     ticked: frozenset[str] = frozenset({"alpha", "gamma"})
 
     plan: ReconcilePlan = plan_rule_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+
+    assert plan.to_install == ("alpha",)
+    assert plan.to_remove == ("beta",)
+
+
+def test_plan_classifies_hooks_by_tick_against_installed_state() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="hook", name="alpha"),
+            Unit(kind="hook", name="beta"),
+            Unit(kind="hook", name="gamma"),
+        ),
+        packages=(),
+        bundles=(),
+    )
+    state: State = State(version=1, units={"hook/beta": "hash", "hook/gamma": "hash"})
+    ticked: frozenset[str] = frozenset({"alpha", "gamma"})
+
+    plan: ReconcilePlan = plan_hook_reconcile(
         ticked=ticked, catalog=catalog, state=state
     )
 
@@ -208,5 +238,52 @@ def test_apply_installs_planned_rules_and_uninstalls_removed_ones(
 
     assert not (claude_root / "rules" / "old-rule.md").is_symlink()
     assert not (state_root / "staged" / "rule" / "old-rule").exists()
+    assert old_id not in result.units
+    assert old_id not in persisted.units
+
+
+def test_apply_installs_planned_hooks_and_uninstalls_removed_ones(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    hooks_source: Path = source_root / "hooks"
+    hooks_source.mkdir(parents=True)
+    for name in ("old-hook", "new-hook"):
+        (hooks_source / f"{name}.sh").write_text(
+            f"#!/usr/bin/env bash\necho {name}\n", encoding="utf-8"
+        )
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    installed_state: State = install_hook(
+        name="old-hook",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    plan: ReconcilePlan = ReconcilePlan(
+        to_install=("new-hook",), to_remove=("old-hook",)
+    )
+    result: State = apply_hook_reconcile(
+        plan=plan,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    persisted: State = load_state(state_root)
+    new_id: str = hook_unit_id("new-hook")
+    old_id: str = hook_unit_id("old-hook")
+
+    assert (claude_root / "hooks" / "new-hook.sh").is_symlink()
+    assert (state_root / "staged" / "hook" / "new-hook").is_file()
+    assert new_id in result.units
+    assert new_id in persisted.units
+
+    assert not (claude_root / "hooks" / "old-hook.sh").is_symlink()
+    assert not (state_root / "staged" / "hook" / "old-hook").exists()
     assert old_id not in result.units
     assert old_id not in persisted.units

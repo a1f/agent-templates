@@ -49,6 +49,7 @@ class Catalog:
 _SKILL_KIND: Final[str] = "skill"
 _AGENT_KIND: Final[str] = "agent"
 _RULE_KIND: Final[str] = "rule"
+_HOOK_KIND: Final[str] = "hook"
 
 
 def unit_id(unit: Unit) -> str:
@@ -93,6 +94,18 @@ def rule_unit_id(name: str) -> str:
     return unit_id(rule_unit(name))
 
 
+def hook_unit(name: str) -> Unit:
+    """Own the hook-kind decision here, so callers stage hooks without
+    re-encoding the "hook" kind token this module is the source of truth for."""
+    return Unit(kind=_HOOK_KIND, name=name)
+
+
+def hook_unit_id(name: str) -> str:
+    """Expose the id a hook unit is keyed by, so callers render install status
+    without re-encoding the "<kind>/<name>" join this module owns."""
+    return unit_id(hook_unit(name))
+
+
 def list_skills(catalog: Catalog) -> list[str]:
     """Surface the installable skills by name in a stable order, so a UI listing
     doesn't depend on declaration order in the toml."""
@@ -109,6 +122,12 @@ def list_rules(catalog: Catalog) -> list[str]:
     """Surface the installable rules by name in a stable order, so a UI listing
     doesn't depend on declaration order in the toml."""
     return sorted(unit.name for unit in catalog.units if unit.kind == _RULE_KIND)
+
+
+def list_hooks(catalog: Catalog) -> list[str]:
+    """Surface the installable hooks by name in a stable order, so a UI listing
+    doesn't depend on declaration order in the toml."""
+    return sorted(unit.name for unit in catalog.units if unit.kind == _HOOK_KIND)
 
 
 def _resolve(ref: str, by_id: dict[str, Unit], package: str) -> Unit:

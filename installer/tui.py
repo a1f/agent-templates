@@ -22,7 +22,9 @@ from rich.panel import Panel
 from catalog import (
     Catalog,
     agent_unit_id,
+    hook_unit_id,
     list_agents,
+    list_hooks,
     list_rules,
     list_skills,
     load_catalog,
@@ -33,9 +35,11 @@ from paths import CATALOG_PATH, CLAUDE_ROOT, REPO_ROOT, STATE_ROOT
 from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
+    apply_hook_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
     plan_agent_reconcile,
+    plan_hook_reconcile,
     plan_rule_reconcile,
     plan_skill_reconcile,
 )
@@ -155,6 +159,14 @@ def rule_rows(*, catalog: Catalog, state: State) -> list[str]:
     )
 
 
+def hook_rows(*, catalog: Catalog, state: State) -> list[str]:
+    """Pair each catalog hook with its on-disk install marker so the Hooks tab
+    renders status, keying install state by the unit id catalog.py owns."""
+    return _unit_rows(
+        names=list_hooks, unit_id_of=hook_unit_id, catalog=catalog, state=state
+    )
+
+
 # ---------------------------------------------------------------------------
 # Data instances
 # ---------------------------------------------------------------------------
@@ -186,10 +198,20 @@ _RULES_TAB: Final[_UnitTab] = _UnitTab(
     confirm_prompt="Apply rule changes?",
 )
 
+_HOOKS_TAB: Final[_UnitTab] = _UnitTab(
+    names=list_hooks,
+    unit_id_of=hook_unit_id,
+    plan=plan_hook_reconcile,
+    apply=apply_hook_reconcile,
+    select_prompt="Select installed hooks",
+    confirm_prompt="Apply hook changes?",
+)
+
 _UNIT_TABS: Final[dict[str, _UnitTab]] = {
     "Skills": _SKILLS_TAB,
     "Agents": _AGENTS_TAB,
     "Rules": _RULES_TAB,
+    "Hooks": _HOOKS_TAB,
 }
 
 

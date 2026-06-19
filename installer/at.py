@@ -16,7 +16,9 @@ import click
 from catalog import (
     Catalog,
     agent_unit_id,
+    hook_unit_id,
     list_agents,
+    list_hooks,
     list_rules,
     list_skills,
     load_catalog,
@@ -27,9 +29,11 @@ from paths import CATALOG_PATH, CLAUDE_ROOT, REPO_ROOT, STATE_ROOT
 from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
+    apply_hook_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
     plan_agent_reconcile,
+    plan_hook_reconcile,
     plan_rule_reconcile,
     plan_skill_reconcile,
 )
@@ -144,6 +148,13 @@ _RULE: Final[_Kind] = _Kind(
     plan=plan_rule_reconcile,
     apply=apply_rule_reconcile,
 )
+_HOOK: Final[_Kind] = _Kind(
+    label="hook",
+    list_names=list_hooks,
+    unit_id_of=hook_unit_id,
+    plan=plan_hook_reconcile,
+    apply=apply_hook_reconcile,
+)
 
 
 def _reject_unknown_units(
@@ -220,6 +231,7 @@ def cli() -> None:
 @click.option("--skill", "skills", multiple=True, metavar="<name>")
 @click.option("--agent", "agents", multiple=True, metavar="<name>")
 @click.option("--rule", "rules", multiple=True, metavar="<name>")
+@click.option("--hook", "hooks", multiple=True, metavar="<name>")
 @click.option("--all", "install_all", is_flag=True)
 # Accepted so a scripted `install --all` can pass it, but it changes nothing: the
 # --all path never opens the menu, so the flag never needs to reach the callback.
@@ -228,15 +240,17 @@ def install(
     skills: tuple[str, ...],
     agents: tuple[str, ...],
     rules: tuple[str, ...],
+    hooks: tuple[str, ...],
     install_all: bool,
 ) -> int:
-    """Install named units (--skill/--agent/--rule/--all) without the menu,
+    """Install named units (--skill/--agent/--rule/--hook/--all) without the menu,
     else open it."""
-    if skills or agents or rules:
+    if skills or agents or rules or hooks:
         requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
             (_SKILL, skills),
             (_AGENT, agents),
             (_RULE, rules),
+            (_HOOK, hooks),
         )
         return _run_per_kind(requested, additive=True)
     if install_all:
@@ -251,20 +265,24 @@ def install(
 @click.option("--skill", "skills", multiple=True, metavar="<name>")
 @click.option("--agent", "agents", multiple=True, metavar="<name>")
 @click.option("--rule", "rules", multiple=True, metavar="<name>")
+@click.option("--hook", "hooks", multiple=True, metavar="<name>")
 def uninstall(
     skills: tuple[str, ...],
     agents: tuple[str, ...],
     rules: tuple[str, ...],
+    hooks: tuple[str, ...],
 ) -> int:
-    """Uninstall named units (--skill/--agent/--rule); at least one is required."""
-    if not skills and not agents and not rules:
+    """Uninstall named units (--skill/--agent/--rule/--hook); at least one is
+    required."""
+    if not skills and not agents and not rules and not hooks:
         raise click.UsageError(
-            "uninstall requires at least one --skill/--agent/--rule <name>"
+            "uninstall requires at least one --skill/--agent/--rule/--hook <name>"
         )
     requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
         (_SKILL, skills),
         (_AGENT, agents),
         (_RULE, rules),
+        (_HOOK, hooks),
     )
     return _run_per_kind(requested, additive=False)
 
