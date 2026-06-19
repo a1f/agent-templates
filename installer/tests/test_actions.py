@@ -1,3 +1,4 @@
+import json
 import stat
 from pathlib import Path
 
@@ -265,6 +266,79 @@ def test_install_hook_stages_executable_sh_and_links_into_claude_hooks(
     assert link_path.read_text(encoding="utf-8") == hook_content
 
     assert f"hook/{name}" in result.units
+
+
+def test_install_hook_merges_settings_fragment_preserving_user_settings(
+    tmp_path: Path,
+) -> None:
+    name: str = "demo-hook"
+    source_root: Path = tmp_path / "repo"
+    hook_source: Path = source_root / "hooks" / f"{name}.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text("#!/usr/bin/env bash\necho demo\n", encoding="utf-8")
+    hook_source.chmod(0o755)
+
+    fragment: dict[str, object] = {
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {"type": "command", "command": "~/.claude/hooks/demo-hook.sh"}
+                ],
+            }
+        ]
+    }
+    (source_root / "hooks" / f"{name}.settings.json").write_text(
+        json.dumps(fragment), encoding="utf-8"
+    )
+
+    claude_root: Path = tmp_path / "claude"
+    claude_root.mkdir(parents=True)
+    user_post_group: dict[str, object] = {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "user.sh"}],
+    }
+    existing_settings: dict[str, object] = {
+        "model": "opus",
+        "hooks": {"PostToolUse": [user_post_group]},
+    }
+    settings_path: Path = claude_root / "settings.json"
+    settings_path.write_text(json.dumps(existing_settings), encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+
+    install_hook(
+        name=name,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    result: dict[str, object] = json.loads(settings_path.read_text(encoding="utf-8"))
+
+    assert result["model"] == "opus"
+
+    hooks_map: object = result["hooks"]
+    assert isinstance(hooks_map, dict)
+    post_groups: object = hooks_map["PostToolUse"]
+    assert isinstance(post_groups, list)
+    assert user_post_group in post_groups
+
+    tracked_groups: list[dict[str, object]] = [
+        group
+        for group in post_groups
+        if isinstance(group, dict) and group.get("id") == f"hook/{name}"
+    ]
+    assert len(tracked_groups) == 1
+
+    tracked_hooks: object = tracked_groups[0]["hooks"]
+    assert isinstance(tracked_hooks, list)
+    first_hook: object = tracked_hooks[0]
+    assert isinstance(first_hook, dict)
+    command: object = first_hook["command"]
+    assert isinstance(command, str)
+    assert command.endswith("demo-hook.sh")
 
 
 def test_uninstall_rule_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
