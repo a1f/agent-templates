@@ -72,3 +72,31 @@ def test_merge_hook_fragment_preserves_other_settings_and_hook_groups() -> None:
         "matcher": "Edit",
         "hooks": [{"type": "command", "command": "ours.sh"}],
     } in post_groups
+
+
+def test_merge_hook_fragment_is_idempotent_for_repeated_same_hook_merge() -> None:
+    fragment: dict[str, object] = {
+        "PostToolUse": [
+            {"matcher": "Edit", "hooks": [{"type": "command", "command": "ours.sh"}]}
+        ]
+    }
+
+    once: dict[str, object] = merge_hook_fragment(
+        {}, hook_id="hook/demo", fragment=fragment
+    )
+    twice: dict[str, object] = merge_hook_fragment(
+        once, hook_id="hook/demo", fragment=fragment
+    )
+
+    assert twice == once
+
+    hooks_map: object = twice["hooks"]
+    assert isinstance(hooks_map, dict)
+    post_groups: object = hooks_map["PostToolUse"]
+    assert isinstance(post_groups, list)
+    our_group_count: int = sum(
+        1
+        for group in post_groups
+        if isinstance(group, dict) and group.get("id") == "hook/demo"
+    )
+    assert our_group_count == 1
