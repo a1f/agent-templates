@@ -18,8 +18,13 @@ def merge_hook_fragment(
     for event, groups in fragment.items():
         # The fragment is untrusted external shape, so cast to the matcher-group
         # list at this boundary; stamping each group as {"id": ..., **group}
-        # copies it, leaving the fragment's own dicts untouched.
-        hooks[event] = [
+        # copies it, leaving the fragment's own dicts untouched. Append our
+        # stamped groups after any the user already had for this event, so a
+        # pre-existing group in the same event survives the merge.
+        existing: list[dict[str, object]] = list(
+            cast("list[dict[str, object]]", hooks.get(event, []))
+        )
+        hooks[event] = existing + [
             {"id": hook_id, **group}
             for group in cast("list[dict[str, object]]", groups)
         ]
