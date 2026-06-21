@@ -142,9 +142,11 @@ def install_hook(
     """Install the named hook, staging its single "<name>.sh" source and linking
     it live under ~/.claude/hooks/. The staged copy is keyed by bare
     "<kind>/<name>" (no ".sh"), while the live symlink keeps the ".sh" suffix;
-    the source's executable mode is preserved through staging. Also merges the
-    hook's settings.json fragment into the user's settings under the tracked id,
-    so staging the script and registering it as live happen as one install."""
+    the source's executable mode is preserved through staging. As a final,
+    separate step — after the script is staged, linked, and recorded — merges the
+    hook's settings.json fragment into the user's settings under the tracked id;
+    the install is idempotent, so re-running it completes a partial install whose
+    settings merge did not land."""
     new_state: State = _install_unit(
         unit=hook_unit(name),
         source=source_root / HOOKS_DIRNAME / f"{name}.sh",
