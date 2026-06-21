@@ -45,6 +45,41 @@ def merge_hook_fragment(
     return merged
 
 
+def unmerge_hook_fragment(
+    settings: dict[str, object], *, hook_id: str
+) -> dict[str, object]:
+    """Strip back out exactly the matcher-groups a hook stamped with its id, so an
+    uninstall reverses merge_hook_fragment — dropping that hook's groups while user
+    groups (no "id") and other hooks' groups (a different "id") stay registered."""
+    # Build a fresh settings dict (and a fresh "hooks" map) rather than mutating
+    # the caller's: settings is the on-disk shape callers may still read, so the
+    # unmerge stays a pure function of its inputs.
+    merged: dict[str, object] = dict(settings)
+    hooks: dict[str, object] = {}
+    for event, groups in cast("dict[str, object]", merged.get("hooks", {})).items():
+        # The settings are untrusted external shape, so cast each event's groups to
+        # the matcher-group list at this boundary and keep only the groups this hook
+        # did not stamp; user groups (no "id") and other hooks' groups (a different
+        # "id") survive, so the unmerge removes exactly this hook's contributions.
+        # Drop an event whose groups are now all gone rather than leaving an empty
+        # "Event": [] behind, so a merge that introduced the event round-trips away.
+        kept: list[dict[str, object]] = [
+            group
+            for group in cast("list[dict[str, object]]", groups)
+            if group.get("id") != hook_id
+        ]
+        if kept:
+            hooks[event] = kept
+    # A settings doc that never had a "hooks" block should round-trip unchanged,
+    # so only re-attach the map when it carries groups; otherwise drop the key
+    # rather than leaving an empty "hooks": {} behind.
+    if hooks:
+        merged["hooks"] = hooks
+    else:
+        merged.pop("hooks", None)
+    return merged
+
+
 def load_settings(path: Path) -> dict[str, object]:
     """Treat a missing settings.json as a first install rather than an error, so a
     hook merges into an empty document instead of every caller handling absence."""
@@ -100,3 +135,23 @@ def merge_hook_settings(*, name: str, source_root: Path, claude_root: Path) -> N
         load_settings(settings_path), hook_id=hook_unit_id(name), fragment=fragment
     )
     save_settings(merged, settings_path)
+
+
+def unmerge_hook_settings(*, name: str, claude_root: Path) -> None:
+    """Strip the hook's tracked matcher-groups back out of the user's settings.json
+    by their id alone, so an uninstall reverses merge_hook_settings without depending
+    on the repo source still existing or the hook's fragment being unchanged."""
+    settings_path: Path = claude_root / SETTINGS_FILENAME
+    # A settings.json that was never written has nothing to un-merge, so bail before
+    # load/save rather than persisting an empty document the install never created.
+    if not settings_path.exists():
+        return
+    loaded: dict[str, object] = load_settings(settings_path)
+    unmerged: dict[str, object] = unmerge_hook_fragment(
+        loaded, hook_id=hook_unit_id(name)
+    )
+    # Persist only when the un-merge actually removed something, so uninstalling a
+    # hook that contributed no groups leaves the user's hand-edited settings.json
+    # byte-for-byte intact rather than reformatting it through save_settings.
+    if unmerged != loaded:
+        save_settings(unmerged, settings_path)

@@ -13,7 +13,7 @@ from constants import (
 )
 from hashing import hash_unit
 from placement import link_unit, stage_unit, unlink_unit, unstage_unit
-from settings import merge_hook_settings
+from settings import merge_hook_settings, unmerge_hook_settings
 from state import State, save_state
 
 
@@ -216,8 +216,10 @@ def uninstall_hook(
     claude_root: Path,
     state: State,
 ) -> State:
-    """Uninstall the named hook, the inverse of install_hook: drop its live
-    symlink then its staged file."""
+    """Uninstall the named hook, the inverse of install_hook: as a first, separate
+    step un-merge the hook's settings.json block by its tracked id, then drop its
+    live symlink and its staged file."""
+    unmerge_hook_settings(name=name, claude_root=claude_root)
     return _uninstall_unit(
         unit=hook_unit(name),
         link_path=claude_root / HOOKS_DIRNAME / f"{name}.sh",
