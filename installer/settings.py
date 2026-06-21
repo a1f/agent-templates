@@ -142,6 +142,10 @@ def unmerge_hook_settings(*, name: str, claude_root: Path) -> None:
     by their id alone, so an uninstall reverses merge_hook_settings without depending
     on the repo source still existing or the hook's fragment being unchanged."""
     settings_path: Path = claude_root / SETTINGS_FILENAME
+    # A settings.json that was never written has nothing to un-merge, so bail before
+    # load/save rather than persisting an empty document the install never created.
+    if not settings_path.exists():
+        return
     unmerged: dict[str, object] = unmerge_hook_fragment(
         load_settings(settings_path), hook_id=hook_unit_id(name)
     )

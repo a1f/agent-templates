@@ -480,3 +480,33 @@ def test_uninstall_hook_removes_its_settings_block_preserving_user_settings(
         if isinstance(group, dict) and group.get("id") == f"hook/{name}"
     ]
     assert tracked_groups == []
+
+
+def test_uninstall_hook_tolerates_missing_settings_file(tmp_path: Path) -> None:
+    hook_content: str = "#!/usr/bin/env bash\necho demo\n"
+    name: str = "demo-hook"
+    source_root: Path = tmp_path / "repo"
+    hook_source: Path = source_root / "hooks" / f"{name}.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text(hook_content, encoding="utf-8")
+    hook_source.chmod(0o755)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    installed_state: State = install_hook(
+        name=name,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    uninstall_hook(
+        name=name,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    assert not (claude_root / "hooks" / f"{name}.sh").is_symlink()
+    assert not (claude_root / "settings.json").exists()
