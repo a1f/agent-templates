@@ -45,6 +45,31 @@ def merge_hook_fragment(
     return merged
 
 
+def unmerge_hook_fragment(
+    settings: dict[str, object], *, hook_id: str
+) -> dict[str, object]:
+    """Strip back out exactly the matcher-groups a hook stamped with its id, so an
+    uninstall reverses merge_hook_fragment — dropping that hook's groups while user
+    groups (no "id") and other hooks' groups (a different "id") stay registered."""
+    # Build a fresh settings dict (and a fresh "hooks" map) rather than mutating
+    # the caller's: settings is the on-disk shape callers may still read, so the
+    # unmerge stays a pure function of its inputs.
+    merged: dict[str, object] = dict(settings)
+    hooks: dict[str, object] = {}
+    for event, groups in cast("dict[str, object]", merged.get("hooks", {})).items():
+        # The settings are untrusted external shape, so cast each event's groups to
+        # the matcher-group list at this boundary and keep only the groups this hook
+        # did not stamp; user groups (no "id") and other hooks' groups (a different
+        # "id") survive, so the unmerge removes exactly this hook's contributions.
+        hooks[event] = [
+            group
+            for group in cast("list[dict[str, object]]", groups)
+            if group.get("id") != hook_id
+        ]
+    merged["hooks"] = hooks
+    return merged
+
+
 def load_settings(path: Path) -> dict[str, object]:
     """Treat a missing settings.json as a first install rather than an error, so a
     hook merges into an empty document instead of every caller handling absence."""
