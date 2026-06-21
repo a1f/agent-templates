@@ -146,7 +146,12 @@ def unmerge_hook_settings(*, name: str, claude_root: Path) -> None:
     # load/save rather than persisting an empty document the install never created.
     if not settings_path.exists():
         return
+    loaded: dict[str, object] = load_settings(settings_path)
     unmerged: dict[str, object] = unmerge_hook_fragment(
-        load_settings(settings_path), hook_id=hook_unit_id(name)
+        loaded, hook_id=hook_unit_id(name)
     )
-    save_settings(unmerged, settings_path)
+    # Persist only when the un-merge actually removed something, so uninstalling a
+    # hook that contributed no groups leaves the user's hand-edited settings.json
+    # byte-for-byte intact rather than reformatting it through save_settings.
+    if unmerged != loaded:
+        save_settings(unmerged, settings_path)
