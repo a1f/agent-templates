@@ -66,7 +66,13 @@ def unmerge_hook_fragment(
             for group in cast("list[dict[str, object]]", groups)
             if group.get("id") != hook_id
         ]
-    merged["hooks"] = hooks
+    # A settings doc that never had a "hooks" block should round-trip unchanged,
+    # so only re-attach the map when it carries groups; otherwise drop the key
+    # rather than leaving an empty "hooks": {} behind.
+    if hooks:
+        merged["hooks"] = hooks
+    else:
+        merged.pop("hooks", None)
     return merged
 
 

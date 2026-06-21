@@ -154,3 +154,12 @@ def test_unmerge_hook_fragment_removes_tracked_groups_preserving_the_rest() -> N
     original_post_groups: object = original_hooks["PostToolUse"]
     assert isinstance(original_post_groups, list)
     assert demo_post_group in original_post_groups
+
+
+def test_unmerge_hook_fragment_leaves_settings_without_a_hooks_block_unchanged() -> None:
+    settings: dict[str, object] = {"model": "opus", "permissions": {"allow": ["Bash"]}}
+
+    result: dict[str, object] = unmerge_hook_fragment(settings, hook_id="hook/demo")
+
+    assert result == {"model": "opus", "permissions": {"allow": ["Bash"]}}
+    assert "hooks" not in result
