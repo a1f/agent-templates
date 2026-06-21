@@ -156,7 +156,7 @@ def test_unmerge_hook_fragment_removes_tracked_groups_preserving_the_rest() -> N
     assert demo_post_group in original_post_groups
 
 
-def test_unmerge_hook_fragment_leaves_settings_without_a_hooks_block_unchanged() -> None:
+def test_unmerge_hook_fragment_leaves_a_no_hooks_doc_unchanged() -> None:
     settings: dict[str, object] = {"model": "opus", "permissions": {"allow": ["Bash"]}}
 
     result: dict[str, object] = unmerge_hook_fragment(settings, hook_id="hook/demo")
