@@ -13,6 +13,7 @@ from constants import (
 )
 from hashing import hash_unit
 from placement import link_unit, stage_unit, unlink_unit, unstage_unit
+from settings import merge_hook_settings
 from state import State, save_state
 
 
@@ -141,14 +142,20 @@ def install_hook(
     """Install the named hook, staging its single "<name>.sh" source and linking
     it live under ~/.claude/hooks/. The staged copy is keyed by bare
     "<kind>/<name>" (no ".sh"), while the live symlink keeps the ".sh" suffix;
-    the source's executable mode is preserved through staging."""
-    return _install_unit(
+    the source's executable mode is preserved through staging. As a final,
+    separate step — after the script is staged, linked, and recorded — merges the
+    hook's settings.json fragment into the user's settings under the tracked id;
+    the install is idempotent, so re-running it completes a partial install whose
+    settings merge did not land."""
+    new_state: State = _install_unit(
         unit=hook_unit(name),
         source=source_root / HOOKS_DIRNAME / f"{name}.sh",
         link_path=claude_root / HOOKS_DIRNAME / f"{name}.sh",
         state_root=state_root,
         state=state,
     )
+    merge_hook_settings(name=name, source_root=source_root, claude_root=claude_root)
+    return new_state
 
 
 def uninstall_skill(
