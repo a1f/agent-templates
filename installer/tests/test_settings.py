@@ -163,3 +163,26 @@ def test_unmerge_hook_fragment_leaves_settings_without_a_hooks_block_unchanged()
 
     assert result == {"model": "opus", "permissions": {"allow": ["Bash"]}}
     assert "hooks" not in result
+
+
+def test_merge_then_unmerge_round_trips_to_the_original_settings() -> None:
+    original: dict[str, object] = {
+        "model": "opus",
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "Read", "hooks": [{"type": "command", "command": "pre.sh"}]}
+            ]
+        },
+    }
+    fragment: dict[str, object] = {
+        "PostToolUse": [
+            {"matcher": "Edit", "hooks": [{"type": "command", "command": "ours.sh"}]}
+        ]
+    }
+
+    merged: dict[str, object] = merge_hook_fragment(
+        original, hook_id="hook/demo", fragment=fragment
+    )
+    restored: dict[str, object] = unmerge_hook_fragment(merged, hook_id="hook/demo")
+
+    assert restored == original

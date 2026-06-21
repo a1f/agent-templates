@@ -61,11 +61,15 @@ def unmerge_hook_fragment(
         # the matcher-group list at this boundary and keep only the groups this hook
         # did not stamp; user groups (no "id") and other hooks' groups (a different
         # "id") survive, so the unmerge removes exactly this hook's contributions.
-        hooks[event] = [
+        # Drop an event whose groups are now all gone rather than leaving an empty
+        # "Event": [] behind, so a merge that introduced the event round-trips away.
+        kept: list[dict[str, object]] = [
             group
             for group in cast("list[dict[str, object]]", groups)
             if group.get("id") != hook_id
         ]
+        if kept:
+            hooks[event] = kept
     # A settings doc that never had a "hooks" block should round-trip unchanged,
     # so only re-attach the map when it carries groups; otherwise drop the key
     # rather than leaving an empty "hooks": {} behind.
