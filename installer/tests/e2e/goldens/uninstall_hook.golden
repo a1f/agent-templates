@@ -1,0 +1,6 @@
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/hook
+json .claude/at/state.json {"units":{},"version":1}
+dir .claude/hooks
+file .claude/settings.json d11149a8d698fc3e6f6e336da59420cc8aca3e022f5c316edd218f56bc82b744

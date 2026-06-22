@@ -19,3 +19,7 @@ name = "demo-agent"
 [[units]]
 kind = "rule"
 name = "demo-rule"
+
+[[units]]
+kind = "hook"
+name = "demo-hook"
