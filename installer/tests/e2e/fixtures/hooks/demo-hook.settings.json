@@ -1,0 +1,13 @@
+{
+  "PostToolUse": [
+    {
+      "matcher": "Edit|Write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": "~/.claude/hooks/demo-hook.sh"
+        }
+      ]
+    }
+  ]
+}

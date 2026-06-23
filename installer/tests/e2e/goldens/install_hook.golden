@@ -1,0 +1,8 @@
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/hook
+file .claude/at/staged/hook/demo-hook a17dede5c3b44bff25d3543d16a6d76e3be70370d92619fe428ba1d4f798c70c
+json .claude/at/state.json {"units":{"hook/demo-hook":"a17dede5c3b44bff25d3543d16a6d76e3be70370d92619fe428ba1d4f798c70c"},"version":1}
+dir .claude/hooks
+link .claude/hooks/demo-hook.sh -> .claude/at/staged/hook/demo-hook
+file .claude/settings.json e965653bcfa5692b483ed8bcc92d26a524e09fd17a12f0b983319513df569f31
