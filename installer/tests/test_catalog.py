@@ -13,6 +13,7 @@ from catalog import (
     list_rules,
     list_skills,
     load_catalog,
+    resolve_package,
     skill_unit_id,
 )
 
@@ -130,6 +131,33 @@ packages = ["pack"]
 """
 
 
+# One package declares extras (three paths, order significant) and another omits
+# the key entirely, so a single catalog pins both extras-order preservation and
+# the empty-tuple default.
+_EXTRAS_FIXTURE: Final[str] = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[units]]
+kind = "agent"
+name = "helper"
+
+[[packages]]
+name = "withextras"
+units = ["skill/alpha"]
+extras = ["schemas", "gates", "scripts/run.py"]
+
+[[packages]]
+name = "bare"
+units = ["agent/helper"]
+
+[[bundles]]
+name = "everything"
+packages = ["withextras", "bare"]
+"""
+
+
 def _write(tmp_path: Path, body: str) -> Path:
     catalog: Path = tmp_path / "catalog.toml"
     catalog.write_text(body, encoding="utf-8")
@@ -153,6 +181,44 @@ def test_load_catalog_populates_all_three_tiers(tmp_path: Path) -> None:
         in catalog.packages
     )
     assert Bundle(name="everything", packages=("pack",)) in catalog.bundles
+
+
+def test_load_catalog_parses_package_extras_in_declared_order(tmp_path: Path) -> None:
+    catalog: Catalog = load_catalog(_write(tmp_path, _EXTRAS_FIXTURE))
+
+    # extras parse into Package.extras as a tuple in declaration order; tuple
+    # equality is ordered, so a reorder would fail this.
+    assert (
+        Package(
+            name="withextras",
+            units=(Unit(kind="skill", name="alpha"),),
+            extras=("schemas", "gates", "scripts/run.py"),
+        )
+        in catalog.packages
+    )
+    # A package row with no extras key defaults to an empty tuple.
+    assert (
+        Package(name="bare", units=(Unit(kind="agent", name="helper"),))
+        in catalog.packages
+    )
+
+
+def test_resolve_package_returns_the_named_package(tmp_path: Path) -> None:
+    catalog: Catalog = load_catalog(_write(tmp_path, _EXTRAS_FIXTURE))
+
+    package: Package = resolve_package(catalog, "withextras")
+
+    assert package.name == "withextras"
+    assert package.extras == ("schemas", "gates", "scripts/run.py")
+    assert package.units == (Unit(kind="skill", name="alpha"),)
+
+
+def test_resolve_package_raises_naming_an_undeclared_package(tmp_path: Path) -> None:
+    catalog: Catalog = load_catalog(_write(tmp_path, _EXTRAS_FIXTURE))
+
+    # A name with no matching package fails loudly, naming the missing package.
+    with pytest.raises(ValueError, match="ghost"):
+        resolve_package(catalog, "ghost")
 
 
 def test_list_skills_returns_only_skill_names_sorted(tmp_path: Path) -> None:
@@ -204,6 +270,22 @@ def test_load_catalog_rejects_package_referencing_undeclared_unit(
 
     with pytest.raises(ValueError, match="skill/does-not-exist"):
         load_catalog(broken)
+
+
+def test_real_seed_resolve_package_carries_declared_extras_and_units() -> None:
+    # Smoke check against the shipped seed without hard-coding its full, growing
+    # extras list (the seed curation is provisional): membership checks confirm a
+    # named package resolves to its declared extras (the runtime support files
+    # staged with it) and still carries its units, so resolution didn't drop
+    # either tier. Exact extras order is pinned by the controlled-fixture test
+    # test_load_catalog_parses_package_extras_in_declared_order, so this smoke
+    # test does not re-pin it.
+    catalog: Catalog = load_catalog(SEED)
+    package: Package = resolve_package(catalog, "architect-pr")
+
+    assert "schemas" in package.extras  # a known declared extra is carried
+    assert "gates" in package.extras  # a second known extra is carried too
+    assert Unit(kind="skill", name="make-pr") in package.units
 
 
 def test_real_seed_loads_and_skills_are_sorted_skill_names() -> None:
