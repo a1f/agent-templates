@@ -114,6 +114,9 @@ kind = "hook"
 name = "ruff-format"
 
 # --- packages (provisional curation; mirrors issue #74's examples) ---
+# extras = source-relative paths (files or dirs) to the runtime support files a
+# skill reads — schemas, gates, helper scripts — staged with the units so an
+# install is self-contained.
 [[packages]]
 name = "architect-pr"
 units = [
@@ -125,6 +128,7 @@ units = [
   "rule/design-principles",
   "rule/tdd",
 ]
+extras = ["schemas", "gates", "scripts/validate_return.py"]
 
 [[packages]]
 name = "lite-pr"
@@ -136,6 +140,7 @@ units = [
   "rule/design-principles",
   "rule/tdd",
 ]
+extras = ["gates"]
 
 [[packages]]
 name = "breakdown"

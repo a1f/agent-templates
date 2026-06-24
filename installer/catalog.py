@@ -20,10 +20,15 @@ class Unit:
 @dataclass(frozen=True)
 class Package:
     """A named group of units installed together; holds the resolved Unit
-    objects, not raw id strings, so callers never re-join against the unit table."""
+    objects, not raw id strings, so callers never re-join against the unit table.
+    `extras` are source-relative paths (files or directories) to the runtime
+    support files a skill reads — schemas, gates, helper scripts — staged
+    alongside the units so an install is self-contained; default `()` keeps
+    `Package(name=..., units=...)` construction working for packages with none."""
 
     name: str
     units: tuple[Unit, ...]
+    extras: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -144,7 +149,28 @@ def _resolve(ref: str, by_id: dict[str, Unit], package: str) -> Unit:
 def _build_package(row: dict[str, object], by_id: dict[str, Unit]) -> Package:
     name: str = cast("str", row["name"])
     refs: list[str] = cast("list[str]", row["units"])
-    return Package(name=name, units=tuple(_resolve(ref, by_id, name) for ref in refs))
+    extras: tuple[str, ...] = tuple(cast("list[str]", row.get("extras", [])))
+    return Package(
+        name=name,
+        units=tuple(_resolve(ref, by_id, name) for ref in refs),
+        extras=extras,
+    )
+
+
+def resolve_package(catalog: Catalog, name: str) -> Package:
+    """Turn a package name into its declared Package — the unit set plus extras —
+    in one place, so callers select a curated group without re-scanning the
+    package table; an undeclared name fails loudly here rather than silently
+    resolving to nothing downstream."""
+    by_name: dict[str, Package] = {
+        package.name: package for package in catalog.packages
+    }
+    try:
+        return by_name[name]
+    except KeyError as missing:
+        raise ValueError(
+            f"package {name!r} is not declared in the catalog"
+        ) from missing
 
 
 def load_catalog(path: Path) -> Catalog:
