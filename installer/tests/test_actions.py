@@ -746,3 +746,67 @@ packages = ["pack-one", "pack-two"]
     # skill/only-two belongs only to pack-two and is left untouched.
     assert skill_unit_id("only-two") in result.units
     assert result.requesters[skill_unit_id("only-two")] == ("pack-two",)
+
+
+def test_uninstall_package_keeps_a_directly_installed_unit(tmp_path: Path) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "alpha"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Alpha Skill\n", encoding="utf-8")
+
+    # A controlled catalog declaring the one unit and a package that also contains
+    # it, loaded through the real boundary so the package install/uninstall resolve
+    # its members exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[packages]]
+name = "pack"
+units = ["skill/alpha"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # The user installs alpha directly first (a bare direct install records no
+    # requester token of its own), then a package containing alpha is layered over
+    # the already-present unit, then that package is dropped again.
+    state_after_direct: State = install_skill(
+        name="alpha",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    state_after_pack: State = install_package(
+        name="pack",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_direct,
+    )
+    result: State = uninstall_package(
+        name="pack",
+        catalog=catalog,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_pack,
+    )
+
+    # The user still wants alpha, so dropping the package must leave it fully
+    # installed: a direct-install marker outlives the package's requester rather
+    # than letting the package uninstall reclaim the directly-installed unit.
+    assert skill_unit_id("alpha") in result.units
+    assert (state_root / "staged" / "skill" / "alpha").is_dir()
+    assert (claude_root / "skills" / "alpha").is_symlink()
+    assert len(result.requesters[skill_unit_id("alpha")]) >= 1

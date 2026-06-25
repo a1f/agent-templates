@@ -317,6 +317,15 @@ def _set_requesters(state: State, *, unit: str, tokens: tuple[str, ...]) -> Stat
     )
 
 
+# Requester token marking a unit the user installed directly, outside any package.
+# Seeded by install_package when it adopts a pre-existing bare direct install (a
+# direct install_skill/etc. records no token of its own), so a later package
+# uninstall leaves this marker behind and keeps a unit the user still wants. The
+# leading "@" can never collide with a real package name, which is a bare catalog
+# identifier, so the marker never clashes with an actual requester.
+DIRECT_REQUESTER: Final[str] = "@direct"
+
+
 def install_package(
     *,
     name: str,
@@ -344,7 +353,15 @@ def install_package(
                 claude_root=claude_root,
                 state=current,
             )
-        base_tokens: tuple[str, ...] = current.requesters.get(identifier, ())
+            base_tokens: tuple[str, ...] = ()
+        else:
+            # The unit was already on disk. Carry its existing requesters forward,
+            # but a bare direct install has none yet — seed the @direct marker so a
+            # later uninstall of this package leaves the marker behind and the unit
+            # the user installed directly survives instead of being reclaimed. The
+            # `or` only fires on an empty/absent set, so a unit another package
+            # already requested keeps that package and is never marked @direct.
+            base_tokens = current.requesters.get(identifier) or (DIRECT_REQUESTER,)
         current = _set_requesters(
             current, unit=identifier, tokens=_add_requester_token(base_tokens, name)
         )
