@@ -3,7 +3,6 @@ import stat
 from pathlib import Path
 
 from actions import (
-    DIRECT_REQUESTER,
     install_agent,
     install_hook,
     install_package,
@@ -16,6 +15,7 @@ from actions import (
     uninstall_skill,
 )
 from catalog import Catalog, agent_unit_id, load_catalog, rule_unit_id, skill_unit_id
+from constants import DIRECT_REQUESTER
 from hashing import hash_unit
 from state import State, load_state
 

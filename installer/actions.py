@@ -17,6 +17,7 @@ from catalog import (
 )
 from constants import (
     AGENTS_DIRNAME,
+    DIRECT_REQUESTER,
     HOOKS_DIRNAME,
     RULES_DIRNAME,
     SKILLS_DIRNAME,
@@ -58,7 +59,7 @@ def _install_unit(
         else {
             **state.requesters,
             installed_id: _add_requester_token(
-                state.requesters.get(installed_id, ()), requester
+                tokens=state.requesters.get(installed_id, ()), token=requester
             ),
         }
     )
@@ -316,21 +317,21 @@ _UNINSTALL_BY_KIND: Final[dict[str, _UninstallAction]] = {
 }
 
 
-def _add_requester_token(tokens: tuple[str, ...], token: str) -> tuple[str, ...]:
+def _add_requester_token(*, tokens: tuple[str, ...], token: str) -> tuple[str, ...]:
     """Fold one requester token into a unit's set, de-duplicated and sorted, so
     crediting the same requester twice is idempotent and the stored order stays
     deterministic."""
     return tuple(sorted({*tokens, token}))
 
 
-def _drop_requester_token(tokens: tuple[str, ...], token: str) -> tuple[str, ...]:
+def _drop_requester_token(*, tokens: tuple[str, ...], token: str) -> tuple[str, ...]:
     """Withdraw one requester's claim on a unit, leaving the remaining tokens in
     their already-sorted order, so uninstall can read what survives without losing
     the deterministic ordering _add_requester_token established."""
     return tuple(item for item in tokens if item != token)
 
 
-def _set_requesters(state: State, *, unit: str, tokens: tuple[str, ...]) -> State:
+def _set_requesters(*, state: State, unit: str, tokens: tuple[str, ...]) -> State:
     """Replace one unit's requester set on a brand-new immutable State, carrying
     units and the other units' requesters forward untouched, so threading a package
     install never disturbs unrelated bookkeeping."""
@@ -339,15 +340,6 @@ def _set_requesters(state: State, *, unit: str, tokens: tuple[str, ...]) -> Stat
         units=state.units,
         requesters={**state.requesters, unit: tokens},
     )
-
-
-# Requester token marking a unit the user installed directly, outside any package.
-# Seeded by install_package when it adopts a pre-existing bare direct install (a
-# direct install_skill/etc. records no token of its own), so a later package
-# uninstall leaves this marker behind and keeps a unit the user still wants. The
-# leading "@" can never collide with a real package name, which is a bare catalog
-# identifier, so the marker never clashes with an actual requester.
-DIRECT_REQUESTER: Final[str] = "@direct"
 
 
 def install_package(
@@ -395,7 +387,9 @@ def install_package(
                 DIRECT_REQUESTER,
             )
             current = _set_requesters(
-                current, unit=identifier, tokens=_add_requester_token(base_tokens, name)
+                state=current,
+                unit=identifier,
+                tokens=_add_requester_token(tokens=base_tokens, token=name),
             )
             save_state(current, state_root)
     return current
@@ -420,10 +414,10 @@ def uninstall_package(
     for unit in package.units:
         identifier: str = unit_id(unit)
         remaining: tuple[str, ...] = _drop_requester_token(
-            current.requesters.get(identifier, ()), name
+            tokens=current.requesters.get(identifier, ()), token=name
         )
         if remaining:
-            current = _set_requesters(current, unit=identifier, tokens=remaining)
+            current = _set_requesters(state=current, unit=identifier, tokens=remaining)
             save_state(current, state_root)
         else:
             uninstall: _UninstallAction = _UNINSTALL_BY_KIND[unit.kind]
