@@ -35,22 +35,37 @@ def _install_unit(
     link_path: Path,
     state_root: Path,
     state: State,
+    requester: str | None = None,
 ) -> State:
     """Place one unit on disk by staging its source then linking the staged copy
     live, so the staged tree stays the single source of truth behind the symlink.
 
     Persists the updated state to state_root (via save_state) and returns a brand-new
     immutable State recording the unit's content hash; the passed-in state is never
-    mutated."""
+    mutated. When requester is given, the SAME write also credits that requester to the
+    unit, so a package install records the unit and its requester atomically and a crash
+    can never leave the unit present-but-uncredited. A direct install (requester None)
+    carries the existing requesters forward untouched, adding no token."""
     staged_path: Path = stage_unit(
         unit=unit, source=source, staged_root=state_root / STAGED_DIRNAME
     )
     link_unit(staged_path=staged_path, link_path=link_path)
     content_hash: str = hash_unit(staged_path)
+    installed_id: str = unit_id(unit)
+    new_requesters: dict[str, tuple[str, ...]] = (
+        state.requesters
+        if requester is None
+        else {
+            **state.requesters,
+            installed_id: _add_requester_token(
+                state.requesters.get(installed_id, ()), requester
+            ),
+        }
+    )
     new_state: State = State(
         version=state.version,
-        units={**state.units, unit_id(unit): content_hash},
-        requesters=state.requesters,
+        units={**state.units, installed_id: content_hash},
+        requesters=new_requesters,
     )
     save_state(new_state, state_root)
     return new_state
@@ -96,6 +111,7 @@ def install_skill(
     state_root: Path,
     claude_root: Path,
     state: State,
+    requester: str | None = None,
 ) -> State:
     """Install the named skill, staging its source tree and linking it live under
     ~/.claude/skills/<name>."""
@@ -105,6 +121,7 @@ def install_skill(
         link_path=claude_root / SKILLS_DIRNAME / name,
         state_root=state_root,
         state=state,
+        requester=requester,
     )
 
 
@@ -115,6 +132,7 @@ def install_agent(
     state_root: Path,
     claude_root: Path,
     state: State,
+    requester: str | None = None,
 ) -> State:
     """Install the named agent, staging its single "<name>.md" source and linking
     it live under ~/.claude/agents/. The staged copy is keyed by bare
@@ -125,6 +143,7 @@ def install_agent(
         link_path=claude_root / AGENTS_DIRNAME / f"{name}.md",
         state_root=state_root,
         state=state,
+        requester=requester,
     )
 
 
@@ -135,6 +154,7 @@ def install_rule(
     state_root: Path,
     claude_root: Path,
     state: State,
+    requester: str | None = None,
 ) -> State:
     """Install the named rule, staging its single "<name>.md" source and linking
     it live under ~/.claude/rules/. The staged copy is keyed by bare
@@ -145,6 +165,7 @@ def install_rule(
         link_path=claude_root / RULES_DIRNAME / f"{name}.md",
         state_root=state_root,
         state=state,
+        requester=requester,
     )
 
 
@@ -155,6 +176,7 @@ def install_hook(
     state_root: Path,
     claude_root: Path,
     state: State,
+    requester: str | None = None,
 ) -> State:
     """Install the named hook, staging its single "<name>.sh" source and linking
     it live under ~/.claude/hooks/. The staged copy is keyed by bare
@@ -170,6 +192,7 @@ def install_hook(
         link_path=claude_root / HOOKS_DIRNAME / f"{name}.sh",
         state_root=state_root,
         state=state,
+        requester=requester,
     )
     merge_hook_settings(name=name, source_root=source_root, claude_root=claude_root)
     return new_state
@@ -256,6 +279,7 @@ class _InstallAction(Protocol):
         state_root: Path,
         claude_root: Path,
         state: State,
+        requester: str | None = None,
     ) -> State: ...
 
 
@@ -337,14 +361,20 @@ def install_package(
 ) -> State:
     """Install a named package by placing each member unit through its per-kind
     install primitive and crediting the package name as that unit's requester, so a
-    unit records which package pulled it in. A unit already on disk — placed by an
-    earlier package — is not re-installed, only credited with the extra requester;
-    the evolving State is persisted after each unit so a partial run is recoverable."""
+    unit records which package pulled it in. A newly placed unit records the package
+    requester atomically in the same State write that records the unit, so a crash can
+    never leave it present-but-uncredited and later mislabel it @direct. A unit already
+    on disk — placed by an earlier package — is not re-installed, only credited with the
+    extra requester; the evolving State is persisted after each unit so a partial run is
+    recoverable."""
     package: Package = resolve_package(catalog, name)
     current: State = state
     for unit in package.units:
         identifier: str = unit_id(unit)
         if identifier not in current.units:
+            # First placement: the installer records the unit AND credits the package
+            # as its requester in one State write, closing the crash window between
+            # recording the unit and recording who asked for it.
             install: _InstallAction = _INSTALL_BY_KIND[unit.kind]
             current = install(
                 name=unit.name,
@@ -352,8 +382,8 @@ def install_package(
                 state_root=state_root,
                 claude_root=claude_root,
                 state=current,
+                requester=name,
             )
-            base_tokens: tuple[str, ...] = ()
         else:
             # The unit was already on disk. Carry its existing requesters forward,
             # but a bare direct install has none yet — seed the @direct marker so a
@@ -361,11 +391,13 @@ def install_package(
             # the user installed directly survives instead of being reclaimed. The
             # `or` only fires on an empty/absent set, so a unit another package
             # already requested keeps that package and is never marked @direct.
-            base_tokens = current.requesters.get(identifier) or (DIRECT_REQUESTER,)
-        current = _set_requesters(
-            current, unit=identifier, tokens=_add_requester_token(base_tokens, name)
-        )
-        save_state(current, state_root)
+            base_tokens: tuple[str, ...] = current.requesters.get(identifier) or (
+                DIRECT_REQUESTER,
+            )
+            current = _set_requesters(
+                current, unit=identifier, tokens=_add_requester_token(base_tokens, name)
+            )
+            save_state(current, state_root)
     return current
 
 

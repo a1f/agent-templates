@@ -3,6 +3,7 @@ import stat
 from pathlib import Path
 
 from actions import (
+    DIRECT_REQUESTER,
     install_agent,
     install_hook,
     install_package,
@@ -132,7 +133,6 @@ def test_install_skill_preserves_existing_requesters_of_other_units(
     # A direct install adds no requester token of its own, so the only requesters
     # entry that should survive is the unrelated unit's prior one.
     assert result.requesters == {"agent/reviewer": ("architect-pr",)}
-    assert result.requesters["agent/reviewer"] == ("architect-pr",)
     assert skill_unit_id("demo-skill") in result.units
 
 
@@ -809,4 +809,4 @@ packages = ["pack"]
     assert skill_unit_id("alpha") in result.units
     assert (state_root / "staged" / "skill" / "alpha").is_dir()
     assert (claude_root / "skills" / "alpha").is_symlink()
-    assert len(result.requesters[skill_unit_id("alpha")]) >= 1
+    assert result.requesters[skill_unit_id("alpha")] == (DIRECT_REQUESTER,)
