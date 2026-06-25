@@ -28,6 +28,19 @@ def test_save_then_load_round_trips_recorded_state(tmp_path: Path) -> None:
     assert loaded == saved
 
 
+def test_save_then_load_round_trips_requesters_as_tuples(tmp_path: Path) -> None:
+    saved: State = State(
+        version=STATE_VERSION,
+        units={"skill/make-pr": "deadbeef"},
+        requesters={"skill/make-pr": ("@direct", "architect-pr")},
+    )
+
+    save_state(saved, tmp_path)
+    loaded: State = load_state(tmp_path)
+
+    assert loaded == saved
+
+
 def test_save_is_atomic_failed_replace_keeps_prior_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
