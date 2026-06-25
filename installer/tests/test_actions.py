@@ -666,9 +666,7 @@ def test_install_package_stages_extras_and_records_package_requester(
 
     schemas_source: Path = source_root / "schemas"
     schemas_source.mkdir(parents=True)
-    (schemas_source / "thing.json").write_text(
-        '{"type": "object"}\n', encoding="utf-8"
-    )
+    (schemas_source / "thing.json").write_text('{"type": "object"}\n', encoding="utf-8")
 
     tool_source: Path = source_root / "scripts" / "tool.py"
     tool_source.parent.mkdir(parents=True)
