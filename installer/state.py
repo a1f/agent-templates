@@ -19,6 +19,10 @@ class State:
     # unit id -> the sorted tuple of tokens that requested it; declared last with a
     # default so existing State(version=..., units=...) call sites keep working.
     requesters: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # extra source-relative path -> the sorted tuple of tokens that requested it,
+    # the same refcount shape as requesters; declared last with a default so existing
+    # State(version=..., units=..., requesters=...) call sites keep working.
+    extras: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def default_state() -> State:
@@ -35,6 +39,10 @@ def save_state(state: State, root: Path) -> None:
     # what prior versions wrote; committed e2e golden snapshots pin that exact JSON.
     if state.requesters:
         payload["requesters"] = state.requesters
+    # Omit an empty extras map for the same reason — committed e2e goldens pin the
+    # exact JSON of stores that have no extras, so an empty map must not appear.
+    if state.extras:
+        payload["extras"] = state.extras
     # Write a sibling temp file and atomically swap it in, so a failed write
     # leaves the prior store intact rather than a half-written file.
     with tempfile.NamedTemporaryFile(
@@ -68,6 +76,14 @@ def load_state(root: Path) -> State:
         requesters: dict[str, tuple[str, ...]] = {
             unit_id: tuple(tokens) for unit_id, tokens in stored_requesters.items()
         }
-        return State(version=version, units=units, requesters=requesters)
+        # A store written before this field has no "extras" key; default to {} and
+        # rebuild each token list as a tuple, mirroring the requesters rebuild above.
+        stored_extras: dict[str, list[str]] = cast(
+            "dict[str, list[str]]", raw.get("extras", {})
+        )
+        extras: dict[str, tuple[str, ...]] = {
+            relpath: tuple(tokens) for relpath, tokens in stored_extras.items()
+        }
+        return State(version=version, units=units, requesters=requesters, extras=extras)
     root.mkdir(parents=True, exist_ok=True)
     return default_state()

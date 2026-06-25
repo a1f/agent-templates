@@ -656,6 +656,70 @@ packages = ["pack"]
     assert result.requesters[agent_unit_id("helper")] == ("pack",)
 
 
+def test_install_package_stages_extras_and_records_package_requester(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "alpha"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Alpha Skill\n", encoding="utf-8")
+
+    schemas_source: Path = source_root / "schemas"
+    schemas_source.mkdir(parents=True)
+    (schemas_source / "thing.json").write_text(
+        '{"type": "object"}\n', encoding="utf-8"
+    )
+
+    tool_source: Path = source_root / "scripts" / "tool.py"
+    tool_source.parent.mkdir(parents=True)
+    tool_source.write_text("print('tool')\n", encoding="utf-8")
+
+    # A controlled catalog declaring the one unit and a package that also carries
+    # two extras — a whole directory ("schemas") and a single file nested in a
+    # subdir ("scripts/tool.py") — loaded through the real boundary so the package
+    # install resolves its members and extras exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[packages]]
+name = "pack"
+units = ["skill/alpha"]
+extras = ["schemas", "scripts/tool.py"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_package(
+        name="pack",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    # The directory extra is staged whole under the state root, preserving its
+    # source-relative path, so a skill finds its schemas where it expects them.
+    assert (state_root / "schemas" / "thing.json").is_file()
+    # The file extra nested in a subdir lands at the same relative path too.
+    assert (state_root / "scripts" / "tool.py").is_file()
+
+    # Each extra records the package name as its requester, keyed by the extra's
+    # source-relative path string.
+    assert result.extras["schemas"] == ("pack",)
+    assert result.extras["scripts/tool.py"] == ("pack",)
+
+
 def test_uninstall_package_keeps_unit_still_required_by_another_package(
     tmp_path: Path,
 ) -> None:
