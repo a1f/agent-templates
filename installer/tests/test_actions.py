@@ -5,14 +5,17 @@ from pathlib import Path
 from actions import (
     install_agent,
     install_hook,
+    install_package,
     install_rule,
     install_skill,
     uninstall_agent,
     uninstall_hook,
+    uninstall_package,
     uninstall_rule,
     uninstall_skill,
 )
-from catalog import agent_unit_id, rule_unit_id, skill_unit_id
+from catalog import Catalog, agent_unit_id, load_catalog, rule_unit_id, skill_unit_id
+from constants import DIRECT_REQUESTER
 from hashing import hash_unit
 from state import State, load_state
 
@@ -101,6 +104,36 @@ def test_install_skill_records_staged_content_hash_as_unit_value(
     recorded_hash: str = result.units[skill_unit_id("demo-skill")]
     assert recorded_hash == hash_unit(skill_source)
     assert recorded_hash != ""
+
+
+def test_install_skill_preserves_existing_requesters_of_other_units(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo-skill"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo Skill\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    prior_state: State = State(
+        version=1,
+        units={"agent/reviewer": "somehash"},
+        requesters={"agent/reviewer": ("architect-pr",)},
+    )
+
+    result: State = install_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=prior_state,
+    )
+
+    # A direct install adds no requester token of its own, so the only requesters
+    # entry that should survive is the unrelated unit's prior one.
+    assert result.requesters == {"agent/reviewer": ("architect-pr",)}
+    assert skill_unit_id("demo-skill") in result.units
 
 
 def test_uninstall_skill_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
@@ -559,3 +592,221 @@ def test_uninstall_hook_tolerates_missing_settings_file(tmp_path: Path) -> None:
 
     assert not (claude_root / "hooks" / f"{name}.sh").is_symlink()
     assert not (claude_root / "settings.json").exists()
+
+
+def test_install_package_installs_each_unit_and_records_package_requester(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "alpha"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Alpha Skill\n", encoding="utf-8")
+    agent_source: Path = source_root / "agents" / "helper.md"
+    agent_source.parent.mkdir(parents=True)
+    agent_source.write_text("# Helper Agent\n", encoding="utf-8")
+
+    # A controlled catalog declaring the two units of different kinds and a package
+    # grouping both, loaded through the real boundary so the package install
+    # resolves its members exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[units]]
+kind = "agent"
+name = "helper"
+
+[[packages]]
+name = "pack"
+units = ["skill/alpha", "agent/helper"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_package(
+        name="pack",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    # Both members are physically placed: each kind's staged copy plus its live
+    # symlink (a skill stages as a directory, an agent as a single file).
+    assert (state_root / "staged" / "skill" / "alpha").is_dir()
+    assert (state_root / "staged" / "agent" / "helper").is_file()
+    assert (claude_root / "skills" / "alpha").is_symlink()
+    assert (claude_root / "agents" / "helper.md").is_symlink()
+
+    assert skill_unit_id("alpha") in result.units
+    assert agent_unit_id("helper") in result.units
+
+    # The package name is recorded as every installed unit's requester.
+    assert result.requesters[skill_unit_id("alpha")] == ("pack",)
+    assert result.requesters[agent_unit_id("helper")] == ("pack",)
+
+
+def test_uninstall_package_keeps_unit_still_required_by_another_package(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("shared", "only-one", "only-two"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(
+            f"# {skill_name} Skill\n", encoding="utf-8"
+        )
+
+    # Two packages that share one unit (skill/shared) and each own one private unit,
+    # loaded through the real boundary so the uninstall resolves members exactly as
+    # production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "shared"
+
+[[units]]
+kind = "skill"
+name = "only-one"
+
+[[units]]
+kind = "skill"
+name = "only-two"
+
+[[packages]]
+name = "pack-one"
+units = ["skill/shared", "skill/only-one"]
+
+[[packages]]
+name = "pack-two"
+units = ["skill/shared", "skill/only-two"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack-one", "pack-two"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Install both packages, threading state, so skill/shared ends up credited to
+    # both pack-one and pack-two while each private unit has a single requester.
+    state_after_pack_one: State = install_package(
+        name="pack-one",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    state_after_both: State = install_package(
+        name="pack-two",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_pack_one,
+    )
+
+    result: State = uninstall_package(
+        name="pack-one",
+        catalog=catalog,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_both,
+    )
+
+    # skill/shared survives: pack-two still requires it, so it stays fully installed
+    # and only loses pack-one from its requester set.
+    assert (state_root / "staged" / "skill" / "shared").is_dir()
+    assert (claude_root / "skills" / "shared").is_symlink()
+    assert skill_unit_id("shared") in result.units
+    assert result.requesters[skill_unit_id("shared")] == ("pack-two",)
+
+    # skill/only-one was pack-one's alone: its last requester is gone, so it is
+    # physically removed and forgotten entirely.
+    assert not (state_root / "staged" / "skill" / "only-one").exists()
+    assert not (claude_root / "skills" / "only-one").is_symlink()
+    assert skill_unit_id("only-one") not in result.units
+    assert skill_unit_id("only-one") not in result.requesters
+
+    # skill/only-two belongs only to pack-two and is left untouched.
+    assert skill_unit_id("only-two") in result.units
+    assert result.requesters[skill_unit_id("only-two")] == ("pack-two",)
+
+
+def test_uninstall_package_keeps_a_directly_installed_unit(tmp_path: Path) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "alpha"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Alpha Skill\n", encoding="utf-8")
+
+    # A controlled catalog declaring the one unit and a package that also contains
+    # it, loaded through the real boundary so the package install/uninstall resolve
+    # its members exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[packages]]
+name = "pack"
+units = ["skill/alpha"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # The user installs alpha directly first (a bare direct install records no
+    # requester token of its own), then a package containing alpha is layered over
+    # the already-present unit, then that package is dropped again.
+    state_after_direct: State = install_skill(
+        name="alpha",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    state_after_pack: State = install_package(
+        name="pack",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_direct,
+    )
+    result: State = uninstall_package(
+        name="pack",
+        catalog=catalog,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_pack,
+    )
+
+    # The user still wants alpha, so dropping the package must leave it fully
+    # installed: a direct-install marker outlives the package's requester rather
+    # than letting the package uninstall reclaim the directly-installed unit.
+    assert skill_unit_id("alpha") in result.units
+    assert (state_root / "staged" / "skill" / "alpha").is_dir()
+    assert (claude_root / "skills" / "alpha").is_symlink()
+    assert result.requesters[skill_unit_id("alpha")] == (DIRECT_REQUESTER,)

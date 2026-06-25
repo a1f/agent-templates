@@ -1,6 +1,6 @@
 import json
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, cast
 
@@ -16,6 +16,9 @@ class State:
 
     version: int
     units: dict[str, str]
+    # unit id -> the sorted tuple of tokens that requested it; declared last with a
+    # default so existing State(version=..., units=...) call sites keep working.
+    requesters: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 def default_state() -> State:
@@ -28,6 +31,10 @@ def save_state(state: State, root: Path) -> None:
     root.mkdir(parents=True, exist_ok=True)
     state_file: Path = root / STATE_FILENAME
     payload: dict[str, object] = {"version": state.version, "units": state.units}
+    # Omit an empty requesters map so a no-requester store stays byte-identical to
+    # what prior versions wrote; committed e2e golden snapshots pin that exact JSON.
+    if state.requesters:
+        payload["requesters"] = state.requesters
     # Write a sibling temp file and atomically swap it in, so a failed write
     # leaves the prior store intact rather than a half-written file.
     with tempfile.NamedTemporaryFile(
@@ -53,6 +60,14 @@ def load_state(root: Path) -> State:
             raw: dict[str, object] = json.load(handle)
         version: int = cast("int", raw["version"])
         units: dict[str, str] = cast("dict[str, str]", raw["units"])
-        return State(version=version, units=units)
+        # A store written before this field has no "requesters" key; default to {}.
+        # JSON stores each token list as an array, so rebuild tuples on the way in.
+        stored_requesters: dict[str, list[str]] = cast(
+            "dict[str, list[str]]", raw.get("requesters", {})
+        )
+        requesters: dict[str, tuple[str, ...]] = {
+            unit_id: tuple(tokens) for unit_id, tokens in stored_requesters.items()
+        }
+        return State(version=version, units=units, requesters=requesters)
     root.mkdir(parents=True, exist_ok=True)
     return default_state()
