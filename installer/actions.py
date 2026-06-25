@@ -2,8 +2,19 @@
 "install this skill" rather than wiring stage + link + record themselves."""
 
 from pathlib import Path
+from typing import Final, Protocol
 
-from catalog import Unit, agent_unit, hook_unit, rule_unit, skill_unit, unit_id
+from catalog import (
+    Catalog,
+    Package,
+    Unit,
+    agent_unit,
+    hook_unit,
+    resolve_package,
+    rule_unit,
+    skill_unit,
+    unit_id,
+)
 from constants import (
     AGENTS_DIRNAME,
     HOOKS_DIRNAME,
@@ -227,3 +238,80 @@ def uninstall_hook(
         state_root=state_root,
         state=state,
     )
+
+
+class _InstallAction(Protocol):
+    """One kind's install primitive: stage the named unit's source and link it live."""
+
+    def __call__(
+        self,
+        *,
+        name: str,
+        source_root: Path,
+        state_root: Path,
+        claude_root: Path,
+        state: State,
+    ) -> State: ...
+
+
+# Probe each unit factory with a throwaway "" name only for its .kind, so the kind
+# keys mirror catalog's source of truth instead of re-encoding the literals here.
+_INSTALL_BY_KIND: Final[dict[str, _InstallAction]] = {
+    skill_unit("").kind: install_skill,
+    agent_unit("").kind: install_agent,
+    rule_unit("").kind: install_rule,
+    hook_unit("").kind: install_hook,
+}
+
+
+def _add_requester_token(tokens: tuple[str, ...], token: str) -> tuple[str, ...]:
+    """Fold one requester token into a unit's set, de-duplicated and sorted, so
+    crediting the same requester twice is idempotent and the stored order stays
+    deterministic."""
+    return tuple(sorted({*tokens, token}))
+
+
+def _set_requesters(state: State, *, unit: str, tokens: tuple[str, ...]) -> State:
+    """Replace one unit's requester set on a brand-new immutable State, carrying
+    units and the other units' requesters forward untouched, so threading a package
+    install never disturbs unrelated bookkeeping."""
+    return State(
+        version=state.version,
+        units=state.units,
+        requesters={**state.requesters, unit: tokens},
+    )
+
+
+def install_package(
+    *,
+    name: str,
+    catalog: Catalog,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Install a named package by placing each member unit through its per-kind
+    install primitive and crediting the package name as that unit's requester, so a
+    unit records which package pulled it in. A unit already on disk — placed by an
+    earlier package — is not re-installed, only credited with the extra requester;
+    the evolving State is persisted after each unit so a partial run is recoverable."""
+    package: Package = resolve_package(catalog, name)
+    current: State = state
+    for unit in package.units:
+        identifier: str = unit_id(unit)
+        if identifier not in current.units:
+            install: _InstallAction = _INSTALL_BY_KIND[unit.kind]
+            current = install(
+                name=unit.name,
+                source_root=source_root,
+                state_root=state_root,
+                claude_root=claude_root,
+                state=current,
+            )
+        base_tokens: tuple[str, ...] = current.requesters.get(identifier, ())
+        current = _set_requesters(
+            current, unit=identifier, tokens=_add_requester_token(base_tokens, name)
+        )
+        save_state(current, state_root)
+    return current

@@ -5,6 +5,7 @@ from pathlib import Path
 from actions import (
     install_agent,
     install_hook,
+    install_package,
     install_rule,
     install_skill,
     uninstall_agent,
@@ -12,7 +13,7 @@ from actions import (
     uninstall_rule,
     uninstall_skill,
 )
-from catalog import agent_unit_id, rule_unit_id, skill_unit_id
+from catalog import Catalog, agent_unit_id, load_catalog, rule_unit_id, skill_unit_id
 from hashing import hash_unit
 from state import State, load_state
 
@@ -590,3 +591,65 @@ def test_uninstall_hook_tolerates_missing_settings_file(tmp_path: Path) -> None:
 
     assert not (claude_root / "hooks" / f"{name}.sh").is_symlink()
     assert not (claude_root / "settings.json").exists()
+
+
+def test_install_package_installs_each_unit_and_records_package_requester(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "alpha"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Alpha Skill\n", encoding="utf-8")
+    agent_source: Path = source_root / "agents" / "helper.md"
+    agent_source.parent.mkdir(parents=True)
+    agent_source.write_text("# Helper Agent\n", encoding="utf-8")
+
+    # A controlled catalog declaring the two units of different kinds and a package
+    # grouping both, loaded through the real boundary so the package install
+    # resolves its members exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[units]]
+kind = "agent"
+name = "helper"
+
+[[packages]]
+name = "pack"
+units = ["skill/alpha", "agent/helper"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_package(
+        name="pack",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    # Both members are physically placed: each kind's staged copy plus its live
+    # symlink (a skill stages as a directory, an agent as a single file).
+    assert (state_root / "staged" / "skill" / "alpha").is_dir()
+    assert (state_root / "staged" / "agent" / "helper").is_file()
+    assert (claude_root / "skills" / "alpha").is_symlink()
+    assert (claude_root / "agents" / "helper.md").is_symlink()
+
+    assert skill_unit_id("alpha") in result.units
+    assert agent_unit_id("helper") in result.units
+
+    # The package name is recorded as every installed unit's requester.
+    assert result.requesters[skill_unit_id("alpha")] == ("pack",)
+    assert result.requesters[agent_unit_id("helper")] == ("pack",)
