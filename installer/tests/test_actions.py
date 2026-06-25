@@ -103,6 +103,37 @@ def test_install_skill_records_staged_content_hash_as_unit_value(
     assert recorded_hash != ""
 
 
+def test_install_skill_preserves_existing_requesters_of_other_units(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo-skill"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo Skill\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    prior_state: State = State(
+        version=1,
+        units={"agent/reviewer": "somehash"},
+        requesters={"agent/reviewer": ("architect-pr",)},
+    )
+
+    result: State = install_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=prior_state,
+    )
+
+    # A direct install adds no requester token of its own, so the only requesters
+    # entry that should survive is the unrelated unit's prior one.
+    assert result.requesters == {"agent/reviewer": ("architect-pr",)}
+    assert result.requesters["agent/reviewer"] == ("architect-pr",)
+    assert skill_unit_id("demo-skill") in result.units
+
+
 def test_uninstall_skill_undoes_install_and_forgets_unit(tmp_path: Path) -> None:
     source_root: Path = tmp_path / "repo"
     skill_source: Path = source_root / "skills" / "demo-skill"

@@ -39,6 +39,7 @@ def _install_unit(
     new_state: State = State(
         version=state.version,
         units={**state.units, unit_id(unit): content_hash},
+        requesters=state.requesters,
     )
     save_state(new_state, state_root)
     return new_state
