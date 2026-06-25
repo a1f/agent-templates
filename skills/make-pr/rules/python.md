@@ -46,10 +46,12 @@ unpack into single annotated assignments when the types matter.
 
 Prefer functions over classes unless state is needed. If a method doesn't use `self`, prefer a module-level function; use `@staticmethod` only when it must conceptually live on the class.
 
-- Use keyword-only arguments for public functions and helpers when named arguments improve
-  call-site clarity. Exceptions: `self`/`cls`, dunder methods, protocol/callback signatures,
-  pytest fixture injection, framework-required signatures, and tiny private helpers where
-  positional use is clearer.
+- All parameters of project functions and helpers are keyword-only: `*` is the FIRST
+  parameter of every `def`. Apply this uniformly — there is NO exception for "tiny" or
+  private helpers, and no "clearer positionally" judgement call. Exempt ONLY `self`/`cls`,
+  dunder methods, `Protocol`/callback `__call__` signatures, pytest fixture injection, and
+  framework-required signatures. When surrounding code is positional, the rule still wins for
+  new or changed code: fix the old signature or flag it — never copy the violation.
 - Never use mutable defaults (`list`, `dict`, `set`). Use `None` sentinel with `if arg is None: arg = []`
 - Sensible immutable defaults (strings, numbers, booleans, `None`, tuples) are fine
 - Return frozen dataclasses for multi-value returns, never bare tuples — return a
