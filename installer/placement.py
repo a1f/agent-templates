@@ -70,6 +70,13 @@ def unstage_unit(*, unit: Unit, staged_root: Path) -> None:
     _remove_staged_entry(staged_path)
 
 
+def unstage_extra(*, relpath: str, state_root: Path) -> None:
+    """Tear down an extra's staged copy at its source-relative path so the state
+    root no longer holds it — the inverse of stage_extra, dropping either the
+    directory tree or the single file it laid down."""
+    _remove_staged_entry(state_root / relpath)
+
+
 def backup_staged_unit(*, unit: Unit, staged_root: Path) -> Path | None:
     """Move a hand-edited staged unit aside to "<name>.bak" so the user's local
     edit survives a following re-stage that overwrites the staged tree, returning
