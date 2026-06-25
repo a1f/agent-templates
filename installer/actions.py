@@ -79,6 +79,11 @@ def _uninstall_unit(
             for existing_id, content in state.units.items()
             if existing_id != removed_id
         },
+        requesters={
+            existing_id: tokens
+            for existing_id, tokens in state.requesters.items()
+            if existing_id != removed_id
+        },
     )
     save_state(new_state, state_root)
     return new_state
@@ -264,11 +269,41 @@ _INSTALL_BY_KIND: Final[dict[str, _InstallAction]] = {
 }
 
 
+class _UninstallAction(Protocol):
+    """One kind's uninstall primitive: drop the named unit's link and staged copy."""
+
+    def __call__(
+        self,
+        *,
+        name: str,
+        state_root: Path,
+        claude_root: Path,
+        state: State,
+    ) -> State: ...
+
+
+# Mirror _INSTALL_BY_KIND on the removal side, keyed off the same factory probes so
+# install and uninstall agree on the kind tokens without re-encoding them.
+_UNINSTALL_BY_KIND: Final[dict[str, _UninstallAction]] = {
+    skill_unit("").kind: uninstall_skill,
+    agent_unit("").kind: uninstall_agent,
+    rule_unit("").kind: uninstall_rule,
+    hook_unit("").kind: uninstall_hook,
+}
+
+
 def _add_requester_token(tokens: tuple[str, ...], token: str) -> tuple[str, ...]:
     """Fold one requester token into a unit's set, de-duplicated and sorted, so
     crediting the same requester twice is idempotent and the stored order stays
     deterministic."""
     return tuple(sorted({*tokens, token}))
+
+
+def _drop_requester_token(tokens: tuple[str, ...], token: str) -> tuple[str, ...]:
+    """Withdraw one requester's claim on a unit, leaving the remaining tokens in
+    their already-sorted order, so uninstall can read what survives without losing
+    the deterministic ordering _add_requester_token established."""
+    return tuple(item for item in tokens if item != token)
 
 
 def _set_requesters(state: State, *, unit: str, tokens: tuple[str, ...]) -> State:
@@ -314,4 +349,39 @@ def install_package(
             current, unit=identifier, tokens=_add_requester_token(base_tokens, name)
         )
         save_state(current, state_root)
+    return current
+
+
+def uninstall_package(
+    *,
+    name: str,
+    catalog: Catalog,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Uninstall a named package by withdrawing its claim on each member unit and
+    physically removing a unit only when its last requester is gone, so a unit a
+    second package still requires stays on disk and merely loses this package from
+    its requester set. This owns the refcount invariant: a unit's disk presence and
+    its state entry persist exactly while at least one package still requires it.
+    The evolving State is persisted after each unit so a partial run is recoverable."""
+    package: Package = resolve_package(catalog, name)
+    current: State = state
+    for unit in package.units:
+        identifier: str = unit_id(unit)
+        remaining: tuple[str, ...] = _drop_requester_token(
+            current.requesters.get(identifier, ()), name
+        )
+        if remaining:
+            current = _set_requesters(current, unit=identifier, tokens=remaining)
+            save_state(current, state_root)
+        else:
+            uninstall: _UninstallAction = _UNINSTALL_BY_KIND[unit.kind]
+            current = uninstall(
+                name=unit.name,
+                state_root=state_root,
+                claude_root=claude_root,
+                state=current,
+            )
     return current

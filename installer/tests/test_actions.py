@@ -10,6 +10,7 @@ from actions import (
     install_skill,
     uninstall_agent,
     uninstall_hook,
+    uninstall_package,
     uninstall_rule,
     uninstall_skill,
 )
@@ -653,3 +654,95 @@ packages = ["pack"]
     # The package name is recorded as every installed unit's requester.
     assert result.requesters[skill_unit_id("alpha")] == ("pack",)
     assert result.requesters[agent_unit_id("helper")] == ("pack",)
+
+
+def test_uninstall_package_keeps_unit_still_required_by_another_package(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("shared", "only-one", "only-two"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(
+            f"# {skill_name} Skill\n", encoding="utf-8"
+        )
+
+    # Two packages that share one unit (skill/shared) and each own one private unit,
+    # loaded through the real boundary so the uninstall resolves members exactly as
+    # production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "shared"
+
+[[units]]
+kind = "skill"
+name = "only-one"
+
+[[units]]
+kind = "skill"
+name = "only-two"
+
+[[packages]]
+name = "pack-one"
+units = ["skill/shared", "skill/only-one"]
+
+[[packages]]
+name = "pack-two"
+units = ["skill/shared", "skill/only-two"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack-one", "pack-two"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Install both packages, threading state, so skill/shared ends up credited to
+    # both pack-one and pack-two while each private unit has a single requester.
+    state_after_pack_one: State = install_package(
+        name="pack-one",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    state_after_both: State = install_package(
+        name="pack-two",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_pack_one,
+    )
+
+    result: State = uninstall_package(
+        name="pack-one",
+        catalog=catalog,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_both,
+    )
+
+    # skill/shared survives: pack-two still requires it, so it stays fully installed
+    # and only loses pack-one from its requester set.
+    assert (state_root / "staged" / "skill" / "shared").is_dir()
+    assert (claude_root / "skills" / "shared").is_symlink()
+    assert skill_unit_id("shared") in result.units
+    assert result.requesters[skill_unit_id("shared")] == ("pack-two",)
+
+    # skill/only-one was pack-one's alone: its last requester is gone, so it is
+    # physically removed and forgotten entirely.
+    assert not (state_root / "staged" / "skill" / "only-one").exists()
+    assert not (claude_root / "skills" / "only-one").is_symlink()
+    assert skill_unit_id("only-one") not in result.units
+    assert skill_unit_id("only-one") not in result.requesters
+
+    # skill/only-two belongs only to pack-two and is left untouched.
+    assert skill_unit_id("only-two") in result.units
+    assert result.requesters[skill_unit_id("only-two")] == ("pack-two",)
