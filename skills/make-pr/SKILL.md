@@ -35,12 +35,12 @@ give `worker-coder` its **`mode`** (`green` | `refactor` | `non_behavioral`) plu
 `dependencies_allowed` (and any named dependency/version) when the task permits dependencies —
 otherwise the coder blocks on any new dependency. Keep each dispatch
 prompt tight and scoped to one job. Require each agent to return exactly the JSON object defined
-in its prompt, and **validate that return against `<skill_root>/schemas/<role>.schema.json`**
+in its prompt, and **validate that return against `~/.claude/at/schemas/<role>.schema.json`**
 (keyed by the `role` field in the return). The validator reads the instance from a **file**, so
 first write the agent's raw return verbatim with `Write` (not `echo`/heredoc — those mangle the
 embedded quotes and newlines) to `<run_root>/<run-id>.<role>.json`, then run:
 
-`uv run --no-project --with jsonschema python <skill_root>/scripts/validate_return.py <skill_root>/schemas/<role>.schema.json <run_root>/<run-id>.<role>.json`
+`uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/<role>.schema.json <run_root>/<run-id>.<role>.json`
 
 (The validator depends on `jsonschema`; `uv run --no-project --with jsonschema` supplies it on first run and caches it — no separate install step.)
 
@@ -61,9 +61,13 @@ stage it unchanged with your production code. Module boundary: `cart` only. Base
 
 Resolve these values before the first dispatch:
 
-- **skill_root**: the directory this `SKILL.md` lives in. It bundles the immutable template
-  assets — `schemas/`, `scripts/`, `gates/`, and `rules/` — so they travel with the skill on
-  install; resolve them here, never from the target repo or a repo checkout.
+- **skill_root**: the directory this `SKILL.md` lives in. Use it for the bundled `rules/` beside
+  it (`rules_root`, below); the runtime extras — schemas, gates, and helper scripts — are resolved
+  from `extras_root`, not from here.
+- **extras_root**: the installer's state root `~/.claude/at`, the single source of truth the
+  installer stages a package's extras into — `schemas/`, `gates/`, and `scripts/` live here.
+  Resolving them from this one root keeps an install self-contained, with no dependency on a repo
+  checkout; reference each extra by its literal path under it (e.g. `~/.claude/at/gates/<lang>.json`).
 - **rules_root**: the bundled `rules/` directory beside this `SKILL.md` (`<skill_root>/rules`). Use
   it for the rule files the agents read.
 - **target_cwd**: the absolute path to the repository being changed. Run every target-repo
@@ -77,7 +81,7 @@ Resolve these values before the first dispatch:
 - **Run id**: use the branch name or task id, replacing `/` and whitespace with `_`.
 - **Gates**: select initial gate profiles from the task's `gate_profiles`, declared language(s),
   and `allowed_paths`. After workers change files, expand the selected profiles from
-  `git diff --name-only <base>...HEAD`. Match paths against each `<skill_root>/gates/*.json`
+  `git diff --name-only <base>...HEAD`. Match paths against each `~/.claude/at/gates/*.json`
   profile's `triggers` globs; both root and nested paths must match. If a changed language has
   no gate, stop and report the missing gate instead of declaring done.
 - **Rules**: resolve rule files to **absolute** paths (the bundled `rules/` directory beside this
@@ -92,7 +96,7 @@ Resolve these values before the first dispatch:
   `<run-id>.<role>.json` return files you write for validation). Do not edit production source, tests,
   rules, or gates directly while acting as architect; route every code or test change to `worker-coder`.
 - Use `Bash` only for `git`, `date`, JSONL validation, the schema validator
-  (`<skill_root>/scripts/validate_return.py`), **re-running a worker's reported verification (e.g. the
+  (`~/.claude/at/scripts/validate_return.py`), **re-running a worker's reported verification (e.g. the
   named GREEN test) to confirm its result**, the task-provided baseline command, and the selected
   gate `setup`/`run` commands. Run all target-repo commands in `target_cwd`. Do not run gate
   `fix` commands directly; route fixes to `worker-coder`.
@@ -143,7 +147,7 @@ Resolve these values before the first dispatch:
       with `mode: refactor`; tests must stay green and unchanged.
    Log every dispatch (see JSONL contract).
 5. **Gate (objective — run before any LLM judgment).** Run the selected gates from
-   `<skill_root>/gates/<lang>.json`. Each gate file is
+   `~/.claude/at/gates/<lang>.json`. Each gate file is
    `{"setup": <cmd>, "triggers": [<glob>], "gates": [{"name","run","fix"}]}` where `fix` may be
    `null` for checks that need a human/coder change rather than a mechanical command. Run `setup`
    once, then each `gates[].run` in order. If setup fails because the repo does not use the
