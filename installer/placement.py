@@ -20,6 +20,17 @@ def _remove_staged_entry(path: Path) -> None:
         path.unlink()
 
 
+def _copy_entry(*, source: Path, destination: Path) -> None:
+    """Copy a source entry to destination without the caller minding its shape —
+    a directory tree or a single file — so staging a unit and staging an extra
+    share one copy decision. copy2 (not copyfile) carries the source's mode across,
+    so an executable hook script stays executable once staged — matching copytree."""
+    if source.is_dir():
+        shutil.copytree(source, destination)
+    else:
+        shutil.copy2(source, destination)
+
+
 def staged_unit_path(*, unit: Unit, staged_root: Path) -> Path:
     """Own the "<kind>/<name>" staged-layout decision in one place, so callers
     locate a unit's staged copy without re-encoding the path this module lays down."""
@@ -34,12 +45,20 @@ def stage_unit(*, unit: Unit, source: Path, staged_root: Path) -> Path:
     # Clear any prior staging of this unit so a re-stage fully supersedes it,
     # leaving no stale files behind, rather than colliding with the old tree.
     _remove_staged_entry(destination)
-    # copy2 (not copyfile) carries the source's mode across, so an executable
-    # hook script stays executable once staged — matching copytree below.
-    if source.is_dir():
-        shutil.copytree(source, destination)
-    else:
-        shutil.copy2(source, destination)
+    _copy_entry(source=source, destination=destination)
+    return destination
+
+
+def stage_extra(*, relpath: str, source_root: Path, state_root: Path) -> Path:
+    """Copy a package's extra support file or directory to the state root at its
+    source-relative path, so a skill finds its schemas and helper scripts where it
+    expects them rather than back in the source tree."""
+    destination: Path = state_root / relpath
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    # Clear any prior copy so a re-stage fully supersedes it, leaving no stale
+    # files behind, rather than colliding with the old entry.
+    _remove_staged_entry(destination)
+    _copy_entry(source=source_root / relpath, destination=destination)
     return destination
 
 
@@ -49,6 +68,13 @@ def unstage_unit(*, unit: Unit, staged_root: Path) -> None:
     tree or the single file it laid down."""
     staged_path: Path = staged_unit_path(unit=unit, staged_root=staged_root)
     _remove_staged_entry(staged_path)
+
+
+def unstage_extra(*, relpath: str, state_root: Path) -> None:
+    """Tear down an extra's staged copy at its source-relative path so the state
+    root no longer holds it — the inverse of stage_extra, dropping either the
+    directory tree or the single file it laid down."""
+    _remove_staged_entry(state_root / relpath)
 
 
 def backup_staged_unit(*, unit: Unit, staged_root: Path) -> Path | None:

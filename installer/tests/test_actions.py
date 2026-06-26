@@ -656,6 +656,68 @@ packages = ["pack"]
     assert result.requesters[agent_unit_id("helper")] == ("pack",)
 
 
+def test_install_package_stages_extras_and_records_package_requester(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "alpha"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Alpha Skill\n", encoding="utf-8")
+
+    schemas_source: Path = source_root / "schemas"
+    schemas_source.mkdir(parents=True)
+    (schemas_source / "thing.json").write_text('{"type": "object"}\n', encoding="utf-8")
+
+    tool_source: Path = source_root / "scripts" / "tool.py"
+    tool_source.parent.mkdir(parents=True)
+    tool_source.write_text("print('tool')\n", encoding="utf-8")
+
+    # A controlled catalog declaring the one unit and a package that also carries
+    # two extras — a whole directory ("schemas") and a single file nested in a
+    # subdir ("scripts/tool.py") — loaded through the real boundary so the package
+    # install resolves its members and extras exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[packages]]
+name = "pack"
+units = ["skill/alpha"]
+extras = ["schemas", "scripts/tool.py"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    result: State = install_package(
+        name="pack",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    # The directory extra is staged whole under the state root, preserving its
+    # source-relative path, so a skill finds its schemas where it expects them.
+    assert (state_root / "schemas" / "thing.json").is_file()
+    # The file extra nested in a subdir lands at the same relative path too.
+    assert (state_root / "scripts" / "tool.py").is_file()
+
+    # Each extra records the package name as its requester, keyed by the extra's
+    # source-relative path string.
+    assert result.extras["schemas"] == ("pack",)
+    assert result.extras["scripts/tool.py"] == ("pack",)
+
+
 def test_uninstall_package_keeps_unit_still_required_by_another_package(
     tmp_path: Path,
 ) -> None:
@@ -810,3 +872,104 @@ packages = ["pack"]
     assert (state_root / "staged" / "skill" / "alpha").is_dir()
     assert (claude_root / "skills" / "alpha").is_symlink()
     assert result.requesters[skill_unit_id("alpha")] == (DIRECT_REQUESTER,)
+
+
+def test_uninstall_package_refcounts_extras_keeping_shared_removing_sole(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("alpha", "beta"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(
+            f"# {skill_name} Skill\n", encoding="utf-8"
+        )
+
+    # A shared extra directory both packages declare, plus one private extra file
+    # per package nested in its own subdir, so refcounting an extra mirrors how the
+    # units test exercises a shared-vs-private unit. The units are incidental here.
+    shared_extra: Path = source_root / "shared"
+    shared_extra.mkdir(parents=True)
+    (shared_extra / "keep.txt").write_text("shared\n", encoding="utf-8")
+
+    one_private: Path = source_root / "one" / "private.txt"
+    one_private.parent.mkdir(parents=True)
+    one_private.write_text("one\n", encoding="utf-8")
+
+    two_private: Path = source_root / "two" / "private.txt"
+    two_private.parent.mkdir(parents=True)
+    two_private.write_text("two\n", encoding="utf-8")
+
+    # Two packages that share one extra ("shared") and each own one private extra,
+    # loaded through the real boundary so the uninstall resolves the package's
+    # extras exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[units]]
+kind = "skill"
+name = "beta"
+
+[[packages]]
+name = "pack-one"
+units = ["skill/alpha"]
+extras = ["shared", "one/private.txt"]
+
+[[packages]]
+name = "pack-two"
+units = ["skill/beta"]
+extras = ["shared", "two/private.txt"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack-one", "pack-two"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Install both packages, threading state, so the shared extra ends up credited
+    # to both pack-one and pack-two while each private extra has a single requester.
+    state_after_pack_one: State = install_package(
+        name="pack-one",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    state_after_both: State = install_package(
+        name="pack-two",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_pack_one,
+    )
+
+    result: State = uninstall_package(
+        name="pack-one",
+        catalog=catalog,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_both,
+    )
+
+    # pack-one's private extra had pack-one as its sole requester: its last
+    # requester is gone, so it is physically removed and forgotten entirely.
+    assert not (state_root / "one" / "private.txt").exists()
+    assert "one/private.txt" not in result.extras
+
+    # The shared extra survives: pack-two still requires it, so it stays on disk and
+    # only loses pack-one from its requester set.
+    assert (state_root / "shared" / "keep.txt").is_file()
+    assert result.extras["shared"] == ("pack-two",)
+
+    # pack-two's private extra belongs only to pack-two and is left untouched.
+    assert (state_root / "two" / "private.txt").is_file()
+    assert result.extras["two/private.txt"] == ("pack-two",)

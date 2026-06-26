@@ -24,7 +24,14 @@ from constants import (
     STAGED_DIRNAME,
 )
 from hashing import hash_unit
-from placement import link_unit, stage_unit, unlink_unit, unstage_unit
+from placement import (
+    link_unit,
+    stage_extra,
+    stage_unit,
+    unlink_unit,
+    unstage_extra,
+    unstage_unit,
+)
 from settings import merge_hook_settings, unmerge_hook_settings
 from state import State, save_state
 
@@ -67,6 +74,7 @@ def _install_unit(
         version=state.version,
         units={**state.units, installed_id: content_hash},
         requesters=new_requesters,
+        extras=state.extras,
     )
     save_state(new_state, state_root)
     return new_state
@@ -100,6 +108,7 @@ def _uninstall_unit(
             for existing_id, tokens in state.requesters.items()
             if existing_id != removed_id
         },
+        extras=state.extras,
     )
     save_state(new_state, state_root)
     return new_state
@@ -333,12 +342,43 @@ def _drop_requester_token(*, tokens: tuple[str, ...], token: str) -> tuple[str, 
 
 def _set_requesters(*, state: State, unit: str, tokens: tuple[str, ...]) -> State:
     """Replace one unit's requester set on a brand-new immutable State, carrying
-    units and the other units' requesters forward untouched, so threading a package
-    install never disturbs unrelated bookkeeping."""
+    units, extras, and the other units' requesters forward untouched, so threading a
+    package install never disturbs unrelated bookkeeping."""
     return State(
         version=state.version,
         units=state.units,
         requesters={**state.requesters, unit: tokens},
+        extras=state.extras,
+    )
+
+
+def _set_extras(*, state: State, extra: str, tokens: tuple[str, ...]) -> State:
+    """Replace one extra's requester set on a brand-new immutable State, carrying
+    units, requesters, and the other extras forward untouched, so recording one
+    extra never disturbs unrelated bookkeeping — the extras analogue of
+    _set_requesters."""
+    return State(
+        version=state.version,
+        units=state.units,
+        requesters=state.requesters,
+        extras={**state.extras, extra: tokens},
+    )
+
+
+def _forget_extra(*, state: State, extra: str) -> State:
+    """Drop one extra key entirely from a brand-new immutable State, carrying units,
+    requesters, and the other extras forward untouched, so removing an extra whose
+    last requester is gone never disturbs unrelated bookkeeping — the extras analogue
+    of how the unit loop rebuilds state without the removed unit."""
+    return State(
+        version=state.version,
+        units=state.units,
+        requesters=state.requesters,
+        extras={
+            relpath: tokens
+            for relpath, tokens in state.extras.items()
+            if relpath != extra
+        },
     )
 
 
@@ -358,7 +398,9 @@ def install_package(
     never leave it present-but-uncredited and later mislabel it @direct. A unit already
     on disk — placed by an earlier package — is not re-installed, only credited with the
     extra requester; the evolving State is persisted after each unit so a partial run is
-    recoverable."""
+    recoverable. After the units, each declared extra (a support file or directory) is
+    staged to the state root at its source-relative path and credited to the package the
+    same way, with the same per-step persistence."""
     package: Package = resolve_package(catalog, name)
     current: State = state
     for unit in package.units:
@@ -392,6 +434,19 @@ def install_package(
                 tokens=_add_requester_token(tokens=base_tokens, token=name),
             )
             save_state(current, state_root)
+    for relpath in package.extras:
+        # Stage the extra to disk, then credit the package as its requester in the
+        # same per-extra State write the unit loop uses, so a partial run is
+        # recoverable and an extra is never present-but-uncredited.
+        stage_extra(relpath=relpath, source_root=source_root, state_root=state_root)
+        current = _set_extras(
+            state=current,
+            extra=relpath,
+            tokens=_add_requester_token(
+                tokens=current.extras.get(relpath, ()), token=name
+            ),
+        )
+        save_state(current, state_root)
     return current
 
 
@@ -408,7 +463,10 @@ def uninstall_package(
     second package still requires stays on disk and merely loses this package from
     its requester set. This owns the refcount invariant: a unit's disk presence and
     its state entry persist exactly while at least one package still requires it.
-    The evolving State is persisted after each unit so a partial run is recoverable."""
+    After the units, each declared extra is refcounted the same way — kept while
+    another package still requires it, physically removed once its last requester is
+    gone. The evolving State is persisted after each unit and extra so a partial run
+    is recoverable."""
     package: Package = resolve_package(catalog, name)
     current: State = state
     for unit in package.units:
@@ -427,4 +485,18 @@ def uninstall_package(
                 claude_root=claude_root,
                 state=current,
             )
+    for relpath in package.extras:
+        # Refcount each extra exactly as the unit loop above refcounts units:
+        # withdraw this package's claim, keep the staged copy while another package
+        # still requires it, or physically remove it once its last requester is gone.
+        # State is persisted after each extra so a partial run is recoverable.
+        remaining_extra: tuple[str, ...] = _drop_requester_token(
+            tokens=current.extras.get(relpath, ()), token=name
+        )
+        if remaining_extra:
+            current = _set_extras(state=current, extra=relpath, tokens=remaining_extra)
+        else:
+            unstage_extra(relpath=relpath, state_root=state_root)
+            current = _forget_extra(state=current, extra=relpath)
+        save_state(current, state_root)
     return current
