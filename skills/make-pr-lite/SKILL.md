@@ -24,15 +24,17 @@ guarantees that.)
 
 ## Runtime resolution
 
-- **skill_root** — the directory this `SKILL.md` lives in. It bundles the `rules/` and `gates/`
-  this skill needs, so they travel with the skill on install — resolve both from here, never from
-  the target repo or a repo checkout.
+- **skill_root** — the directory this `SKILL.md` lives in. Use it for the bundled `rules/` beside
+  it (`rules_root`, below); the runtime `gates/` are resolved from `extras_root`, not from here.
+- **extras_root** — the installer's state root `~/.claude/at`, the single source of truth the
+  installer stages a package's extras into — this skill's `gates/` live here. Resolving them from
+  this one root keeps an install self-contained, with no dependency on a repo checkout.
 - **rules_root** — `<skill_root>/rules`; pass rule files as absolute paths (a subagent's cwd is the
   target repo, so bare names won't resolve).
 - **target_cwd** — the repo being changed; run every `git`/gate command there.
 - **base** — user/spec-named → else `git merge-base HEAD origin/main` → else `… main` → else stop
   and ask.
-- **gates** — preflight: pick `<skill_root>/gates/<lang>.json` by the task's language(s) /
+- **gates** — preflight: pick `~/.claude/at/gates/<lang>.json` by the task's language(s) /
   `allowed_paths`. After the coder runs, re-check against `git diff --name-only <base>...HEAD`. A
   changed language with no profile → stop and report.
 - **rules to pass** — always `design-principles.md`; `tdd.md` for behavioral work; the language
