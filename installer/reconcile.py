@@ -6,10 +6,12 @@ from typing import Protocol
 from actions import (
     install_agent,
     install_hook,
+    install_package,
     install_rule,
     install_skill,
     uninstall_agent,
     uninstall_hook,
+    uninstall_package,
     uninstall_rule,
     uninstall_skill,
 )
@@ -292,3 +294,36 @@ def apply_hook_reconcile(
         claude_root=claude_root,
         state=state,
     )
+
+
+def apply_package_reconcile(
+    *,
+    plan: ReconcilePlan,
+    catalog: Catalog,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned package diff via the refcount-aware install_package /
+    uninstall_package, threading the persisted State through so the final return
+    reflects every action."""
+    current: State = state
+    for name in plan.to_install:
+        current = install_package(
+            name=name,
+            catalog=catalog,
+            source_root=source_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    for name in plan.to_remove:
+        current = uninstall_package(
+            name=name,
+            catalog=catalog,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    return current

@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from actions import install_agent, install_hook, install_rule, install_skill
+from actions import (
+    install_agent,
+    install_hook,
+    install_package,
+    install_rule,
+    install_skill,
+)
 from catalog import (
     Catalog,
     Package,
@@ -8,6 +14,7 @@ from catalog import (
     agent_unit,
     agent_unit_id,
     hook_unit_id,
+    load_catalog,
     rule_unit_id,
     skill_unit,
     skill_unit_id,
@@ -16,6 +23,7 @@ from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
     apply_hook_reconcile,
+    apply_package_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
     package_installed,
@@ -353,3 +361,74 @@ def test_apply_installs_planned_hooks_and_uninstalls_removed_ones(
     assert not (state_root / "staged" / "hook" / "old-hook").exists()
     assert old_id not in result.units
     assert old_id not in persisted.units
+
+
+def test_apply_package_reconcile_installs_added_and_removes_dropped_packages(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("alpha", "beta"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(
+            f"# {skill_name} Skill\n", encoding="utf-8"
+        )
+
+    # Two single-unit packages, loaded through the real boundary so the package
+    # reconcile resolves each package's member unit exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[units]]
+kind = "skill"
+name = "beta"
+
+[[packages]]
+name = "pack-a"
+units = ["skill/alpha"]
+
+[[packages]]
+name = "pack-b"
+units = ["skill/beta"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack-a", "pack-b"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Pre-install pack-a so the plan has a real package to drop while it adds pack-b.
+    installed_state: State = install_package(
+        name="pack-a",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    plan: ReconcilePlan = ReconcilePlan(to_install=("pack-b",), to_remove=("pack-a",))
+    result: State = apply_package_reconcile(
+        plan=plan,
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=installed_state,
+    )
+
+    # pack-b is now installed: its unit is recorded, credits pack-b, and is live.
+    assert skill_unit_id("beta") in result.units
+    assert result.requesters[skill_unit_id("beta")] == ("pack-b",)
+    assert (claude_root / "skills" / "beta").is_symlink()
+
+    # pack-a is now removed: its unit is gone from state and from disk.
+    assert skill_unit_id("alpha") not in result.units
+    assert not (claude_root / "skills" / "alpha").exists()
