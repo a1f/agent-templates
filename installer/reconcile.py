@@ -15,14 +15,17 @@ from actions import (
 )
 from catalog import (
     Catalog,
+    Package,
     agent_unit_id,
     hook_unit_id,
     list_agents,
     list_hooks,
     list_rules,
     list_skills,
+    resolve_package,
     rule_unit_id,
     skill_unit_id,
+    unit_id,
 )
 from state import State
 
@@ -109,6 +112,18 @@ def plan_hook_reconcile(
         names=list_hooks(catalog),
         unit_id_of=hook_unit_id,
         state=state,
+    )
+
+
+def package_installed(*, catalog: Catalog, name: str, state: State) -> bool:
+    """Report a package as installed iff every unit it declares credits it in
+    state.requesters — the exact bookkeeping install_package writes and
+    uninstall_package withdraws — so the view reads the refcount rather than
+    guessing from loose unit presence; a package that declares no units is never
+    installed, never vacuously true."""
+    package: Package = resolve_package(catalog, name)
+    return bool(package.units) and all(
+        name in state.requesters.get(unit_id(unit), ()) for unit in package.units
     )
 
 

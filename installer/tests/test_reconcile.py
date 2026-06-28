@@ -3,10 +3,13 @@ from pathlib import Path
 from actions import install_agent, install_hook, install_rule, install_skill
 from catalog import (
     Catalog,
+    Package,
     Unit,
+    agent_unit,
     agent_unit_id,
     hook_unit_id,
     rule_unit_id,
+    skill_unit,
     skill_unit_id,
 )
 from reconcile import (
@@ -15,12 +18,46 @@ from reconcile import (
     apply_hook_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
+    package_installed,
     plan_agent_reconcile,
     plan_hook_reconcile,
     plan_rule_reconcile,
     plan_skill_reconcile,
 )
 from state import State, load_state
+
+
+def test_package_installed_requires_every_declared_unit_to_credit_the_package() -> None:
+    catalog: Catalog = Catalog(
+        units=(skill_unit("alpha"), agent_unit("helper")),
+        packages=(
+            Package(name="pack", units=(skill_unit("alpha"), agent_unit("helper"))),
+        ),
+        bundles=(),
+    )
+
+    # Both declared units credit "pack" in the refcount map, and units stays empty so
+    # the predicate can only be reading requesters bookkeeping, not loose unit presence.
+    fully_credited: State = State(
+        version=1,
+        units={},
+        requesters={
+            skill_unit_id("alpha"): ("pack",),
+            agent_unit_id("helper"): ("pack",),
+        },
+    )
+    assert package_installed(catalog=catalog, name="pack", state=fully_credited) is True
+
+    # Drop the helper's credit: one declared unit no longer names "pack", so the
+    # package is not fully installed even though the other unit still credits it.
+    helper_uncredited: State = State(
+        version=1,
+        units={},
+        requesters={skill_unit_id("alpha"): ("pack",)},
+    )
+    assert (
+        package_installed(catalog=catalog, name="pack", state=helper_uncredited) is False
+    )
 
 
 def test_plan_classifies_skills_by_tick_against_installed_state() -> None:
