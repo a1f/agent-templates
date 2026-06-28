@@ -13,6 +13,7 @@ from actions import install_agent, install_hook, install_rule, install_skill
 from at import main
 from catalog import (
     Catalog,
+    Package,
     Unit,
     agent_unit_id,
     hook_unit_id,
@@ -30,6 +31,7 @@ from tui import (
     abort_on_esc,
     agent_rows,
     hook_rows,
+    package_rows,
     rule_rows,
     skill_rows,
 )
@@ -162,6 +164,38 @@ def test_hook_rows_marks_installed_sorted_and_excludes_non_hooks() -> None:
     rows: list[str] = hook_rows(catalog=catalog, state=state)
 
     assert rows == [f"{MARKER_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
+
+
+def test_package_rows_marks_installed_by_refcount_sorted_with_member_ids() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="skill", name="alpha"),
+            Unit(kind="agent", name="helper"),
+            Unit(kind="skill", name="beta"),
+        ),
+        packages=(
+            Package(
+                name="pack-z",
+                units=(
+                    Unit(kind="skill", name="alpha"),
+                    Unit(kind="agent", name="helper"),
+                ),
+            ),
+            Package(name="pack-a", units=(Unit(kind="skill", name="beta"),)),
+        ),
+        bundles=(),
+    )
+    # Credit every unit of pack-a (only skill/beta) with "pack-a" so the refcount
+    # predicate reports it installed; leave pack-z's units uncredited. units stays
+    # empty so a passing row can only come from requesters, not from state.units.
+    state: State = State(version=1, units={}, requesters={"skill/beta": ("pack-a",)})
+
+    rows: list[str] = package_rows(catalog=catalog, state=state)
+
+    assert rows == [
+        f"{MARKER_INSTALLED} pack-a  (skill/beta)",
+        f"{MARKER_NOT_INSTALLED} pack-z  (skill/alpha, agent/helper)",
+    ]
 
 
 def test_skills_tab_renders_skill_rows_instead_of_placeholder(

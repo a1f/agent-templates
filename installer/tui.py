@@ -21,15 +21,19 @@ from rich.panel import Panel
 
 from catalog import (
     Catalog,
+    Package,
     agent_unit_id,
     hook_unit_id,
     list_agents,
     list_hooks,
+    list_packages,
     list_rules,
     list_skills,
     load_catalog,
+    resolve_package,
     rule_unit_id,
     skill_unit_id,
+    unit_id,
 )
 from paths import CATALOG_PATH, CLAUDE_ROOT, REPO_ROOT, STATE_ROOT
 from reconcile import (
@@ -38,6 +42,7 @@ from reconcile import (
     apply_hook_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
+    package_installed,
     plan_agent_reconcile,
     plan_hook_reconcile,
     plan_rule_reconcile,
@@ -165,6 +170,23 @@ def hook_rows(*, catalog: Catalog, state: State) -> list[str]:
     return _unit_rows(
         names=list_hooks, unit_id_of=hook_unit_id, catalog=catalog, state=state
     )
+
+
+def package_rows(*, catalog: Catalog, state: State) -> list[str]:
+    """Pair each catalog package with its refcount-derived install marker (via
+    package_installed) so the Packages tab renders status, and show the member
+    units the package pulls in alongside it."""
+    rows: list[str] = []
+    for name in list_packages(catalog=catalog):
+        package: Package = resolve_package(catalog, name)
+        marker: str = (
+            MARKER_INSTALLED
+            if package_installed(catalog=catalog, name=name, state=state)
+            else MARKER_NOT_INSTALLED
+        )
+        members: str = ", ".join(unit_id(unit) for unit in package.units)
+        rows.append(f"{marker} {name}  ({members})")
+    return rows
 
 
 # ---------------------------------------------------------------------------
