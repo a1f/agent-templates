@@ -20,6 +20,7 @@ from catalog import (
     hook_unit_id,
     list_agents,
     list_hooks,
+    list_packages,
     list_rules,
     list_skills,
     resolve_package,
@@ -125,6 +126,27 @@ def package_installed(*, catalog: Catalog, name: str, state: State) -> bool:
     return bool(package.units) and all(
         name in state.requesters.get(unit_id(unit), ()) for unit in package.units
     )
+
+
+def plan_package_reconcile(
+    *, ticked: frozenset[str], catalog: Catalog, state: State
+) -> ReconcilePlan:
+    """Diff the ticked selection against the catalog's packages, taking "installed"
+    from the refcount predicate rather than loose unit presence, so the apply step
+    works from a decided plan instead of re-deriving the diff."""
+    names: list[str] = list_packages(catalog=catalog)
+    installed: set[str] = {
+        name
+        for name in names
+        if package_installed(catalog=catalog, name=name, state=state)
+    }
+    to_install: tuple[str, ...] = tuple(
+        name for name in names if name in ticked and name not in installed
+    )
+    to_remove: tuple[str, ...] = tuple(
+        name for name in names if name in installed and name not in ticked
+    )
+    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
 
 
 class _InstallAction(Protocol):

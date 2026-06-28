@@ -21,6 +21,7 @@ from reconcile import (
     package_installed,
     plan_agent_reconcile,
     plan_hook_reconcile,
+    plan_package_reconcile,
     plan_rule_reconcile,
     plan_skill_reconcile,
 )
@@ -58,6 +59,33 @@ def test_package_installed_requires_every_declared_unit_to_credit_the_package() 
     assert (
         package_installed(catalog=catalog, name="pack", state=helper_uncredited) is False
     )
+
+
+def test_plan_classifies_packages_by_refcount_install_not_unit_presence() -> None:
+    catalog: Catalog = Catalog(
+        units=(skill_unit("alpha"), skill_unit("beta")),
+        packages=(
+            Package(name="pack-a", units=(skill_unit("alpha"),)),
+            Package(name="pack-b", units=(skill_unit("beta"),)),
+        ),
+        bundles=(),
+    )
+
+    # pack-a's only unit credits "pack-a", so the refcount predicate reads pack-a as
+    # installed; pack-b stays uncredited and so is not installed. units is empty so the
+    # diff can only be reading requesters bookkeeping, not loose unit presence.
+    state: State = State(
+        version=1,
+        units={},
+        requesters={skill_unit_id("alpha"): ("pack-a",)},
+    )
+
+    plan: ReconcilePlan = plan_package_reconcile(
+        ticked=frozenset({"pack-b"}), catalog=catalog, state=state
+    )
+
+    assert plan.to_install == ("pack-b",)
+    assert plan.to_remove == ("pack-a",)
 
 
 def test_plan_classifies_skills_by_tick_against_installed_state() -> None:
