@@ -9,7 +9,13 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from pytest import CaptureFixture, MonkeyPatch
 
-from actions import install_agent, install_hook, install_rule, install_skill
+from actions import (
+    install_agent,
+    install_hook,
+    install_package,
+    install_rule,
+    install_skill,
+)
 from at import main
 from catalog import (
     Catalog,
@@ -481,6 +487,87 @@ def test_packages_tab_installs_ticked_package_through_reconcile(
     assert final_state.requesters[skill_unit_id("demo-skill")] == ("demo-pack",)
     assert f"{MARKER_INSTALLED} demo-pack" in captured
     assert TAB_PLACEHOLDER not in captured
+
+
+def test_packages_tab_unticking_one_package_keeps_a_shared_unit(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
+
+    # Real skill sources for the shared unit and each package's exclusive unit, so the
+    # pre-install can place live symlinks and staging before the reconcile runs.
+    for name in ("shared", "only-a", "only-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "shared"\n\n'
+        '[[units]]\nkind = "skill"\nname = "only-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "only-b"\n\n'
+        '[[packages]]\nname = "pack-a"\nunits = ["skill/shared", "skill/only-a"]\n\n'
+        '[[packages]]\nname = "pack-b"\nunits = ["skill/shared", "skill/only-b"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
+
+    # Pre-install both packages through the real public install action, so the shared
+    # unit carries both packages as requesters and each exclusive unit carries its own.
+    catalog: Catalog = load_catalog(catalog_file)
+    state: State = load_state(state_root)
+    for package_name in ("pack-a", "pack-b"):
+        state = install_package(
+            name=package_name,
+            catalog=catalog,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+
+    # The tab menu opens the Packages tab, then closes it after the reconcile.
+    select_answers: Iterator[str] = iter(["Packages", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # pack-b is left unticked; only pack-a stays in the desired set.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["pack-a"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Reconciling to the desired set {pack-a} runs a refcount-correct uninstall of
+    # pack-b: only its exclusive unit is reclaimed, while the shared unit survives on
+    # pack-a's remaining credit and pack-a's own exclusive unit stays installed.
+    final_state: State = load_state(state_root)
+    only_b_link: Path = claude_root / "skills" / "only-b"
+    shared_link: Path = claude_root / "skills" / "shared"
+    assert exit_code == 0
+    assert skill_unit_id("only-b") not in final_state.units
+    assert not only_b_link.exists() and not only_b_link.is_symlink()
+    assert skill_unit_id("shared") in final_state.units
+    assert shared_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("shared")] == ("pack-a",)
+    assert skill_unit_id("only-a") in final_state.units
 
 
 def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
