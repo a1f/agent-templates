@@ -57,7 +57,8 @@ def test_package_installed_requires_every_declared_unit_to_credit_the_package() 
         requesters={skill_unit_id("alpha"): ("pack",)},
     )
     assert (
-        package_installed(catalog=catalog, name="pack", state=helper_uncredited) is False
+        package_installed(catalog=catalog, name="pack", state=helper_uncredited)
+        is False
     )
 
 
