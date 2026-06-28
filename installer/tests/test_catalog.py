@@ -10,6 +10,7 @@ from catalog import (
     Unit,
     list_agents,
     list_hooks,
+    list_packages,
     list_rules,
     list_skills,
     load_catalog,
@@ -250,6 +251,22 @@ def test_list_hooks_returns_only_hook_names_sorted(tmp_path: Path) -> None:
     # Only hook-kind units, and sorted (declaration order is zeta, alpha); the
     # skill and agent units must not leak into the hook listing.
     assert list_hooks(catalog) == ["alpha", "zeta"]
+
+
+def test_list_packages_returns_package_names_sorted() -> None:
+    # Packages are listed by name in a stable sorted order, independent of their
+    # declaration order in the catalog (here zeta is declared before alpha).
+    shared: Unit = Unit(kind="skill", name="alpha")
+    catalog: Catalog = Catalog(
+        units=(shared,),
+        packages=(
+            Package(name="zeta", units=(shared,)),
+            Package(name="alpha", units=(shared,)),
+        ),
+        bundles=(),
+    )
+
+    assert list_packages(catalog=catalog) == ["alpha", "zeta"]
 
 
 def test_skill_unit_id_joins_kind_and_name() -> None:

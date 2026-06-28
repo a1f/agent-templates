@@ -6,23 +6,29 @@ from typing import Protocol
 from actions import (
     install_agent,
     install_hook,
+    install_package,
     install_rule,
     install_skill,
     uninstall_agent,
     uninstall_hook,
+    uninstall_package,
     uninstall_rule,
     uninstall_skill,
 )
 from catalog import (
     Catalog,
+    Package,
     agent_unit_id,
     hook_unit_id,
     list_agents,
     list_hooks,
+    list_packages,
     list_rules,
     list_skills,
+    resolve_package,
     rule_unit_id,
     skill_unit_id,
+    unit_id,
 )
 from state import State
 
@@ -41,6 +47,21 @@ class ReconcilePlan:
         return not self.to_install and not self.to_remove
 
 
+def _diff_selection(
+    *, names: list[str], ticked: frozenset[str], installed: set[str]
+) -> ReconcilePlan:
+    """Diff a ticked selection against an already-decided installed set into a
+    sorted ReconcilePlan, so every kind/tier shares one diff and differs only in
+    how it decides what counts as installed."""
+    to_install: tuple[str, ...] = tuple(
+        name for name in names if name in ticked and name not in installed
+    )
+    to_remove: tuple[str, ...] = tuple(
+        name for name in names if name in installed and name not in ticked
+    )
+    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+
+
 def _plan_reconcile(
     *,
     ticked: frozenset[str],
@@ -51,13 +72,7 @@ def _plan_reconcile(
     """Diff the ticked selection against installed state over one kind's units, so
     both public plan wrappers share one diff instead of re-deriving it per kind."""
     installed: set[str] = {name for name in names if unit_id_of(name) in state.units}
-    to_install: tuple[str, ...] = tuple(
-        name for name in names if name in ticked and name not in installed
-    )
-    to_remove: tuple[str, ...] = tuple(
-        name for name in names if name in installed and name not in ticked
-    )
-    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+    return _diff_selection(names=names, ticked=ticked, installed=installed)
 
 
 def plan_skill_reconcile(
@@ -110,6 +125,33 @@ def plan_hook_reconcile(
         unit_id_of=hook_unit_id,
         state=state,
     )
+
+
+def package_installed(*, catalog: Catalog, name: str, state: State) -> bool:
+    """Report a package as installed iff every unit it declares credits it in
+    state.requesters — the exact bookkeeping install_package writes and
+    uninstall_package withdraws — so the view reads the refcount rather than
+    guessing from loose unit presence; a package that declares no units is never
+    installed, never vacuously true."""
+    package: Package = resolve_package(catalog, name)
+    return bool(package.units) and all(
+        name in state.requesters.get(unit_id(unit), ()) for unit in package.units
+    )
+
+
+def plan_package_reconcile(
+    *, ticked: frozenset[str], catalog: Catalog, state: State
+) -> ReconcilePlan:
+    """Diff the ticked selection against the catalog's packages, taking "installed"
+    from the refcount predicate rather than loose unit presence, so the apply step
+    works from a decided plan instead of re-deriving the diff."""
+    names: list[str] = list_packages(catalog=catalog)
+    installed: set[str] = {
+        name
+        for name in names
+        if package_installed(catalog=catalog, name=name, state=state)
+    }
+    return _diff_selection(names=names, ticked=ticked, installed=installed)
 
 
 class _InstallAction(Protocol):
@@ -252,3 +294,36 @@ def apply_hook_reconcile(
         claude_root=claude_root,
         state=state,
     )
+
+
+def apply_package_reconcile(
+    *,
+    plan: ReconcilePlan,
+    catalog: Catalog,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned package diff via the refcount-aware install_package /
+    uninstall_package, threading the persisted State through so the final return
+    reflects every action."""
+    current: State = state
+    for name in plan.to_install:
+        current = install_package(
+            name=name,
+            catalog=catalog,
+            source_root=source_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    for name in plan.to_remove:
+        current = uninstall_package(
+            name=name,
+            catalog=catalog,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=current,
+        )
+    return current

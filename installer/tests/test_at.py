@@ -9,10 +9,17 @@ from prompt_toolkit.input import create_pipe_input
 from prompt_toolkit.output import DummyOutput
 from pytest import CaptureFixture, MonkeyPatch
 
-from actions import install_agent, install_hook, install_rule, install_skill
+from actions import (
+    install_agent,
+    install_hook,
+    install_package,
+    install_rule,
+    install_skill,
+)
 from at import main
 from catalog import (
     Catalog,
+    Package,
     Unit,
     agent_unit_id,
     hook_unit_id,
@@ -30,6 +37,7 @@ from tui import (
     abort_on_esc,
     agent_rows,
     hook_rows,
+    package_rows,
     rule_rows,
     skill_rows,
 )
@@ -162,6 +170,38 @@ def test_hook_rows_marks_installed_sorted_and_excludes_non_hooks() -> None:
     rows: list[str] = hook_rows(catalog=catalog, state=state)
 
     assert rows == [f"{MARKER_INSTALLED} alpha", f"{MARKER_NOT_INSTALLED} zeta"]
+
+
+def test_package_rows_marks_installed_by_refcount_sorted_with_member_ids() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="skill", name="alpha"),
+            Unit(kind="agent", name="helper"),
+            Unit(kind="skill", name="beta"),
+        ),
+        packages=(
+            Package(
+                name="pack-z",
+                units=(
+                    Unit(kind="skill", name="alpha"),
+                    Unit(kind="agent", name="helper"),
+                ),
+            ),
+            Package(name="pack-a", units=(Unit(kind="skill", name="beta"),)),
+        ),
+        bundles=(),
+    )
+    # Credit every unit of pack-a (only skill/beta) with "pack-a" so the refcount
+    # predicate reports it installed; leave pack-z's units uncredited. units stays
+    # empty so a passing row can only come from requesters, not from state.units.
+    state: State = State(version=1, units={}, requesters={"skill/beta": ("pack-a",)})
+
+    rows: list[str] = package_rows(catalog=catalog, state=state)
+
+    assert rows == [
+        f"{MARKER_INSTALLED} pack-a  (skill/beta)",
+        f"{MARKER_NOT_INSTALLED} pack-z  (skill/alpha, agent/helper)",
+    ]
 
 
 def test_skills_tab_renders_skill_rows_instead_of_placeholder(
@@ -384,6 +424,150 @@ def test_hooks_tab_installs_ticked_hook_through_reconcile(
     assert hook_unit_id("demo-hook") in final_state.units
     assert f"{MARKER_INSTALLED} demo-hook" in captured
     assert TAB_PLACEHOLDER not in captured
+
+
+def test_packages_tab_installs_ticked_package_through_reconcile(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
+
+    # A real skill source on disk is the only input the install needs; nothing is
+    # installed up front, so ticking demo-pack through the Packages tab must place its
+    # member skill via the refcount-aware package reconcile and credit the package as
+    # that unit's requester — the packages-tier analogue of how the Agents tab installs
+    # a ticked agent.
+    skill_source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    skill_source.parent.mkdir(parents=True)
+    skill_source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/demo-skill"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Packages tab, then closes it after the reconcile applies.
+    select_answers: Iterator[str] = iter(["Packages", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Tick the lone catalog package by name so the desired set installs demo-pack.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-pack"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Ticking demo-pack applies plan_package_reconcile then apply_package_reconcile, so
+    # the package's member skill ends up linked live and credited to demo-pack in state,
+    # and the package rows re-render with the installed marker.
+    captured: str = capsys.readouterr().out
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("demo-skill")] == ("demo-pack",)
+    assert f"{MARKER_INSTALLED} demo-pack" in captured
+    assert TAB_PLACEHOLDER not in captured
+
+
+def test_packages_tab_unticking_one_package_keeps_a_shared_unit(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
+
+    # Real skill sources for the shared unit and each package's exclusive unit, so the
+    # pre-install can place live symlinks and staging before the reconcile runs.
+    for name in ("shared", "only-a", "only-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "shared"\n\n'
+        '[[units]]\nkind = "skill"\nname = "only-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "only-b"\n\n'
+        '[[packages]]\nname = "pack-a"\nunits = ["skill/shared", "skill/only-a"]\n\n'
+        '[[packages]]\nname = "pack-b"\nunits = ["skill/shared", "skill/only-b"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
+
+    # Pre-install both packages through the real public install action, so the shared
+    # unit carries both packages as requesters and each exclusive unit carries its own.
+    catalog: Catalog = load_catalog(catalog_file)
+    state: State = load_state(state_root)
+    for package_name in ("pack-a", "pack-b"):
+        state = install_package(
+            name=package_name,
+            catalog=catalog,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+
+    # The tab menu opens the Packages tab, then closes it after the reconcile.
+    select_answers: Iterator[str] = iter(["Packages", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # pack-b is left unticked; only pack-a stays in the desired set.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["pack-a"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Reconciling to the desired set {pack-a} runs a refcount-correct uninstall of
+    # pack-b: only its exclusive unit is reclaimed, while the shared unit survives on
+    # pack-a's remaining credit and pack-a's own exclusive unit stays installed.
+    final_state: State = load_state(state_root)
+    only_b_link: Path = claude_root / "skills" / "only-b"
+    shared_link: Path = claude_root / "skills" / "shared"
+    assert exit_code == 0
+    assert skill_unit_id("only-b") not in final_state.units
+    assert not only_b_link.exists() and not only_b_link.is_symlink()
+    assert skill_unit_id("shared") in final_state.units
+    assert shared_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("shared")] == ("pack-a",)
+    assert skill_unit_id("only-a") in final_state.units
 
 
 def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
