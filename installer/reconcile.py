@@ -45,6 +45,21 @@ class ReconcilePlan:
         return not self.to_install and not self.to_remove
 
 
+def _diff_selection(
+    *, names: list[str], ticked: frozenset[str], installed: set[str]
+) -> ReconcilePlan:
+    """Diff a ticked selection against an already-decided installed set into a
+    sorted ReconcilePlan, so every kind/tier shares one diff and differs only in
+    how it decides what counts as installed."""
+    to_install: tuple[str, ...] = tuple(
+        name for name in names if name in ticked and name not in installed
+    )
+    to_remove: tuple[str, ...] = tuple(
+        name for name in names if name in installed and name not in ticked
+    )
+    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+
+
 def _plan_reconcile(
     *,
     ticked: frozenset[str],
@@ -55,13 +70,7 @@ def _plan_reconcile(
     """Diff the ticked selection against installed state over one kind's units, so
     both public plan wrappers share one diff instead of re-deriving it per kind."""
     installed: set[str] = {name for name in names if unit_id_of(name) in state.units}
-    to_install: tuple[str, ...] = tuple(
-        name for name in names if name in ticked and name not in installed
-    )
-    to_remove: tuple[str, ...] = tuple(
-        name for name in names if name in installed and name not in ticked
-    )
-    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+    return _diff_selection(names=names, ticked=ticked, installed=installed)
 
 
 def plan_skill_reconcile(
@@ -140,13 +149,7 @@ def plan_package_reconcile(
         for name in names
         if package_installed(catalog=catalog, name=name, state=state)
     }
-    to_install: tuple[str, ...] = tuple(
-        name for name in names if name in ticked and name not in installed
-    )
-    to_remove: tuple[str, ...] = tuple(
-        name for name in names if name in installed and name not in ticked
-    )
-    return ReconcilePlan(to_install=to_install, to_remove=to_remove)
+    return _diff_selection(names=names, ticked=ticked, installed=installed)
 
 
 class _InstallAction(Protocol):
