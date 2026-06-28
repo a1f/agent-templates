@@ -420,6 +420,69 @@ def test_hooks_tab_installs_ticked_hook_through_reconcile(
     assert TAB_PLACEHOLDER not in captured
 
 
+def test_packages_tab_installs_ticked_package_through_reconcile(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
+
+    # A real skill source on disk is the only input the install needs; nothing is
+    # installed up front, so ticking demo-pack through the Packages tab must place its
+    # member skill via the refcount-aware package reconcile and credit the package as
+    # that unit's requester — the packages-tier analogue of how the Agents tab installs
+    # a ticked agent.
+    skill_source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    skill_source.parent.mkdir(parents=True)
+    skill_source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/demo-skill"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Packages tab, then closes it after the reconcile applies.
+    select_answers: Iterator[str] = iter(["Packages", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Tick the lone catalog package by name so the desired set installs demo-pack.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-pack"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Ticking demo-pack applies plan_package_reconcile then apply_package_reconcile, so
+    # the package's member skill ends up linked live and credited to demo-pack in state,
+    # and the package rows re-render with the installed marker.
+    captured: str = capsys.readouterr().out
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("demo-skill")] == ("demo-pack",)
+    assert f"{MARKER_INSTALLED} demo-pack" in captured
+    assert TAB_PLACEHOLDER not in captured
+
+
 def test_skills_tab_unticking_skill_removes_it_while_ticked_stays_installed(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
