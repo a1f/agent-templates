@@ -135,6 +135,12 @@ def list_hooks(catalog: Catalog) -> list[str]:
     return sorted(unit.name for unit in catalog.units if unit.kind == _HOOK_KIND)
 
 
+def list_packages(*, catalog: Catalog) -> list[str]:
+    """Surface the installable packages by name in a stable order, so a UI
+    listing doesn't depend on declaration order in the toml."""
+    return sorted(package.name for package in catalog.packages)
+
+
 def _resolve(ref: str, by_id: dict[str, Unit], package: str) -> Unit:
     """Turn a package's unit id into the declared Unit, failing loudly at parse
     time with the dangling ref named rather than silently dropping it."""
