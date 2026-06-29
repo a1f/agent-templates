@@ -51,25 +51,25 @@ schema retry is separate from the behavior-level retry budgets in the loop below
 A tight RED dispatch reads, e.g.: "Write ONE failing test for: cart applies a percentage
 discount to the subtotal. Module boundary: `cart` (`cart.py`, `tests/test_cart.py`). Public
 interface: `Cart.total(discount: Percent)`. Base: <base>. Rules (absolute paths):
-<abs>/tdd.md, <abs>/design-principles.md, <abs>/python.md." The matching
+~/.claude/at/rules/tdd.md, ~/.claude/at/rules/design-principles.md, ~/.claude/at/rules/python.md." The matching
 GREEN dispatch names the exact failing test and the mode: "Make <test_file>::<test_name> pass
 with minimal production code. mode: green. The RED test is already on the tree but uncommitted —
 stage it unchanged with your production code. Module boundary: `cart` only. Base: <base>. Rules:
-<abs>/design-principles.md, <abs>/python.md, <abs>/tdd.md."
+~/.claude/at/rules/design-principles.md, ~/.claude/at/rules/python.md, ~/.claude/at/rules/tdd.md."
 
 ## Runtime resolution
 
 Resolve these values before the first dispatch:
 
-- **skill_root**: the directory this `SKILL.md` lives in. Use it for the bundled `rules/` beside
-  it (`rules_root`, below); the runtime extras — schemas, gates, and helper scripts — are resolved
-  from `extras_root`, not from here.
+- **skill_root**: the directory this `SKILL.md` lives in — it holds only the SKILL.md itself; the
+  rule files and the runtime extras (schemas, gates, helper scripts) are all resolved from
+  `extras_root`, not from here.
 - **extras_root**: the installer's state root `~/.claude/at`, the single source of truth the
-  installer stages a package's extras into — `schemas/`, `gates/`, and `scripts/` live here.
+  installer stages a package's extras into — `rules/`, `schemas/`, `gates/`, and `scripts/` live here.
   Resolving them from this one root keeps an install self-contained, with no dependency on a repo
   checkout; reference each extra by its literal path under it (e.g. `~/.claude/at/gates/<lang>.json`).
-- **rules_root**: the bundled `rules/` directory beside this `SKILL.md` (`<skill_root>/rules`). Use
-  it for the rule files the agents read.
+- **rules_root**: the `rules/` directory the installer composes from the single canonical source
+  into the state root (`~/.claude/at/rules`). Use it for the rule files the agents read.
 - **target_cwd**: the absolute path to the repository being changed. Run every target-repo
   command there: `git`, verification commands, package-manager setup, and gate runs.
 - **run_root**: a writable directory for logs and transient return JSON, defaulting to
@@ -84,8 +84,8 @@ Resolve these values before the first dispatch:
   `git diff --name-only <base>...HEAD`. Match paths against each `~/.claude/at/gates/*.json`
   profile's `triggers` globs; both root and nested paths must match. If a changed language has
   no gate, stop and report the missing gate instead of declaring done.
-- **Rules**: resolve rule files to **absolute** paths (the bundled `rules/` directory beside this
-  `SKILL.md`, `rules_root`) before passing them — a subagent's working directory is the user's
+- **Rules**: resolve rule files to **absolute** paths under `rules_root` (`~/.claude/at/rules`)
+  before passing them — a subagent's working directory is the user's
   project, not this skill's directory, so bare or repo-relative names will not resolve. Always pass
   `design-principles.md`; add `tdd.md` for behavioral RED/GREEN steps; add the matching
   language rule (`python.md`, `typescript.md`, `rust.md`) for each changed file type.
