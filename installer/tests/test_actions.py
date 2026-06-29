@@ -1033,3 +1033,102 @@ packages = ["pack-one", "pack-two"]
     # pack-two's private extra belongs only to pack-two and is left untouched.
     assert (state_root / "two" / "private.txt").is_file()
     assert result.extras["two/private.txt"] == ("pack-two",)
+
+
+def test_uninstall_package_drops_forgotten_extra_hash_keeping_shared(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("alpha", "beta"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(
+            f"# {skill_name} Skill\n", encoding="utf-8"
+        )
+
+    # A shared extra directory both packages declare, plus one private extra file
+    # per package nested in its own subdir, so refcounting an extra's hash mirrors how
+    # the extras test exercises a shared-vs-private extra. The units are incidental.
+    shared_extra: Path = source_root / "shared"
+    shared_extra.mkdir(parents=True)
+    (shared_extra / "keep.txt").write_text("shared\n", encoding="utf-8")
+
+    one_private: Path = source_root / "one" / "private.txt"
+    one_private.parent.mkdir(parents=True)
+    one_private.write_text("one\n", encoding="utf-8")
+
+    two_private: Path = source_root / "two" / "private.txt"
+    two_private.parent.mkdir(parents=True)
+    two_private.write_text("two\n", encoding="utf-8")
+
+    # Two packages that share one extra ("shared") and each own one private extra,
+    # loaded through the real boundary so the uninstall resolves the package's
+    # extras exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[units]]
+kind = "skill"
+name = "beta"
+
+[[packages]]
+name = "pack-one"
+units = ["skill/alpha"]
+extras = ["shared", "one/private.txt"]
+
+[[packages]]
+name = "pack-two"
+units = ["skill/beta"]
+extras = ["shared", "two/private.txt"]
+
+[[bundles]]
+name = "everything"
+packages = ["pack-one", "pack-two"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Install both packages, threading state, so the shared extra ends up credited
+    # to both pack-one and pack-two while each private extra has a single requester.
+    state_after_pack_one: State = install_package(
+        name="pack-one",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    state_after_both: State = install_package(
+        name="pack-two",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_pack_one,
+    )
+
+    result: State = uninstall_package(
+        name="pack-one",
+        catalog=catalog,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_both,
+    )
+
+    # pack-one's private extra had pack-one as its sole requester: its last requester
+    # is gone, so the extra is forgotten — and its recorded hash is dropped too.
+    assert "one/private.txt" not in result.extra_hashes
+
+    # The shared extra survives: pack-two still requires it, so its recorded hash is
+    # kept and still equals hashing the surviving staged copy under the state root.
+    assert "shared" in result.extra_hashes
+    assert result.extra_hashes["shared"] == hash_unit(state_root / "shared")
+
+    # pack-two's private extra belongs only to pack-two, so its hash is untouched.
+    assert "two/private.txt" in result.extra_hashes

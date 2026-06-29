@@ -385,9 +385,11 @@ def _set_extra_hash(*, state: State, extra: str, content_hash: str) -> State:
 
 def _forget_extra(*, state: State, extra: str) -> State:
     """Drop one extra key entirely from a brand-new immutable State, carrying units,
-    requesters, extra hashes, and the other extras forward untouched, so removing an
-    extra whose last requester is gone never disturbs unrelated bookkeeping — the
-    extras analogue of how the unit loop rebuilds state without the removed unit."""
+    requesters, and the other extras forward untouched, so removing an extra whose last
+    requester is gone never disturbs unrelated bookkeeping — the extras analogue of how
+    the unit loop rebuilds state without the removed unit. Drops both the extra's
+    requester entry and its content-hash entry, so a forgotten extra leaves no orphaned
+    hash behind."""
     return State(
         version=state.version,
         units=state.units,
@@ -397,7 +399,11 @@ def _forget_extra(*, state: State, extra: str) -> State:
             for relpath, tokens in state.extras.items()
             if relpath != extra
         },
-        extra_hashes=state.extra_hashes,
+        extra_hashes={
+            relpath: content
+            for relpath, content in state.extra_hashes.items()
+            if relpath != extra
+        },
     )
 
 
