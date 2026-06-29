@@ -1,4 +1,5 @@
 import contextlib
+import json
 from pathlib import Path
 from typing import NoReturn
 
@@ -39,6 +40,33 @@ def test_save_then_load_round_trips_requesters_as_tuples(tmp_path: Path) -> None
     loaded: State = load_state(tmp_path)
 
     assert loaded == saved
+
+
+def test_save_then_load_round_trips_extra_hashes_and_omits_when_empty(
+    tmp_path: Path,
+) -> None:
+    with_hashes: State = State(
+        version=STATE_VERSION,
+        units={"skill/make-pr": "deadbeef"},
+        extra_hashes={"rules/python.md": "c0ffee"},
+    )
+    hashed_root: Path = tmp_path / "hashed"
+
+    save_state(with_hashes, hashed_root)
+    loaded: State = load_state(hashed_root)
+
+    assert loaded == with_hashes
+
+    without_hashes: State = State(
+        version=STATE_VERSION, units={"skill/make-pr": "deadbeef"}
+    )
+    empty_root: Path = tmp_path / "empty"
+
+    save_state(without_hashes, empty_root)
+    with (empty_root / STATE_FILENAME).open(encoding="utf-8") as handle:
+        payload: dict[str, object] = json.load(handle)
+
+    assert "extra_hashes" not in payload
 
 
 def test_save_is_atomic_failed_replace_keeps_prior_state(
