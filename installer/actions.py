@@ -75,6 +75,7 @@ def _install_unit(
         units={**state.units, installed_id: content_hash},
         requesters=new_requesters,
         extras=state.extras,
+        extra_hashes=state.extra_hashes,
     )
     save_state(new_state, state_root)
     return new_state
@@ -109,6 +110,7 @@ def _uninstall_unit(
             if existing_id != removed_id
         },
         extras=state.extras,
+        extra_hashes=state.extra_hashes,
     )
     save_state(new_state, state_root)
     return new_state
@@ -342,34 +344,52 @@ def _drop_requester_token(*, tokens: tuple[str, ...], token: str) -> tuple[str, 
 
 def _set_requesters(*, state: State, unit: str, tokens: tuple[str, ...]) -> State:
     """Replace one unit's requester set on a brand-new immutable State, carrying
-    units, extras, and the other units' requesters forward untouched, so threading a
-    package install never disturbs unrelated bookkeeping."""
+    units, extras, extra hashes, and the other units' requesters forward untouched, so
+    threading a package install never disturbs unrelated bookkeeping."""
     return State(
         version=state.version,
         units=state.units,
         requesters={**state.requesters, unit: tokens},
         extras=state.extras,
+        extra_hashes=state.extra_hashes,
     )
 
 
 def _set_extras(*, state: State, extra: str, tokens: tuple[str, ...]) -> State:
     """Replace one extra's requester set on a brand-new immutable State, carrying
-    units, requesters, and the other extras forward untouched, so recording one
-    extra never disturbs unrelated bookkeeping — the extras analogue of
+    units, requesters, extra hashes, and the other extras forward untouched, so
+    recording one extra never disturbs unrelated bookkeeping — the extras analogue of
     _set_requesters."""
     return State(
         version=state.version,
         units=state.units,
         requesters=state.requesters,
         extras={**state.extras, extra: tokens},
+        extra_hashes=state.extra_hashes,
+    )
+
+
+def _set_extra_hash(*, state: State, extra: str, content_hash: str) -> State:
+    """Replace one extra's recorded content hash on a brand-new immutable State,
+    carrying units, requesters, and the other extras' hashes forward untouched, so
+    recording one extra's hash never disturbs unrelated bookkeeping — the content-hash
+    analogue of _set_extras."""
+    return State(
+        version=state.version,
+        units=state.units,
+        requesters=state.requesters,
+        extras=state.extras,
+        extra_hashes={**state.extra_hashes, extra: content_hash},
     )
 
 
 def _forget_extra(*, state: State, extra: str) -> State:
     """Drop one extra key entirely from a brand-new immutable State, carrying units,
-    requesters, and the other extras forward untouched, so removing an extra whose
-    last requester is gone never disturbs unrelated bookkeeping — the extras analogue
-    of how the unit loop rebuilds state without the removed unit."""
+    requesters, and the other extras forward untouched, so removing an extra whose last
+    requester is gone never disturbs unrelated bookkeeping — the extras analogue of how
+    the unit loop rebuilds state without the removed unit. Drops both the extra's
+    requester entry and its content-hash entry, so a forgotten extra leaves no orphaned
+    hash behind."""
     return State(
         version=state.version,
         units=state.units,
@@ -377,6 +397,11 @@ def _forget_extra(*, state: State, extra: str) -> State:
         extras={
             relpath: tokens
             for relpath, tokens in state.extras.items()
+            if relpath != extra
+        },
+        extra_hashes={
+            relpath: content
+            for relpath, content in state.extra_hashes.items()
             if relpath != extra
         },
     )
@@ -435,16 +460,23 @@ def install_package(
             )
             save_state(current, state_root)
     for relpath in package.extras:
-        # Stage the extra to disk, then credit the package as its requester in the
-        # same per-extra State write the unit loop uses, so a partial run is
-        # recoverable and an extra is never present-but-uncredited.
-        stage_extra(relpath=relpath, source_root=source_root, state_root=state_root)
+        # Stage the extra to disk, then credit the package as its requester AND record
+        # the staged copy's content hash in the same per-extra State write the unit loop
+        # uses, so a partial run is recoverable and an extra is never
+        # present-but-uncredited.
+        staged: Path = stage_extra(
+            relpath=relpath, source_root=source_root, state_root=state_root
+        )
+        content_hash: str = hash_unit(staged)
         current = _set_extras(
             state=current,
             extra=relpath,
             tokens=_add_requester_token(
                 tokens=current.extras.get(relpath, ()), token=name
             ),
+        )
+        current = _set_extra_hash(
+            state=current, extra=relpath, content_hash=content_hash
         )
         save_state(current, state_root)
     return current

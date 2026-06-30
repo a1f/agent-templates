@@ -23,6 +23,10 @@ class State:
     # the same refcount shape as requesters; declared last with a default so existing
     # State(version=..., units=..., requesters=...) call sites keep working.
     extras: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # extra source-relative path -> the sha256 content hash recorded for it; declared
+    # last with a default so existing State(version=..., units=..., requesters=...,
+    # extras=...) call sites keep working.
+    extra_hashes: dict[str, str] = field(default_factory=dict)
 
 
 def default_state() -> State:
@@ -43,6 +47,10 @@ def save_state(state: State, root: Path) -> None:
     # exact JSON of stores that have no extras, so an empty map must not appear.
     if state.extras:
         payload["extras"] = state.extras
+    # Omit an empty extra_hashes map for the same reason; values are plain strings,
+    # so no tuple handling is needed unlike requesters/extras above.
+    if state.extra_hashes:
+        payload["extra_hashes"] = state.extra_hashes
     # Write a sibling temp file and atomically swap it in, so a failed write
     # leaves the prior store intact rather than a half-written file.
     with tempfile.NamedTemporaryFile(
@@ -84,6 +92,17 @@ def load_state(root: Path) -> State:
         extras: dict[str, tuple[str, ...]] = {
             relpath: tuple(tokens) for relpath, tokens in stored_extras.items()
         }
-        return State(version=version, units=units, requesters=requesters, extras=extras)
+        # A store written before this field has no "extra_hashes" key; default to {}.
+        # Values are plain strings, so no tuple rebuild is needed unlike extras above.
+        extra_hashes: dict[str, str] = cast(
+            "dict[str, str]", raw.get("extra_hashes", {})
+        )
+        return State(
+            version=version,
+            units=units,
+            requesters=requesters,
+            extras=extras,
+            extra_hashes=extra_hashes,
+        )
     root.mkdir(parents=True, exist_ok=True)
     return default_state()

@@ -128,7 +128,7 @@ units = [
   "rule/design-principles",
   "rule/tdd",
 ]
-extras = ["schemas", "gates", "scripts/validate_return.py"]
+extras = ["schemas", "gates", "scripts/validate_return.py", "rules"]
 
 [[packages]]
 name = "lite-pr"
@@ -140,7 +140,14 @@ units = [
   "rule/design-principles",
   "rule/tdd",
 ]
-extras = ["gates"]
+extras = ["gates", "rules"]
+
+# improve-architecture audits a subsystem; its rubric is the canonical design-principles
+# rule, composed in via the rules extra rather than a bundled in-skill copy.
+[[packages]]
+name = "improve-architecture"
+units = ["skill/improve-architecture", "rule/design-principles"]
+extras = ["rules"]
 
 [[packages]]
 name = "breakdown"
