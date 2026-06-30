@@ -223,12 +223,15 @@ def _run_per_kind(
     return 0
 
 
-def _run_packages(*, names: tuple[str, ...]) -> int:
-    """Install the named packages non-interactively through the refcount engine — the
-    packages-tier analogue of `_run_per_kind`. It is kept out of the `_Kind` dispatch
-    because apply_package_reconcile threads the `catalog` that the `_ApplyReconcile`
-    protocol the per-kind path shares cannot carry. Ticks the union of already-installed
-    packages and the named ones, so installing one never withdraws another."""
+def _run_packages(*, names: tuple[str, ...], additive: bool) -> int:
+    """Install or uninstall the named packages non-interactively through the refcount
+    engine — the packages-tier analogue of `_run_per_kind`. It is kept out of the
+    `_Kind` dispatch because apply_package_reconcile threads the `catalog` that the
+    `_ApplyReconcile` protocol the per-kind path shares cannot carry. `additive` picks
+    the ticked set the same way `_run_per_kind` does: install joins the named packages
+    to those already installed (`installed | names`, so installing one never withdraws
+    another), uninstall drops them (`installed - names`), leaving units a still-claiming
+    package needs in place by refcount."""
     catalog: Catalog = load_catalog(_catalog_path())
     state: State = load_state(STATE_ROOT)
     installed: set[str] = {
@@ -236,7 +239,10 @@ def _run_packages(*, names: tuple[str, ...]) -> int:
         for name in list_packages(catalog=catalog)
         if package_installed(catalog=catalog, name=name, state=state)
     }
-    ticked: frozenset[str] = frozenset(installed | set(names))
+    selected: set[str] = set(names)
+    ticked: frozenset[str] = frozenset(
+        installed | selected if additive else installed - selected
+    )
     plan: ReconcilePlan = plan_package_reconcile(
         ticked=ticked, catalog=catalog, state=state
     )
@@ -280,7 +286,7 @@ def install(
     """Install named units (--skill/--agent/--rule/--hook) or packages (--package),
     or every skill (--all), without the menu; else open it."""
     if packages:
-        return _run_packages(names=packages)
+        return _run_packages(names=packages, additive=True)
     if skills or agents or rules or hooks:
         requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
             (_SKILL, skills),
@@ -302,18 +308,23 @@ def install(
 @click.option("--agent", "agents", multiple=True, metavar="<name>")
 @click.option("--rule", "rules", multiple=True, metavar="<name>")
 @click.option("--hook", "hooks", multiple=True, metavar="<name>")
+@click.option("--package", "packages", multiple=True, metavar="<name>")
 def uninstall(
     skills: tuple[str, ...],
     agents: tuple[str, ...],
     rules: tuple[str, ...],
     hooks: tuple[str, ...],
+    packages: tuple[str, ...],
 ) -> int:
-    """Uninstall named units (--skill/--agent/--rule/--hook); at least one is
-    required."""
-    if not skills and not agents and not rules and not hooks:
+    """Uninstall named units (--skill/--agent/--rule/--hook) or packages (--package);
+    at least one is required."""
+    if not skills and not agents and not rules and not hooks and not packages:
         raise click.UsageError(
-            "uninstall requires at least one --skill/--agent/--rule/--hook <name>"
+            "uninstall requires at least one "
+            "--skill/--agent/--rule/--hook/--package <name>"
         )
+    if packages:
+        return _run_packages(names=packages, additive=False)
     requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
         (_SKILL, skills),
         (_AGENT, agents),
