@@ -56,3 +56,27 @@ def test_package_refcount_governs_shared_unit_lifecycle(tmp_path: Path) -> None:
         actual=snapshot(home),
         goldens_dir=GOLDENS_DIR,
     )
+
+
+@pytest.mark.e2e
+def test_package_install_stages_declared_extras(tmp_path: Path) -> None:
+    home: Path = tmp_path / "home"
+    home.mkdir()
+    catalog: Path = FIXTURES_DIR / "catalog.toml"
+
+    # demo-pack-extras declares extras = ["schemas"], so installing it must copy the
+    # source-relative schemas/ directory to ~/.claude/at/schemas and record the extra
+    # (with its content hash) in state — the golden pins both the staged file and the
+    # state bookkeeping.
+    install_result: subprocess.CompletedProcess[str] = run_at(
+        args=["install", "--package", "demo-pack-extras", "--non-interactive"],
+        home=home,
+        source_root=FIXTURES_DIR,
+        catalog=catalog,
+    )
+    assert install_result.returncode == 0, install_result.stderr
+    assert_matches_golden(
+        name="install_package_with_extras",
+        actual=snapshot(home),
+        goldens_dir=GOLDENS_DIR,
+    )

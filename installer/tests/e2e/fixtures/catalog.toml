@@ -15,6 +15,15 @@ units = ["skill/demo-skill", "agent/demo-agent"]
 name = "demo-pack-b"
 units = ["skill/demo-skill-two", "agent/demo-agent"]
 
+# A standalone package that declares an extra so e2e can pin the staging rule:
+# installing it copies the source-relative schemas/ directory to ~/.claude/at/schemas
+# and records the extra (with its content hash) in state. It shares nothing with
+# demo-pack-a / demo-pack-b, so adding it leaves their goldens untouched.
+[[packages]]
+name = "demo-pack-extras"
+units = ["rule/demo-rule"]
+extras = ["schemas"]
+
 [[units]]
 kind = "skill"
 name = "demo-skill"
