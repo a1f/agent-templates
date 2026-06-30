@@ -262,6 +262,7 @@ def _run_packages(*, names: tuple[str, ...], additive: bool) -> int:
     plan: ReconcilePlan = plan_package_reconcile(
         ticked=ticked, catalog=catalog, state=state
     )
+    # State return ignored: lone apply persists via save_state; no inter-kind threading.
     apply_package_reconcile(
         plan=plan,
         catalog=catalog,
