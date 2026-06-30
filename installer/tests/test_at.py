@@ -1257,6 +1257,55 @@ def test_install_skill_flag_installs_named_skill_non_interactively(
     assert skill_unit_id("demo-skill") in final_state.units
 
 
+def test_install_package_flag_installs_named_package_non_interactively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A real skill source on disk is the only input the non-interactive install needs;
+    # nothing is installed up front, so installing demo-pack must place its member skill
+    # through the refcount-aware package install and credit the package as that unit's
+    # requester — the packages-tier analogue of the --skill flag.
+    source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/demo-skill"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The --package path must place the package without ever opening the TUI: route
+    # every questionary prompt to a factory that fails loudly, so a regression that
+    # falls back through launch_tui's select/checkbox/confirm trips this guard.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--package", "demo-pack"])
+
+    # Installing demo-pack places its member skill live and records demo-pack as that
+    # unit's sole requester, so the package's refcount credit — not a @direct marker —
+    # is what holds the skill installed.
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("demo-skill")] == ("demo-pack",)
+
+
 def test_multiple_skill_flags_install_all_named_skills_additively(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:

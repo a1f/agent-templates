@@ -19,6 +19,7 @@ from catalog import (
     hook_unit_id,
     list_agents,
     list_hooks,
+    list_packages,
     list_rules,
     list_skills,
     load_catalog,
@@ -30,10 +31,13 @@ from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
     apply_hook_reconcile,
+    apply_package_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
+    package_installed,
     plan_agent_reconcile,
     plan_hook_reconcile,
+    plan_package_reconcile,
     plan_rule_reconcile,
     plan_skill_reconcile,
 )
@@ -219,6 +223,34 @@ def _run_per_kind(
     return 0
 
 
+def _run_packages(*, names: tuple[str, ...]) -> int:
+    """Install the named packages non-interactively through the refcount engine — the
+    packages-tier analogue of `_run_per_kind`. It is kept out of the `_Kind` dispatch
+    because apply_package_reconcile threads the `catalog` that the `_ApplyReconcile`
+    protocol the per-kind path shares cannot carry. Ticks the union of already-installed
+    packages and the named ones, so installing one never withdraws another."""
+    catalog: Catalog = load_catalog(_catalog_path())
+    state: State = load_state(STATE_ROOT)
+    installed: set[str] = {
+        name
+        for name in list_packages(catalog=catalog)
+        if package_installed(catalog=catalog, name=name, state=state)
+    }
+    ticked: frozenset[str] = frozenset(installed | set(names))
+    plan: ReconcilePlan = plan_package_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+    apply_package_reconcile(
+        plan=plan,
+        catalog=catalog,
+        source_root=_source_root(),
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        state=state,
+    )
+    return 0
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(
     AT_VERSION, "--version", prog_name="at", message="%(prog)s %(version)s"
@@ -232,6 +264,7 @@ def cli() -> None:
 @click.option("--agent", "agents", multiple=True, metavar="<name>")
 @click.option("--rule", "rules", multiple=True, metavar="<name>")
 @click.option("--hook", "hooks", multiple=True, metavar="<name>")
+@click.option("--package", "packages", multiple=True, metavar="<name>")
 @click.option("--all", "install_all", is_flag=True)
 # Accepted so a scripted `install --all` can pass it, but it changes nothing: the
 # --all path never opens the menu, so the flag never needs to reach the callback.
@@ -241,10 +274,13 @@ def install(
     agents: tuple[str, ...],
     rules: tuple[str, ...],
     hooks: tuple[str, ...],
+    packages: tuple[str, ...],
     install_all: bool,
 ) -> int:
-    """Install named units (--skill/--agent/--rule/--hook/--all) without the menu,
-    else open it."""
+    """Install named units (--skill/--agent/--rule/--hook) or packages (--package),
+    or every skill (--all), without the menu; else open it."""
+    if packages:
+        return _run_packages(names=packages)
     if skills or agents or rules or hooks:
         requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
             (_SKILL, skills),
