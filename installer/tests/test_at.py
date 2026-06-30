@@ -1257,6 +1257,55 @@ def test_install_skill_flag_installs_named_skill_non_interactively(
     assert skill_unit_id("demo-skill") in final_state.units
 
 
+def test_install_package_flag_installs_named_package_non_interactively(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A real skill source on disk is the only input the non-interactive install needs;
+    # nothing is installed up front, so installing demo-pack must place its member skill
+    # through the refcount-aware package install and credit the package as that unit's
+    # requester — the packages-tier analogue of the --skill flag.
+    source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/demo-skill"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The --package path must place the package without ever opening the TUI: route
+    # every questionary prompt to a factory that fails loudly, so a regression that
+    # falls back through launch_tui's select/checkbox/confirm trips this guard.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--package", "demo-pack"])
+
+    # Installing demo-pack places its member skill live and records demo-pack as that
+    # unit's sole requester, so the package's refcount credit — not a @direct marker —
+    # is what holds the skill installed.
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("demo-skill")] == ("demo-pack",)
+
+
 def test_multiple_skill_flags_install_all_named_skills_additively(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1595,6 +1644,60 @@ def test_install_unknown_skill_errors_with_exit_two_and_installs_nothing(
     assert skill_unit_id("nonesuch") not in final_state.units
 
 
+def test_install_unknown_package_errors_with_exit_two_and_installs_nothing(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # The catalog declares a real package (demo-pack -> demo-skill) but never
+    # 'nonesuch', so the request names an unknown package while the catalog still
+    # holds a valid one. The package's member skill source is staged so that a
+    # mistaken install of demo-pack would succeed — making a no-op the only way
+    # nothing lands.
+    source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/demo-skill"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The error path must stay non-interactive: route every questionary prompt to a
+    # factory that fails loudly, so a regression that falls back into launch_tui's
+    # select/checkbox/confirm trips this guard instead of silently prompting.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--package", "nonesuch"])
+
+    # An unknown --package name is rejected atomically before any apply: main exits 2
+    # and names the bad package ('nonesuch') on stderr, and nothing is installed — the
+    # real package's member skill never lands (no link, no state entry), so a typo
+    # fails loudly instead of silently no-opping.
+    captured_err: str = capsys.readouterr().err
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    assert exit_code == 2
+    assert captured_err != ""
+    assert "nonesuch" in captured_err
+    assert not skill_link.exists() and not skill_link.is_symlink()
+    assert skill_unit_id("demo-skill") not in final_state.units
+
+
 @pytest.mark.parametrize(
     "argv",
     [["install", "--skill"], ["uninstall", "--skill"], ["uninstall"]],
@@ -1919,3 +2022,76 @@ def test_install_rejects_unknown_name_in_any_kind_before_applying_any(
     assert not skill_link.exists() and not skill_link.is_symlink()
     assert not skill_staging.exists()
     assert skill_unit_id("good-skill") not in final_state.units
+
+
+def test_uninstall_package_flag_decrements_refcount_keeping_shared_unit(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real skill sources for the shared unit and each package's exclusive unit, so the
+    # pre-install can place live symlinks and staging before the uninstall runs.
+    for name in ("shared", "only-a", "only-b"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "shared"\n\n'
+        '[[units]]\nkind = "skill"\nname = "only-a"\n\n'
+        '[[units]]\nkind = "skill"\nname = "only-b"\n\n'
+        '[[packages]]\nname = "pack-a"\nunits = ["skill/shared", "skill/only-a"]\n\n'
+        '[[packages]]\nname = "pack-b"\nunits = ["skill/shared", "skill/only-b"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Pre-install both packages through the real public install action, so the shared
+    # unit carries both packages as requesters and each exclusive unit carries its own.
+    catalog: Catalog = load_catalog(catalog_file)
+    state: State = load_state(state_root)
+    for package_name in ("pack-a", "pack-b"):
+        state = install_package(
+            name=package_name,
+            catalog=catalog,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+
+    # Uninstalling a package must withdraw its claim without ever opening the TUI:
+    # route every questionary prompt to a factory that fails loudly, so a regression
+    # that falls back through launch_tui's select/checkbox/confirm trips this guard.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["uninstall", "--package", "pack-a"])
+
+    # `uninstall --package pack-a` is a refcount decrement: pack-a's exclusive unit
+    # only-a is reclaimed (its link, staging, and state entry go), while the shared unit
+    # survives on pack-b's remaining credit — still linked and now requested by pack-b
+    # alone — and pack-b's own exclusive unit only-b stays installed.
+    final_state: State = load_state(state_root)
+    only_a_link: Path = claude_root / "skills" / "only-a"
+    shared_link: Path = claude_root / "skills" / "shared"
+    only_b_link: Path = claude_root / "skills" / "only-b"
+    assert exit_code == 0
+    assert skill_unit_id("only-a") not in final_state.units
+    assert not only_a_link.exists() and not only_a_link.is_symlink()
+    assert skill_unit_id("shared") in final_state.units
+    assert shared_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("shared")] == ("pack-b",)
+    assert skill_unit_id("only-b") in final_state.units
+    assert only_b_link.is_symlink()

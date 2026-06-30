@@ -1,0 +1,9 @@
+dir .claude/at
+dir .claude/at/schemas
+file .claude/at/schemas/demo-schema.json 0caf2bd5dfff062ff9d07d6123ce36e1fc5a4f02677f2e913b27c04c6075f98e
+dir .claude/at/staged
+dir .claude/at/staged/rule
+file .claude/at/staged/rule/demo-rule 94b4fcca183f1a395b2231260530d3d608b66d70206d8eff1d0000d680d65d6a
+json .claude/at/state.json {"extra_hashes":{"schemas":"e8224ef72a3b8e9463978953355c1fc546f9b5a093e20f0ca8169a2ab20fc752"},"extras":{"schemas":["demo-pack-extras"]},"requesters":{"rule/demo-rule":["demo-pack-extras"]},"units":{"rule/demo-rule":"94b4fcca183f1a395b2231260530d3d608b66d70206d8eff1d0000d680d65d6a"},"version":1}
+dir .claude/rules
+link .claude/rules/demo-rule.md -> .claude/at/staged/rule/demo-rule

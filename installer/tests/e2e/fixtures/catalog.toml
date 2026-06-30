@@ -1,8 +1,28 @@
 # Frozen fixture catalog for installer e2e scenarios. Deliberately minimal and
 # stable so goldens change only when installer BEHAVIOUR changes, never when a
 # real skill under ../../skills is edited.
-packages = []
 bundles = []
+
+# Two packages that deliberately SHARE agent/demo-agent so e2e can pin the refcount
+# rule: a unit pulled in by both survives uninstalling one package and is removed only
+# when its last requester package goes. demo-skill / demo-skill-two are each exclusive
+# to one package, so they witness the non-shared side of the same uninstall.
+[[packages]]
+name = "demo-pack-a"
+units = ["skill/demo-skill", "agent/demo-agent"]
+
+[[packages]]
+name = "demo-pack-b"
+units = ["skill/demo-skill-two", "agent/demo-agent"]
+
+# A standalone package that declares an extra so e2e can pin the staging rule:
+# installing it copies the source-relative schemas/ directory to ~/.claude/at/schemas
+# and records the extra (with its content hash) in state. It shares nothing with
+# demo-pack-a / demo-pack-b, so adding it leaves their goldens untouched.
+[[packages]]
+name = "demo-pack-extras"
+units = ["rule/demo-rule"]
+extras = ["schemas"]
 
 [[units]]
 kind = "skill"
