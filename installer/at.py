@@ -161,20 +161,29 @@ _HOOK: Final[_Kind] = _Kind(
 )
 
 
-def _reject_unknown_units(
-    names: list[str], *, kind: _Kind, catalog: Catalog
+def _reject_unknown(
+    *, names: list[str], label: str, known: frozenset[str]
 ) -> int | None:
-    """Reject a name the catalog doesn't list for this kind before any reconcile runs,
-    so a typo fails atomically instead of silently no-opping; names the unknowns on
-    stderr and returns exit code 2, or None when every name is known."""
-    known: frozenset[str] = frozenset(kind.list_names(catalog))
+    """Reject any requested name the catalog doesn't list before reconcile runs, so a
+    typo fails atomically instead of silently no-opping; the one rejection rule shared
+    by the per-kind units path and the packages path. Names the unknowns on stderr and
+    returns exit code 2, or None when every name is known."""
     unknown: list[str] = [name for name in names if name not in known]
     if not unknown:
         return None
     for name in unknown:
-        print(f"error: unknown {kind.label} '{name}'", file=sys.stderr)
+        print(f"error: unknown {label} '{name}'", file=sys.stderr)
     print("Try 'at --help' for usage.", file=sys.stderr)
     return 2
+
+
+def _reject_unknown_units(
+    *, names: list[str], kind: _Kind, catalog: Catalog
+) -> int | None:
+    """Reject a name the catalog doesn't list for this kind before reconcile runs."""
+    return _reject_unknown(
+        names=names, label=kind.label, known=frozenset(kind.list_names(catalog))
+    )
 
 
 def _run_per_kind(
@@ -195,7 +204,7 @@ def _run_per_kind(
         if not names:
             continue
         rejection: int | None = _reject_unknown_units(
-            list(names), kind=kind, catalog=catalog
+            names=list(names), kind=kind, catalog=catalog
         )
         if rejection is not None:
             return rejection
@@ -233,6 +242,13 @@ def _run_packages(*, names: tuple[str, ...], additive: bool) -> int:
     another), uninstall drops them (`installed - names`), leaving units a still-claiming
     package needs in place by refcount."""
     catalog: Catalog = load_catalog(_catalog_path())
+    rejection: int | None = _reject_unknown(
+        names=list(names),
+        label="package",
+        known=frozenset(list_packages(catalog=catalog)),
+    )
+    if rejection is not None:
+        return rejection
     state: State = load_state(STATE_ROOT)
     installed: set[str] = {
         name

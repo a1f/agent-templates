@@ -1644,6 +1644,60 @@ def test_install_unknown_skill_errors_with_exit_two_and_installs_nothing(
     assert skill_unit_id("nonesuch") not in final_state.units
 
 
+def test_install_unknown_package_errors_with_exit_two_and_installs_nothing(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # The catalog declares a real package (demo-pack -> demo-skill) but never
+    # 'nonesuch', so the request names an unknown package while the catalog still
+    # holds a valid one. The package's member skill source is staged so that a
+    # mistaken install of demo-pack would succeed — making a no-op the only way
+    # nothing lands.
+    source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/demo-skill"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # The error path must stay non-interactive: route every questionary prompt to a
+    # factory that fails loudly, so a regression that falls back into launch_tui's
+    # select/checkbox/confirm trips this guard instead of silently prompting.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--package", "nonesuch"])
+
+    # An unknown --package name is rejected atomically before any apply: main exits 2
+    # and names the bad package ('nonesuch') on stderr, and nothing is installed — the
+    # real package's member skill never lands (no link, no state entry), so a typo
+    # fails loudly instead of silently no-opping.
+    captured_err: str = capsys.readouterr().err
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    assert exit_code == 2
+    assert captured_err != ""
+    assert "nonesuch" in captured_err
+    assert not skill_link.exists() and not skill_link.is_symlink()
+    assert skill_unit_id("demo-skill") not in final_state.units
+
+
 @pytest.mark.parametrize(
     "argv",
     [["install", "--skill"], ["uninstall", "--skill"], ["uninstall"]],
