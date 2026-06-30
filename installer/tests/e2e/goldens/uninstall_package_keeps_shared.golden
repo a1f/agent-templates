@@ -1,0 +1,12 @@
+dir .claude/agents
+link .claude/agents/demo-agent.md -> .claude/at/staged/agent/demo-agent
+dir .claude/at
+dir .claude/at/staged
+dir .claude/at/staged/agent
+file .claude/at/staged/agent/demo-agent b5ab887c16f11fd42f38c3972bb7019d601a4686b12069ba3e4ef87ac5c5f831
+dir .claude/at/staged/skill
+dir .claude/at/staged/skill/demo-skill-two
+file .claude/at/staged/skill/demo-skill-two/SKILL.md ff3436a0c12035b4212dc3a83fa396ab7f1135f50314e0490715d0848bf8b460
+json .claude/at/state.json {"requesters":{"agent/demo-agent":["demo-pack-b"],"skill/demo-skill-two":["demo-pack-b"]},"units":{"agent/demo-agent":"b5ab887c16f11fd42f38c3972bb7019d601a4686b12069ba3e4ef87ac5c5f831","skill/demo-skill-two":"112a14a7446a409b98435238e9dfdc915640e3aa94434ace60644531e0e09bf5"},"version":1}
+dir .claude/skills
+link .claude/skills/demo-skill-two -> .claude/at/staged/skill/demo-skill-two
