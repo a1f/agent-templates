@@ -20,16 +20,19 @@ from rich.console import Console
 from rich.panel import Panel
 
 from catalog import (
+    Bundle,
     Catalog,
     Package,
     agent_unit_id,
     hook_unit_id,
     list_agents,
+    list_bundles,
     list_hooks,
     list_packages,
     list_rules,
     list_skills,
     load_catalog,
+    resolve_bundle,
     resolve_package,
     rule_unit_id,
     skill_unit_id,
@@ -39,12 +42,15 @@ from paths import CATALOG_PATH, CLAUDE_ROOT, REPO_ROOT, STATE_ROOT
 from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
+    apply_bundle_reconcile,
     apply_hook_reconcile,
     apply_package_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
+    bundle_installed,
     package_installed,
     plan_agent_reconcile,
+    plan_bundle_reconcile,
     plan_hook_reconcile,
     plan_package_reconcile,
     plan_rule_reconcile,
@@ -67,8 +73,11 @@ TAB_PLACEHOLDER: Final[str] = "(empty — populated in a later PR)"
 PACKAGES_CHOICE: Final[str] = "Packages"
 PACKAGES_SELECT_PROMPT: Final[str] = "Select installed packages"
 PACKAGES_CONFIRM_PROMPT: Final[str] = "Apply package changes?"
+BUNDLES_CHOICE: Final[str] = "Bundles"
+BUNDLES_SELECT_PROMPT: Final[str] = "Select installed bundles"
+BUNDLES_CONFIRM_PROMPT: Final[str] = "Apply bundle changes?"
 MENU_CHOICES: Final[tuple[str, ...]] = (
-    "Bundles",
+    BUNDLES_CHOICE,
     PACKAGES_CHOICE,
     "Skills",
     "Agents",
@@ -191,6 +200,24 @@ def package_rows(*, catalog: Catalog, state: State) -> list[str]:
             else MARKER_NOT_INSTALLED
         )
         members: str = ", ".join(unit_id(unit) for unit in package.units)
+        rows.append(f"{marker} {name}  ({members})")
+    return rows
+
+
+def bundle_rows(*, catalog: Catalog, state: State) -> list[str]:
+    """Pair each catalog bundle with its refcount-derived install marker (via
+    bundle_installed) so the Bundles tab renders status, and show the member
+    packages the bundle pulls in alongside it — a bundle is a set of packages,
+    so the members are package names in declared order."""
+    rows: list[str] = []
+    for name in list_bundles(catalog=catalog):
+        bundle: Bundle = resolve_bundle(catalog=catalog, name=name)
+        marker: str = (
+            MARKER_INSTALLED
+            if bundle_installed(catalog=catalog, name=name, state=state)
+            else MARKER_NOT_INSTALLED
+        )
+        members: str = ", ".join(bundle.packages)
         rows.append(f"{marker} {name}  ({members})")
     return rows
 
@@ -354,6 +381,50 @@ def _run_packages_tab(*, console: Console) -> None:
         console.print(row, markup=False)
 
 
+def _run_bundles_tab(*, console: Console) -> None:
+    """Drive the Bundles tab end to end — render status, take the ticked selection,
+    plan the diff over installed bundles, confirm, apply, then re-render. It is not a
+    `_UnitTab` under `_run_unit_tab` because apply_bundle_reconcile drives the package
+    tier: it threads the `catalog` and the still-ticked `ticked` set that the `_ApplyFn`
+    protocol the unit tabs share does not carry."""
+    catalog: Catalog = load_catalog(CATALOG_PATH)
+    state: State = load_state(STATE_ROOT)
+    for row in bundle_rows(catalog=catalog, state=state):
+        console.print(row, markup=False)
+    choices: list[questionary.Choice] = [
+        questionary.Choice(
+            name, checked=bundle_installed(catalog=catalog, name=name, state=state)
+        )
+        for name in list_bundles(catalog=catalog)
+    ]
+    ticked: list[str] | None = abort_on_esc(
+        questionary.checkbox(BUNDLES_SELECT_PROMPT, choices=choices)
+    ).ask()
+    if ticked is None:
+        return
+    plan: ReconcilePlan = plan_bundle_reconcile(
+        ticked=frozenset(ticked), catalog=catalog, state=state
+    )
+    if plan.is_empty:
+        return
+    confirmed: bool | None = abort_on_esc(
+        questionary.confirm(BUNDLES_CONFIRM_PROMPT)
+    ).ask()
+    if not confirmed:
+        return
+    state = apply_bundle_reconcile(
+        plan=plan,
+        ticked=frozenset(ticked),
+        catalog=catalog,
+        source_root=REPO_ROOT,
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        state=state,
+    )
+    for row in bundle_rows(catalog=catalog, state=state):
+        console.print(row, markup=False)
+
+
 def launch_tui() -> int:
     """Bail out on non-interactive stdin: questionary's prompt would otherwise
     block forever waiting on input no CI session can supply."""
@@ -369,6 +440,9 @@ def launch_tui() -> int:
             ).ask()
             if choice is None or choice == "Exit":
                 return 0
+            if choice == BUNDLES_CHOICE:
+                _run_bundles_tab(console=console)
+                continue
             if choice == PACKAGES_CHOICE:
                 _run_packages_tab(console=console)
                 continue

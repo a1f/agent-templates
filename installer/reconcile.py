@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -16,15 +16,18 @@ from actions import (
     uninstall_skill,
 )
 from catalog import (
+    Bundle,
     Catalog,
     Package,
     agent_unit_id,
     hook_unit_id,
     list_agents,
+    list_bundles,
     list_hooks,
     list_packages,
     list_rules,
     list_skills,
+    resolve_bundle,
     resolve_package,
     rule_unit_id,
     skill_unit_id,
@@ -139,6 +142,18 @@ def package_installed(*, catalog: Catalog, name: str, state: State) -> bool:
     )
 
 
+def bundle_installed(*, catalog: Catalog, name: str, state: State) -> bool:
+    """Report a bundle as installed iff every package it declares reads installed
+    by the same refcount predicate the packages tier uses (package_installed), so
+    the bundle view reads its members' state rather than re-deriving it; a bundle
+    that declares no packages is never installed, never vacuously true."""
+    bundle: Bundle = resolve_bundle(catalog=catalog, name=name)
+    return bool(bundle.packages) and all(
+        package_installed(catalog=catalog, name=package, state=state)
+        for package in bundle.packages
+    )
+
+
 def plan_package_reconcile(
     *, ticked: frozenset[str], catalog: Catalog, state: State
 ) -> ReconcilePlan:
@@ -150,6 +165,22 @@ def plan_package_reconcile(
         name
         for name in names
         if package_installed(catalog=catalog, name=name, state=state)
+    }
+    return _diff_selection(names=names, ticked=ticked, installed=installed)
+
+
+def plan_bundle_reconcile(
+    *, ticked: frozenset[str], catalog: Catalog, state: State
+) -> ReconcilePlan:
+    """Diff the ticked selection against the catalog's bundles, taking "installed"
+    from bundle_installed (every member package installed) rather than loose unit
+    presence, so the apply step works from a decided plan instead of re-deriving
+    the diff."""
+    names: list[str] = list_bundles(catalog=catalog)
+    installed: set[str] = {
+        name
+        for name in names
+        if bundle_installed(catalog=catalog, name=name, state=state)
     }
     return _diff_selection(names=names, ticked=ticked, installed=installed)
 
@@ -327,3 +358,53 @@ def apply_package_reconcile(
             state=current,
         )
     return current
+
+
+def _bundle_packages(*, catalog: Catalog, bundles: Iterable[str]) -> set[str]:
+    """Collect the member packages of a set of bundles into one deduped set, the
+    bundle->package join every bundle-tier apply needs to translate a bundle diff
+    into the package diff the tested package engine runs."""
+    return {
+        package
+        for name in bundles
+        for package in resolve_bundle(catalog=catalog, name=name).packages
+    }
+
+
+def apply_bundle_reconcile(
+    *,
+    plan: ReconcilePlan,
+    ticked: frozenset[str],
+    catalog: Catalog,
+    source_root: Path,
+    state_root: Path,
+    claude_root: Path,
+    state: State,
+) -> State:
+    """Carry out a planned bundle diff by translating it into a package diff and
+    delegating to the refcount-aware apply_package_reconcile, so the bundle tier
+    composes the tested package engine rather than reimplementing install/uninstall.
+
+    `ticked` carries every bundle the user left selected — the unchanged-still-installed
+    bundles that `plan` alone cannot name, since `plan` only records the transitions.
+    A package a dropped bundle shares with a still-ticked bundle must survive, so we
+    remove a dropped bundle's package only when no kept bundle still claims it; the
+    package tier's own unit refcount then does the rest of the survival bookkeeping."""
+    to_install: tuple[str, ...] = tuple(
+        sorted(_bundle_packages(catalog=catalog, bundles=plan.to_install))
+    )
+    kept: set[str] = _bundle_packages(catalog=catalog, bundles=ticked)
+    to_remove: tuple[str, ...] = tuple(
+        sorted(_bundle_packages(catalog=catalog, bundles=plan.to_remove) - kept)
+    )
+    package_plan: ReconcilePlan = ReconcilePlan(
+        to_install=to_install, to_remove=to_remove
+    )
+    return apply_package_reconcile(
+        plan=package_plan,
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state,
+    )

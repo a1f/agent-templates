@@ -8,6 +8,7 @@ from actions import (
     install_skill,
 )
 from catalog import (
+    Bundle,
     Catalog,
     Package,
     Unit,
@@ -22,12 +23,15 @@ from catalog import (
 from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
+    apply_bundle_reconcile,
     apply_hook_reconcile,
     apply_package_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
+    bundle_installed,
     package_installed,
     plan_agent_reconcile,
+    plan_bundle_reconcile,
     plan_hook_reconcile,
     plan_package_reconcile,
     plan_rule_reconcile,
@@ -70,6 +74,50 @@ def test_package_installed_requires_every_declared_unit_to_credit_the_package() 
     )
 
 
+def test_bundle_installed_requires_every_declared_package_to_be_installed() -> None:
+    catalog: Catalog = Catalog(
+        units=(skill_unit("alpha"), agent_unit("helper")),
+        packages=(
+            Package(name="pack-a", units=(skill_unit("alpha"),)),
+            Package(name="pack-b", units=(agent_unit("helper"),)),
+        ),
+        bundles=(
+            Bundle(name="full", packages=("pack-a", "pack-b")),
+            Bundle(name="empty", packages=()),
+        ),
+    )
+
+    # Every unit of both member packages credits its package, so both packages read
+    # installed and the bundle is installed. units stays empty so the predicate can
+    # only be reading requesters bookkeeping, not loose unit presence.
+    fully_installed: State = State(
+        version=1,
+        units={},
+        requesters={
+            skill_unit_id("alpha"): ("pack-a",),
+            agent_unit_id("helper"): ("pack-b",),
+        },
+    )
+    assert bundle_installed(catalog=catalog, name="full", state=fully_installed) is True
+
+    # Drop pack-b's credit: one member package is no longer installed, so the bundle
+    # is not fully installed even though pack-a still is.
+    pack_b_uninstalled: State = State(
+        version=1,
+        units={},
+        requesters={skill_unit_id("alpha"): ("pack-a",)},
+    )
+    assert (
+        bundle_installed(catalog=catalog, name="full", state=pack_b_uninstalled)
+        is False
+    )
+
+    # A bundle that declares no packages is never vacuously installed.
+    assert (
+        bundle_installed(catalog=catalog, name="empty", state=fully_installed) is False
+    )
+
+
 def test_plan_classifies_packages_by_refcount_install_not_unit_presence() -> None:
     catalog: Catalog = Catalog(
         units=(skill_unit("alpha"), skill_unit("beta")),
@@ -95,6 +143,36 @@ def test_plan_classifies_packages_by_refcount_install_not_unit_presence() -> Non
 
     assert plan.to_install == ("pack-b",)
     assert plan.to_remove == ("pack-a",)
+
+
+def test_plan_classifies_bundles_by_installed_state_not_unit_presence() -> None:
+    catalog: Catalog = Catalog(
+        units=(skill_unit("alpha"), skill_unit("beta")),
+        packages=(
+            Package(name="pack-a", units=(skill_unit("alpha"),)),
+            Package(name="pack-b", units=(skill_unit("beta"),)),
+        ),
+        bundles=(
+            Bundle(name="bundle-a", packages=("pack-a",)),
+            Bundle(name="bundle-b", packages=("pack-b",)),
+        ),
+    )
+
+    # pack-a's unit credits "pack-a", so bundle-a reads installed via bundle_installed;
+    # bundle-b's package stays uncredited and so is not installed. units is empty so the
+    # diff can only be reading requesters bookkeeping, not loose unit presence.
+    state: State = State(
+        version=1,
+        units={},
+        requesters={skill_unit_id("alpha"): ("pack-a",)},
+    )
+
+    plan: ReconcilePlan = plan_bundle_reconcile(
+        ticked=frozenset({"bundle-b"}), catalog=catalog, state=state
+    )
+
+    assert plan.to_install == ("bundle-b",)
+    assert plan.to_remove == ("bundle-a",)
 
 
 def test_plan_classifies_skills_by_tick_against_installed_state() -> None:
@@ -432,3 +510,147 @@ packages = ["pack-a", "pack-b"]
     # pack-a is now removed: its unit is gone from state and from disk.
     assert skill_unit_id("alpha") not in result.units
     assert not (claude_root / "skills" / "alpha").exists()
+
+
+def test_apply_bundle_reconcile_installs_a_newly_ticked_bundles_packages(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "alpha"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# alpha Skill\n", encoding="utf-8")
+
+    # A bundle over one package over one skill, loaded through the real boundary so the
+    # bundle reconcile resolves the member package and its unit exactly as production.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "alpha"
+
+[[packages]]
+name = "pack-a"
+units = ["skill/alpha"]
+
+[[bundles]]
+name = "bundle-a"
+packages = ["pack-a"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    plan: ReconcilePlan = ReconcilePlan(to_install=("bundle-a",), to_remove=())
+    result: State = apply_bundle_reconcile(
+        plan=plan,
+        ticked=frozenset({"bundle-a"}),
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    persisted: State = load_state(state_root)
+    alpha_id: str = skill_unit_id("alpha")
+
+    # Installing bundle-a places its member package's unit: recorded in state (and
+    # persisted), credited to the package that pulled it in, and linked live — so the
+    # bundle tier delegates to the tested package engine rather than reimplementing it.
+    assert alpha_id in result.units
+    assert alpha_id in persisted.units
+    assert result.requesters[alpha_id] == ("pack-a",)
+    assert (claude_root / "skills" / "alpha").is_symlink()
+
+
+def test_apply_bundle_reconcile_keeps_a_package_shared_by_a_still_ticked_bundle(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("shared", "only-a", "only-b"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(f"# {skill_name}\n", encoding="utf-8")
+
+    # Two bundles overlapping on pkg-shared; each also carries its own exclusive
+    # package. Loaded through the real boundary so the bundle reconcile resolves the
+    # bundle->package->unit chain exactly as production will.
+    catalog_body: str = """
+[[units]]
+kind = "skill"
+name = "shared"
+
+[[units]]
+kind = "skill"
+name = "only-a"
+
+[[units]]
+kind = "skill"
+name = "only-b"
+
+[[packages]]
+name = "pkg-shared"
+units = ["skill/shared"]
+
+[[packages]]
+name = "pkg-a"
+units = ["skill/only-a"]
+
+[[packages]]
+name = "pkg-b"
+units = ["skill/only-b"]
+
+[[bundles]]
+name = "bundle-x"
+packages = ["pkg-shared", "pkg-a"]
+
+[[bundles]]
+name = "bundle-y"
+packages = ["pkg-shared", "pkg-b"]
+"""
+    catalog_path: Path = tmp_path / "catalog.toml"
+    catalog_path.write_text(catalog_body, encoding="utf-8")
+    catalog: Catalog = load_catalog(catalog_path)
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Pre-install every member package so both bundles read installed before the diff.
+    state: State = State(version=1, units={})
+    for package_name in ("pkg-shared", "pkg-a", "pkg-b"):
+        state = install_package(
+            name=package_name,
+            catalog=catalog,
+            source_root=source_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+
+    # Untick bundle-y while bundle-x stays ticked: bundle-y's packages are
+    # {pkg-shared, pkg-b}, but pkg-shared is kept by still-ticked bundle-x, so only
+    # pkg-b is reclaimed.
+    plan: ReconcilePlan = ReconcilePlan(to_install=(), to_remove=("bundle-y",))
+    result: State = apply_bundle_reconcile(
+        plan=plan,
+        ticked=frozenset({"bundle-x"}),
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state,
+    )
+
+    shared_id: str = skill_unit_id("shared")
+    only_b_id: str = skill_unit_id("only-b")
+
+    # pkg-shared survives on bundle-x's claim: its unit stays recorded, credited, live.
+    assert shared_id in result.units
+    assert result.requesters[shared_id] == ("pkg-shared",)
+    assert (claude_root / "skills" / "shared").is_symlink()
+
+    # pkg-b is reclaimed: its exclusive unit is gone from state and from disk.
+    assert only_b_id not in result.units
+    assert not (claude_root / "skills" / "only-b").exists()

@@ -18,6 +18,7 @@ from actions import (
 )
 from at import main
 from catalog import (
+    Bundle,
     Catalog,
     Package,
     Unit,
@@ -36,6 +37,7 @@ from tui import (
     TAB_PLACEHOLDER,
     abort_on_esc,
     agent_rows,
+    bundle_rows,
     hook_rows,
     package_rows,
     rule_rows,
@@ -201,6 +203,35 @@ def test_package_rows_marks_installed_by_refcount_sorted_with_member_ids() -> No
     assert rows == [
         f"{MARKER_INSTALLED} pack-a  (skill/beta)",
         f"{MARKER_NOT_INSTALLED} pack-z  (skill/alpha, agent/helper)",
+    ]
+
+
+def test_bundle_rows_marks_installed_by_refcount_sorted_with_member_packages() -> None:
+    catalog: Catalog = Catalog(
+        units=(
+            Unit(kind="skill", name="alpha"),
+            Unit(kind="skill", name="beta"),
+        ),
+        packages=(
+            Package(name="pack-x", units=(Unit(kind="skill", name="alpha"),)),
+            Package(name="pack-y", units=(Unit(kind="skill", name="beta"),)),
+        ),
+        bundles=(
+            Bundle(name="bundle-z", packages=("pack-x", "pack-y")),
+            Bundle(name="bundle-a", packages=("pack-x",)),
+        ),
+    )
+    # Credit pack-x's only unit so it reads installed; bundle-a's every member
+    # package (only pack-x) is installed, so bundle-a reads installed. bundle-z also
+    # needs pack-y, which stays uncredited, so bundle-z is not installed. units stays
+    # empty so a passing row can only come from requesters, not loose unit presence.
+    state: State = State(version=1, units={}, requesters={"skill/alpha": ("pack-x",)})
+
+    rows: list[str] = bundle_rows(catalog=catalog, state=state)
+
+    assert rows == [
+        f"{MARKER_INSTALLED} bundle-a  (pack-x)",
+        f"{MARKER_NOT_INSTALLED} bundle-z  (pack-x, pack-y)",
     ]
 
 
@@ -486,6 +517,69 @@ def test_packages_tab_installs_ticked_package_through_reconcile(
     assert skill_link.is_symlink()
     assert final_state.requesters[skill_unit_id("demo-skill")] == ("demo-pack",)
     assert f"{MARKER_INSTALLED} demo-pack" in captured
+    assert TAB_PLACEHOLDER not in captured
+
+
+def test_bundles_tab_installs_ticked_bundle_through_reconcile(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("tui.STATE_ROOT", state_root)
+    monkeypatch.setattr("tui.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("tui.REPO_ROOT", repo_root)
+
+    # A real skill source on disk is the only input the install needs; nothing is
+    # installed up front, so ticking demo-bundle through the Bundles tab must place its
+    # member package's skill via the refcount-aware bundle reconcile and credit the
+    # package as that unit's requester — the bundles-tier analogue of how the Packages
+    # tab installs a ticked package.
+    skill_source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    skill_source.parent.mkdir(parents=True)
+    skill_source.write_text("# demo-skill\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/demo-skill"]\n\n'
+        '[[bundles]]\nname = "demo-bundle"\npackages = ["demo-pack"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("tui.CATALOG_PATH", catalog_file)
+    # The tab menu opens the Bundles tab, then closes it after the reconcile applies.
+    select_answers: Iterator[str] = iter(["Bundles", "Exit"])
+
+    class FakeSelect:
+        def ask(self) -> str:
+            return next(select_answers)
+
+    # Tick the lone catalog bundle by name so the desired set installs demo-bundle.
+    class FakeCheckbox:
+        def ask(self) -> list[str]:
+            return ["demo-bundle"]
+
+    class ConfirmPrompt:
+        def ask(self) -> bool:
+            return True
+
+    monkeypatch.setattr("questionary.select", lambda *args, **kwargs: FakeSelect())
+    monkeypatch.setattr("questionary.checkbox", lambda *args, **kwargs: FakeCheckbox())
+    monkeypatch.setattr("questionary.confirm", lambda *args, **kwargs: ConfirmPrompt())
+
+    exit_code: int = main(["install"])
+
+    # Ticking demo-bundle applies plan_bundle_reconcile then apply_bundle_reconcile, so
+    # the bundle's member package's skill ends up linked live and credited to demo-pack
+    # in state, and the bundle rows re-render with the installed marker.
+    captured: str = capsys.readouterr().out
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    assert exit_code == 0
+    assert skill_link.is_symlink()
+    assert final_state.requesters[skill_unit_id("demo-skill")] == ("demo-pack",)
+    assert f"{MARKER_INSTALLED} demo-bundle" in captured
     assert TAB_PLACEHOLDER not in captured
 
 
