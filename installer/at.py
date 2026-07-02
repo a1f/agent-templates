@@ -18,6 +18,7 @@ from catalog import (
     agent_unit_id,
     hook_unit_id,
     list_agents,
+    list_bundles,
     list_hooks,
     list_packages,
     list_rules,
@@ -30,12 +31,15 @@ from paths import CATALOG_PATH, CLAUDE_ROOT, REPO_ROOT, STATE_ROOT
 from reconcile import (
     ReconcilePlan,
     apply_agent_reconcile,
+    apply_bundle_reconcile,
     apply_hook_reconcile,
     apply_package_reconcile,
     apply_rule_reconcile,
     apply_skill_reconcile,
+    bundle_installed,
     package_installed,
     plan_agent_reconcile,
+    plan_bundle_reconcile,
     plan_hook_reconcile,
     plan_package_reconcile,
     plan_rule_reconcile,
@@ -274,6 +278,49 @@ def _run_packages(*, names: tuple[str, ...], additive: bool) -> int:
     return 0
 
 
+def _run_bundles(*, names: tuple[str, ...], additive: bool) -> int:
+    """Install or uninstall the named bundles non-interactively through the refcount
+    engine — the bundle-tier analogue of `_run_packages`, kept a parallel duplicate
+    (not a shared runner) until a third refcount tier makes dedup pay off. `additive`
+    picks the ticked set the same way `_run_packages` does: install joins the named
+    bundles to those already installed (`installed | names`), uninstall drops them
+    (`installed - names`). That same `ticked` is threaded into apply_bundle_reconcile,
+    which apply_package_reconcile does not need: it names every still-selected bundle so
+    a package shared with a bundle that survives is kept, not withdrawn."""
+    catalog: Catalog = load_catalog(_catalog_path())
+    rejection: int | None = _reject_unknown(
+        names=list(names),
+        label="bundle",
+        known=frozenset(list_bundles(catalog=catalog)),
+    )
+    if rejection is not None:
+        return rejection
+    state: State = load_state(STATE_ROOT)
+    installed: set[str] = {
+        name
+        for name in list_bundles(catalog=catalog)
+        if bundle_installed(catalog=catalog, name=name, state=state)
+    }
+    selected: set[str] = set(names)
+    ticked: frozenset[str] = frozenset(
+        installed | selected if additive else installed - selected
+    )
+    plan: ReconcilePlan = plan_bundle_reconcile(
+        ticked=ticked, catalog=catalog, state=state
+    )
+    # State return ignored: lone apply persists via save_state; no inter-kind threading.
+    apply_bundle_reconcile(
+        plan=plan,
+        ticked=ticked,
+        catalog=catalog,
+        source_root=_source_root(),
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        state=state,
+    )
+    return 0
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(
     AT_VERSION, "--version", prog_name="at", message="%(prog)s %(version)s"
@@ -288,6 +335,7 @@ def cli() -> None:
 @click.option("--rule", "rules", multiple=True, metavar="<name>")
 @click.option("--hook", "hooks", multiple=True, metavar="<name>")
 @click.option("--package", "packages", multiple=True, metavar="<name>")
+@click.option("--bundle", "bundles", multiple=True, metavar="<name>")
 @click.option("--all", "install_all", is_flag=True)
 # Accepted so a scripted `install --all` can pass it, but it changes nothing: the
 # --all path never opens the menu, so the flag never needs to reach the callback.
@@ -298,12 +346,15 @@ def install(
     rules: tuple[str, ...],
     hooks: tuple[str, ...],
     packages: tuple[str, ...],
+    bundles: tuple[str, ...],
     install_all: bool,
 ) -> int:
-    """Install named units (--skill/--agent/--rule/--hook) or packages (--package),
-    or every skill (--all), without the menu; else open it."""
+    """Install named units (--skill/--agent/--rule/--hook), packages (--package), or
+    bundles (--bundle), or every skill (--all), without the menu; else open it."""
     if packages:
         return _run_packages(names=packages, additive=True)
+    if bundles:
+        return _run_bundles(names=bundles, additive=True)
     if skills or agents or rules or hooks:
         requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
             (_SKILL, skills),
@@ -326,22 +377,33 @@ def install(
 @click.option("--rule", "rules", multiple=True, metavar="<name>")
 @click.option("--hook", "hooks", multiple=True, metavar="<name>")
 @click.option("--package", "packages", multiple=True, metavar="<name>")
+@click.option("--bundle", "bundles", multiple=True, metavar="<name>")
 def uninstall(
     skills: tuple[str, ...],
     agents: tuple[str, ...],
     rules: tuple[str, ...],
     hooks: tuple[str, ...],
     packages: tuple[str, ...],
+    bundles: tuple[str, ...],
 ) -> int:
-    """Uninstall named units (--skill/--agent/--rule/--hook) or packages (--package);
-    at least one is required."""
-    if not skills and not agents and not rules and not hooks and not packages:
+    """Uninstall named units (--skill/--agent/--rule/--hook), packages (--package), or
+    bundles (--bundle); at least one is required."""
+    if (
+        not skills
+        and not agents
+        and not rules
+        and not hooks
+        and not packages
+        and not bundles
+    ):
         raise click.UsageError(
             "uninstall requires at least one "
-            "--skill/--agent/--rule/--hook/--package <name>"
+            "--skill/--agent/--rule/--hook/--package/--bundle <name>"
         )
     if packages:
         return _run_packages(names=packages, additive=False)
+    if bundles:
+        return _run_bundles(names=bundles, additive=False)
     requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
         (_SKILL, skills),
         (_AGENT, agents),
