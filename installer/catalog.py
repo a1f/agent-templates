@@ -33,9 +33,10 @@ class Package:
 
 @dataclass(frozen=True)
 class Bundle:
-    """An opinionated pick of packages (by name), the coarsest install choice.
-    Package names are kept raw here; resolving and validating bundle->package
-    refs is deferred to the slice that makes the bundle tier load-bearing."""
+    """An opinionated pick of packages by name, the coarsest install choice; the
+    names are kept raw (consumers want names, not resolved Packages) while
+    load_catalog still rejects a bundle naming an undeclared package at parse
+    time."""
 
     name: str
     packages: tuple[str, ...]
@@ -141,6 +142,12 @@ def list_packages(*, catalog: Catalog) -> list[str]:
     return sorted(package.name for package in catalog.packages)
 
 
+def list_bundles(*, catalog: Catalog) -> list[str]:
+    """Surface the installable bundles by name in a stable order, so a UI
+    listing doesn't depend on declaration order in the toml."""
+    return sorted(bundle.name for bundle in catalog.bundles)
+
+
 def _resolve(ref: str, by_id: dict[str, Unit], package: str) -> Unit:
     """Turn a package's unit id into the declared Unit, failing loudly at parse
     time with the dangling ref named rather than silently dropping it."""
@@ -163,6 +170,17 @@ def _build_package(row: dict[str, object], by_id: dict[str, Unit]) -> Package:
     )
 
 
+def _build_bundle(*, row: dict[str, object], package_names: frozenset[str]) -> Bundle:
+    """Build a bundle, failing loudly at parse time with any dangling package ref
+    named rather than deferring the error to a lazy resolve downstream."""
+    name: str = cast("str", row["name"])
+    refs: tuple[str, ...] = tuple(cast("list[str]", row["packages"]))
+    for ref in refs:
+        if ref not in package_names:
+            raise ValueError(f"bundle {name!r} references undeclared package {ref!r}")
+    return Bundle(name=name, packages=refs)
+
+
 def resolve_package(catalog: Catalog, name: str) -> Package:
     """Turn a package name into its declared Package — the unit set plus extras —
     in one place, so callers select a curated group without re-scanning the
@@ -177,6 +195,18 @@ def resolve_package(catalog: Catalog, name: str) -> Package:
         raise ValueError(
             f"package {name!r} is not declared in the catalog"
         ) from missing
+
+
+def resolve_bundle(*, catalog: Catalog, name: str) -> Bundle:
+    """Turn a bundle name into its declared Bundle — the package set — in one
+    place, so callers select a curated tier without re-scanning the bundle table;
+    an undeclared name fails loudly here rather than silently resolving to nothing
+    downstream."""
+    by_name: dict[str, Bundle] = {bundle.name: bundle for bundle in catalog.bundles}
+    try:
+        return by_name[name]
+    except KeyError as missing:
+        raise ValueError(f"bundle {name!r} is not declared in the catalog") from missing
 
 
 def load_catalog(path: Path) -> Catalog:
@@ -195,12 +225,10 @@ def load_catalog(path: Path) -> Catalog:
         _build_package(row, by_id)
         for row in cast("list[dict[str, object]]", raw["packages"])
     )
+    package_names: frozenset[str] = frozenset(package.name for package in packages)
 
     bundles: tuple[Bundle, ...] = tuple(
-        Bundle(
-            name=cast("str", row["name"]),
-            packages=tuple(cast("list[str]", row["packages"])),
-        )
+        _build_bundle(row=row, package_names=package_names)
         for row in cast("list[dict[str, object]]", raw["bundles"])
     )
 

@@ -9,11 +9,13 @@ from catalog import (
     Package,
     Unit,
     list_agents,
+    list_bundles,
     list_hooks,
     list_packages,
     list_rules,
     list_skills,
     load_catalog,
+    resolve_bundle,
     resolve_package,
     skill_unit_id,
 )
@@ -222,6 +224,22 @@ def test_resolve_package_raises_naming_an_undeclared_package(tmp_path: Path) -> 
         resolve_package(catalog, "ghost")
 
 
+def test_resolve_bundle_returns_the_named_bundle(tmp_path: Path) -> None:
+    catalog: Catalog = load_catalog(_write(tmp_path, _FIXTURE))
+
+    bundle: Bundle = resolve_bundle(catalog=catalog, name="everything")
+
+    assert bundle == Bundle(name="everything", packages=("pack",))
+
+
+def test_resolve_bundle_raises_naming_an_undeclared_bundle(tmp_path: Path) -> None:
+    catalog: Catalog = load_catalog(_write(tmp_path, _FIXTURE))
+
+    # A name with no matching bundle fails loudly, naming the missing bundle.
+    with pytest.raises(ValueError, match="ghost"):
+        resolve_bundle(catalog=catalog, name="ghost")
+
+
 def test_list_skills_returns_only_skill_names_sorted(tmp_path: Path) -> None:
     catalog: Catalog = load_catalog(_write(tmp_path, _FIXTURE))
 
@@ -269,6 +287,22 @@ def test_list_packages_returns_package_names_sorted() -> None:
     assert list_packages(catalog=catalog) == ["alpha", "zeta"]
 
 
+def test_list_bundles_returns_bundle_names_sorted() -> None:
+    # Bundles are listed by name in a stable sorted order, independent of their
+    # declaration order in the catalog (here zeta is declared before alpha).
+    shared: Unit = Unit(kind="skill", name="alpha")
+    catalog: Catalog = Catalog(
+        units=(shared,),
+        packages=(Package(name="pack", units=(shared,)),),
+        bundles=(
+            Bundle(name="zeta", packages=("pack",)),
+            Bundle(name="alpha", packages=("pack",)),
+        ),
+    )
+
+    assert list_bundles(catalog=catalog) == ["alpha", "zeta"]
+
+
 def test_skill_unit_id_joins_kind_and_name() -> None:
     # The skill-unit id is the join key install status is keyed by; pin it here
     # so the "<kind>/<name>" format lives in exactly one module.
@@ -286,6 +320,20 @@ def test_load_catalog_rejects_package_referencing_undeclared_unit(
     )
 
     with pytest.raises(ValueError, match="skill/does-not-exist"):
+        load_catalog(broken)
+
+
+def test_load_catalog_rejects_bundle_referencing_undeclared_package(
+    tmp_path: Path,
+) -> None:
+    broken: Path = _write(
+        tmp_path,
+        '[[units]]\nkind = "skill"\nname = "make-pr"\n\n'
+        '[[packages]]\nname = "real"\nunits = ["skill/make-pr"]\n\n'
+        '[[bundles]]\nname = "wide"\npackages = ["ghost-package"]\n',
+    )
+
+    with pytest.raises(ValueError, match="ghost-package"):
         load_catalog(broken)
 
 
