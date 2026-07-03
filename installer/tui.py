@@ -1,6 +1,6 @@
-"""The interactive installer menu: the whole TUI concern (tab rendering, the
-checkbox/confirm reconcile loop, and Esc handling) lives here so at.py stays the
-CLI/entry dispatcher."""
+"""The installer's view layer: the whole interactive TUI concern (tab rendering, the
+checkbox/confirm reconcile loop, and Esc handling) plus the non-interactive `at status`
+dashboard rendering live here so at.py stays the CLI/entry dispatcher."""
 
 import sys
 from collections.abc import Callable
@@ -38,6 +38,7 @@ from catalog import (
     skill_unit_id,
     unit_id,
 )
+from hashing import Drift
 from paths import CATALOG_PATH, CLAUDE_ROOT, REPO_ROOT, STATE_ROOT
 from reconcile import (
     ReconcilePlan,
@@ -57,6 +58,7 @@ from reconcile import (
     plan_skill_reconcile,
 )
 from state import State, load_state
+from update import skill_drift
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -220,6 +222,75 @@ def bundle_rows(*, catalog: Catalog, state: State) -> list[str]:
         members: str = ", ".join(bundle.packages)
         rows.append(f"{marker} {name}  ({members})")
     return rows
+
+
+# ---------------------------------------------------------------------------
+# Status dashboard
+# ---------------------------------------------------------------------------
+
+
+def _section(*, title: str, rows: list[str]) -> list[str]:
+    """Render one dashboard section as its title line followed by two-space-indented
+    rows, so every availability kind formats a title-and-rows block the same way and
+    the indent decision lives in one place."""
+    return [title, *(f"  {row}" for row in rows)]
+
+
+def _drift_label(*, drift: Drift) -> str:
+    """Collapse the two independent drift axes into the one phrase a user reads, so the
+    dashboard tells them at a glance whether a skill is current, updatable, or carries a
+    local edit worth preserving."""
+    if drift.upstream_changed and drift.locally_edited:
+        return "upstream changed, locally edited"
+    if drift.upstream_changed:
+        return "upstream changed"
+    if drift.locally_edited:
+        return "locally edited"
+    return "up to date"
+
+
+def _drift_row(*, name: str, source_root: Path, state_root: Path, state: State) -> str:
+    """Report how one installed skill diverges from its recorded install hash via the
+    shared update.skill_drift, so the dashboard's drift view reads divergence from the
+    same source/staged/recorded inputs an `at update` would act on."""
+    drift: Drift = skill_drift(
+        name=name, source_root=source_root, state_root=state_root, state=state
+    )
+    return f"{name} — {_drift_label(drift=drift)}"
+
+
+def status_lines(
+    *, catalog: Catalog, state: State, source_root: Path, state_root: Path
+) -> list[str]:
+    """Build the read-only status dashboard as text lines so `at status` can render an
+    installation at a glance — the per-kind availability grid (reusing the tab row
+    helpers), a skills-only drift section, and the active source root — without mutating
+    anything. state_root and source_root locate the staged copies and upstream sources
+    the drift section reads."""
+    lines: list[str] = ["Agent Templates — status"]
+    grid: list[tuple[str, list[str]]] = [
+        (BUNDLES_CHOICE, bundle_rows(catalog=catalog, state=state)),
+        (PACKAGES_CHOICE, package_rows(catalog=catalog, state=state)),
+        ("Skills", skill_rows(catalog=catalog, state=state)),
+        ("Agents", agent_rows(catalog=catalog, state=state)),
+        ("Rules", rule_rows(catalog=catalog, state=state)),
+        ("Hooks", hook_rows(catalog=catalog, state=state)),
+    ]
+    for title, rows in grid:
+        lines.extend(_section(title=title, rows=rows))
+    # Drift is skills-only, as in update.py: agents/rules/hooks carry no drift wiring.
+    drift_rows: list[str] = [
+        _drift_row(
+            name=name, source_root=source_root, state_root=state_root, state=state
+        )
+        for name in list_skills(catalog)
+        if skill_unit_id(name) in state.units
+    ]
+    # No installed skill has any drift to report, so stand in a placeholder rather than
+    # leave the section a bare title.
+    lines.extend(_section(title="Drift", rows=drift_rows or ["(none installed)"]))
+    lines.append(str(source_root))
+    return lines
 
 
 # ---------------------------------------------------------------------------

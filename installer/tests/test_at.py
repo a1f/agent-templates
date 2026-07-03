@@ -2370,3 +2370,246 @@ def test_install_unknown_bundle_errors_with_exit_two_and_installs_nothing(
     assert "nonesuch" in captured_err
     assert not skill_link.exists() and not skill_link.is_symlink()
     assert skill_unit_id("demo-skill") not in final_state.units
+
+
+def test_status_renders_availability_grid_without_opening_the_tui(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Real skill sources for the two skills the setup actually installs (alpha
+    # directly, gamma through a package); beta and delta are catalog-only, so status
+    # renders them unchecked without ever reading their source.
+    for name in ("alpha", "gamma"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        '[[units]]\nkind = "skill"\nname = "alpha"\n\n'
+        '[[units]]\nkind = "skill"\nname = "beta"\n\n'
+        '[[units]]\nkind = "skill"\nname = "gamma"\n\n'
+        '[[units]]\nkind = "skill"\nname = "delta"\n\n'
+        '[[packages]]\nname = "demo-pack"\nunits = ["skill/gamma"]\n\n'
+        '[[packages]]\nname = "other-pack"\nunits = ["skill/delta"]\n\n'
+        '[[bundles]]\nname = "demo-bundle"\npackages = ["other-pack"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # An installed skill (alpha, direct) and an installed package (demo-pack, which
+    # pulls in gamma) give the grid a mix of checked and unchecked rows; other-pack and
+    # demo-bundle stay uninstalled.
+    catalog: Catalog = load_catalog(catalog_file)
+    state: State = install_skill(
+        name="alpha",
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=load_state(state_root),
+    )
+    install_package(
+        name="demo-pack",
+        catalog=catalog,
+        source_root=repo_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state,
+    )
+
+    # A read-only status must never open the menu: route every questionary prompt to a
+    # factory that fails loudly, so a regression that opens the TUI trips this guard.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("status must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["status"])
+
+    captured: str = capsys.readouterr().out
+    lines: list[str] = captured.splitlines()
+    assert exit_code == 0
+    # Every kind titles its own section, in the fixed grid order, under one header.
+    assert "Agent Templates — status" in lines
+    for title in ("Bundles", "Packages", "Skills", "Agents", "Rules", "Hooks"):
+        assert title in lines
+    # Representative checked/unchecked rows come straight from the *_rows helpers
+    # (indent aside), so an installed unit reads the installed marker and an
+    # uninstalled one the not-installed marker.
+    assert f"{MARKER_INSTALLED} alpha" in captured
+    assert f"{MARKER_NOT_INSTALLED} beta" in captured
+    assert f"{MARKER_INSTALLED} demo-pack  (skill/gamma)" in captured
+    assert f"{MARKER_NOT_INSTALLED} demo-bundle  (other-pack)" in captured
+    # The trailing line names the active source root that drives drift.
+    assert lines[-1] == str(repo_root)
+
+
+def test_status_drift_reports_locally_edited_and_up_to_date_per_installed_skill(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Install two skills from real sources so both record an install-time hash; alpha's
+    # staged copy is then hand-edited on disk so its content diverges from what was
+    # recorded, while beta and both upstream sources are left untouched.
+    state: State = load_state(state_root)
+    for name in ("alpha", "beta"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+        state = install_skill(
+            name=name,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+    staged_alpha: Path = state_root / "staged" / "skill" / "alpha" / "SKILL.md"
+    staged_alpha.write_text("# alpha edited locally\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "alpha"\n\n'
+        '[[units]]\nkind = "skill"\nname = "beta"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("status must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["status"])
+
+    captured: str = capsys.readouterr().out
+    lines: list[str] = captured.splitlines()
+    assert exit_code == 0
+    # The edited staged copy drifts from its recorded hash while upstream is unchanged,
+    # so alpha reads locally edited; beta, untouched on both sides, reads up to date.
+    assert "Drift" in lines
+    assert "alpha — locally edited" in captured
+    assert "beta — up to date" in captured
+
+
+def test_status_drift_reports_upstream_changed_and_combined_per_installed_skill(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Install two skills from real sources so both record an install-time hash. gamma's
+    # upstream source is then bumped on disk without re-staging, so only its source
+    # diverges from what was recorded; delta's upstream source AND staged copy are both
+    # edited, so it diverges on both axes at once.
+    state: State = load_state(state_root)
+    for name in ("gamma", "delta"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+        state = install_skill(
+            name=name,
+            source_root=repo_root,
+            state_root=state_root,
+            claude_root=claude_root,
+            state=state,
+        )
+    (repo_root / "skills" / "gamma" / "SKILL.md").write_text(
+        "# gamma upstream bumped\n", encoding="utf-8"
+    )
+    (repo_root / "skills" / "delta" / "SKILL.md").write_text(
+        "# delta upstream bumped\n", encoding="utf-8"
+    )
+    staged_delta: Path = state_root / "staged" / "skill" / "delta" / "SKILL.md"
+    staged_delta.write_text("# delta edited locally\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "gamma"\n\n'
+        '[[units]]\nkind = "skill"\nname = "delta"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("status must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["status"])
+
+    captured: str = capsys.readouterr().out
+    captured_lines: list[str] = captured.splitlines()
+    assert exit_code == 0
+    # gamma's upstream source alone diverges from its recorded hash, so it reads the
+    # upstream-only phrase; delta diverges on both axes, so it reads the combined one.
+    # Assert the exact two-space-indented line, not a substring, so the combined
+    # superstring "gamma — upstream changed, locally edited" cannot satisfy the
+    # upstream-only check.
+    assert "  gamma — upstream changed" in captured_lines
+    assert "  delta — upstream changed, locally edited" in captured_lines
+
+
+def test_status_on_empty_install_shows_all_uninstalled_and_drift_placeholder(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # A catalog with a unit at each tier but a state root that has never been installed
+    # into, so every grid row must read uninstalled and no skill is installed to drift.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        '[[units]]\nkind = "skill"\nname = "orphan"\n\n'
+        '[[packages]]\nname = "pack"\nunits = ["skill/orphan"]\n\n'
+        '[[bundles]]\nname = "bund"\npackages = ["pack"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("status must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["status"])
+
+    captured: str = capsys.readouterr().out
+    lines: list[str] = captured.splitlines()
+    assert exit_code == 0
+    # Nothing is installed, so no row carries the installed marker and the lone unit
+    # at each tier reads uninstalled...
+    assert MARKER_INSTALLED not in captured
+    assert f"{MARKER_NOT_INSTALLED} orphan" in captured
+    # ...and with no installed skill to report on, drift falls back to a placeholder.
+    assert "Drift" in lines
+    assert "(none installed)" in captured

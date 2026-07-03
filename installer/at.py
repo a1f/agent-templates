@@ -46,7 +46,7 @@ from reconcile import (
     plan_skill_reconcile,
 )
 from state import State, load_state
-from tui import launch_tui
+from tui import launch_tui, status_lines
 from update import update_installed_skills
 
 AT_VERSION: Final[str] = "0.2.0"
@@ -417,6 +417,23 @@ def uninstall(
 def update() -> int:
     """Pull the repo, then refresh every installed skill from its updated source."""
     return _run_update()
+
+
+@cli.command()
+def status() -> int:
+    """Print a read-only dashboard of the installation — the availability grid, skill
+    drift, and the active source root — without mutating the install, running git, or
+    opening the menu."""
+    catalog: Catalog = load_catalog(_catalog_path())
+    state: State = load_state(STATE_ROOT)
+    lines: list[str] = status_lines(
+        catalog=catalog,
+        state=state,
+        source_root=_source_root(),
+        state_root=STATE_ROOT,
+    )
+    print("\n".join(lines))
+    return 0
 
 
 def main(argv: list[str]) -> int:

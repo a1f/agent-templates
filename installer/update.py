@@ -8,6 +8,22 @@ from placement import backup_staged_unit, staged_unit_path
 from state import State
 
 
+def skill_drift(
+    *, name: str, source_root: Path, state_root: Path, state: State
+) -> Drift:
+    """Single source of truth for a skill's drift inputs, so the status view and the
+    update reconcile read divergence the same way instead of each re-deriving where a
+    skill's source and staged copies live and how its drift is computed. `name` must be
+    an installed skill (its unit id present in `state.units`); otherwise the
+    recorded-hash lookup raises KeyError, so callers must guard."""
+    source: Path = source_root / SKILLS_DIRNAME / name
+    staged: Path = staged_unit_path(
+        unit=skill_unit(name), staged_root=state_root / STAGED_DIRNAME
+    )
+    recorded: str = state.units[skill_unit_id(name)]
+    return detect_drift(source=source, staged=staged, recorded=recorded)
+
+
 def update_skill(
     *,
     name: str,
@@ -19,12 +35,9 @@ def update_skill(
     """Reconcile a skill against its upstream source: leave a local edit to the
     staged copy untouched when upstream is unchanged, otherwise rescue it to
     "<name>.bak" before re-staging the new source, so an edit is never lost."""
-    source: Path = source_root / SKILLS_DIRNAME / name
-    staged: Path = staged_unit_path(
-        unit=skill_unit(name), staged_root=state_root / STAGED_DIRNAME
+    drift: Drift = skill_drift(
+        name=name, source_root=source_root, state_root=state_root, state=state
     )
-    recorded: str = state.units[skill_unit_id(name)]
-    drift: Drift = detect_drift(source=source, staged=staged, recorded=recorded)
     if not drift.upstream_changed:
         return state
     if drift.locally_edited:
