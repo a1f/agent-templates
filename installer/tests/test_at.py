@@ -2613,3 +2613,96 @@ def test_status_on_empty_install_shows_all_uninstalled_and_drift_placeholder(
     # ...and with no installed skill to report on, drift falls back to a placeholder.
     assert "Drift" in lines
     assert "(none installed)" in captured
+
+
+def test_validate_reports_ok_with_counts_on_a_valid_catalog(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    # A well-formed catalog whose every package/bundle ref resolves: two units, one
+    # package, one bundle, so the OK line's counts are small and exactly assertable.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        '[[units]]\nkind = "skill"\nname = "alpha"\n\n'
+        '[[units]]\nkind = "skill"\nname = "beta"\n\n'
+        '[[packages]]\nname = "pack"\nunits = ["skill/alpha"]\n\n'
+        '[[bundles]]\nname = "bund"\npackages = ["pack"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # A read-only lint must never open the menu: route every questionary prompt to a
+    # factory that fails loudly, so a regression that opens the TUI trips this guard.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("validate must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["validate"])
+
+    output: str = capsys.readouterr().out
+    assert exit_code == 0
+    assert output == "catalog OK — 2 units, 1 packages, 1 bundles\n"
+
+
+def test_validate_reports_error_and_exit_one_on_dangling_reference(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    # A package names a unit that is never declared, so the loader rejects the dangling
+    # ref and validate must surface that as a clean error naming the offending ref.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "alpha"\n\n'
+        '[[packages]]\nname = "pack"\nunits = ["skill/ghost"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    exit_code: int = main(["validate"])
+
+    errors: str = capsys.readouterr().err
+    assert exit_code == 1
+    assert "error:" in errors
+    assert "ghost" in errors
+
+
+def test_validate_reports_error_not_traceback_on_schema_violation(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    # A unit row is missing its required `name`, so the loader raises on the schema
+    # violation; validate must surface it as a clean error, not an uncaught traceback.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        'packages = []\nbundles = []\n\n[[units]]\nkind = "skill"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    exit_code: int = main(["validate"])
+
+    errors: str = capsys.readouterr().err
+    assert exit_code == 1
+    assert "error:" in errors
+    assert "name" in errors
+
+
+def test_validate_reports_error_not_traceback_on_malformed_shape(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    # `[units]` as a single table instead of the array-of-tables `[[units]]` is a common
+    # TOML authoring slip; the loader trips over the wrong shape (a TypeError), and
+    # validate must surface it as a clean error line, not let the traceback escape.
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        'packages = []\nbundles = []\n\n[units]\nkind = "skill"\nname = "alpha"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    exit_code: int = main(["validate"])
+
+    errors: str = capsys.readouterr().err
+    assert exit_code == 1
+    assert "error:" in errors
