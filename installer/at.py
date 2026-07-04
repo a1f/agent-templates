@@ -436,6 +436,24 @@ def status() -> int:
     return 0
 
 
+@cli.command()
+def validate() -> int:
+    """Lint the catalog's content and shape by loading it through the shared loader, so
+    a dangling reference, a missing required key, or a wrong-shaped or syntactically bad
+    catalog surfaces as a clean error line and exit 1, all while staying read-only — no
+    mutation, no git, no menu."""
+    try:
+        catalog: Catalog = load_catalog(_catalog_path())
+    except (ValueError, KeyError, TypeError) as problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return 1
+    print(
+        f"catalog OK — {len(catalog.units)} units, "
+        f"{len(catalog.packages)} packages, {len(catalog.bundles)} bundles"
+    )
+    return 0
+
+
 def main(argv: list[str]) -> int:
     """The stable int-returning entry every test and the `at` wrapper call: run the
     click group without its process-exiting shell and translate the outcome to an exit
