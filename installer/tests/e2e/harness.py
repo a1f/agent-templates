@@ -23,6 +23,9 @@ GOLDENS_DIR: Final[Path] = Path(__file__).parent / "goldens"
 # at.py's sibling modules and inline-script deps just as a user's `at` does.
 _INSTALLER_DIR: Final[Path] = Path(__file__).parents[2]
 _AT_SCRIPT: Final[Path] = _INSTALLER_DIR / "at.py"
+# The front-door scripts (validate.sh and friends) sit at the repo root, three levels up
+# from tests/e2e/, so run_root_script resolves them by location, not the process cwd.
+_REPO_ROOT: Final[Path] = Path(__file__).parents[3]
 # Captured at import, before any per-scenario HOME override, so the subprocess reuses
 # the developer/CI uv cache instead of re-resolving at.py's PEP 723 env under each
 # throwaway temp HOME — keeping e2e runs both fast and deterministic.
@@ -130,6 +133,29 @@ def run_at(
     return subprocess.run(
         ["uv", "run", str(_AT_SCRIPT), *args],
         cwd=_INSTALLER_DIR,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def run_root_script(
+    *, script: str, args: list[str], home: Path, source_root: Path, catalog: Path
+) -> subprocess.CompletedProcess[str]:
+    """Drive a real repo-root shell script against an isolated home with run_at's exact
+    env seams, so e2e can prove a front-door script (like validate.sh) forwards to the
+    Python engine instead of a mock."""
+    env: dict[str, str] = {
+        **os.environ,
+        "HOME": str(home),
+        "AT_SOURCE_ROOT": str(source_root),
+        "AT_CATALOG": str(catalog),
+        "UV_CACHE_DIR": _UV_CACHE_DIR,
+    }
+    return subprocess.run(
+        [str(_REPO_ROOT / script), *args],
+        cwd=_REPO_ROOT,
         env=env,
         capture_output=True,
         text=True,
