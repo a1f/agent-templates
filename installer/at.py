@@ -321,6 +321,31 @@ def _run_bundles(*, names: tuple[str, ...], additive: bool) -> int:
     return 0
 
 
+def _run_whole_catalog(*, additive: bool) -> int:
+    """Install or uninstall the entire catalog non-interactively — the shared body both
+    `--all` branches route through, so the packages-first ordering invariant lives in
+    one place. `additive` picks the direction the way `_run_per_kind` does: install
+    (True) tops up the catalog, uninstall (False) tears it down.
+
+    Packages MUST run first, before the per-kind pass: on install so each package's
+    units are credited to it as their requester (a per-kind pass over the empty state
+    would seed @direct units the package could no longer claim), on uninstall so the
+    refcount teardown reconciles extras and refcounts before the direct sweep (a
+    per-kind pass would rip out package-owned units and orphan the staged extras). The
+    per-kind pass then installs or removes only the package-less remainder."""
+    catalog: Catalog = load_catalog(_catalog_path())
+    package_status: int = _run_packages(
+        names=tuple(list_packages(catalog=catalog)), additive=additive
+    )
+    if package_status != 0:
+        return package_status
+    all_kinds: tuple[tuple[_Kind, tuple[str, ...]], ...] = tuple(
+        (kind, tuple(kind.list_names(catalog)))
+        for kind in (_SKILL, _AGENT, _RULE, _HOOK)
+    )
+    return _run_per_kind(all_kinds, additive=additive)
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(
     AT_VERSION, "--version", prog_name="at", message="%(prog)s %(version)s"
@@ -369,21 +394,7 @@ def install(
         )
         return _run_per_kind(requested, additive=True)
     if install_all:
-        # Install the whole catalog: every package through the refcount engine, then a
-        # per-kind top-up that installs only the package-less leftovers as direct units.
-        # Packages MUST run first — a per-kind pass over the empty state would seed
-        # @direct units the package could no longer claim as their requester.
-        catalog: Catalog = load_catalog(_catalog_path())
-        package_status: int = _run_packages(
-            names=tuple(list_packages(catalog=catalog)), additive=True
-        )
-        if package_status != 0:
-            return package_status
-        all_kinds: tuple[tuple[_Kind, tuple[str, ...]], ...] = tuple(
-            (kind, tuple(kind.list_names(catalog)))
-            for kind in (_SKILL, _AGENT, _RULE, _HOOK)
-        )
-        return _run_per_kind(all_kinds, additive=True)
+        return _run_whole_catalog(additive=True)
     return launch_tui()
 
 
@@ -429,21 +440,7 @@ def uninstall(
     if bundles:
         return _run_bundles(names=bundles, additive=False)
     if uninstall_all:
-        # Tear down the whole catalog: every package through the refcount engine, then a
-        # per-kind sweep that removes only the package-less leftover direct units.
-        # Packages MUST run first — a per-kind pass would rip out package-owned units
-        # directly and orphan the staged extras the refcount teardown clears.
-        catalog: Catalog = load_catalog(_catalog_path())
-        package_status: int = _run_packages(
-            names=tuple(list_packages(catalog=catalog)), additive=False
-        )
-        if package_status != 0:
-            return package_status
-        all_kinds: tuple[tuple[_Kind, tuple[str, ...]], ...] = tuple(
-            (kind, tuple(kind.list_names(catalog)))
-            for kind in (_SKILL, _AGENT, _RULE, _HOOK)
-        )
-        return _run_per_kind(all_kinds, additive=False)
+        return _run_whole_catalog(additive=False)
     requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
         (_SKILL, skills),
         (_AGENT, agents),
