@@ -1886,6 +1886,86 @@ def test_install_unknown_package_errors_with_exit_two_and_installs_nothing(
     assert skill_unit_id("demo-skill") not in final_state.units
 
 
+def test_all_with_named_flag_is_rejected_on_install_and_uninstall(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Two real skill sources exist so either could install. Only 'kept' is seeded, so
+    # 'absent' is a live sentinel: a run that wrongly honored --all would link it, and
+    # its staying uninstalled proves the illegal combination installed nothing.
+    for name in ("kept", "absent"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "kept"\n\n'
+        '[[units]]\nkind = "skill"\nname = "absent"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Rejecting the combination must never open the TUI: route every questionary prompt
+    # to a factory that fails loudly, so a regression that falls back through
+    # launch_tui's select/checkbox/confirm trips this guard instead of prompting.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    # Seed the one real install through the public CLI and guard that it landed while
+    # the sentinel stayed uninstalled, so the intactness pins below are non-vacuous.
+    kept_link: Path = claude_root / "skills" / "kept"
+    absent_link: Path = claude_root / "skills" / "absent"
+    seed_exit: int = main(["install", "--skill", "kept"])
+    seed_state: State = load_state(state_root)
+    assert seed_exit == 0
+    assert kept_link.is_symlink()
+    assert skill_unit_id("kept") in seed_state.units
+    assert not absent_link.exists() and not absent_link.is_symlink()
+    capsys.readouterr()
+
+    # uninstall --all --skill kept: --all combined with a named flag is a usage error,
+    # so main exits 2, names the conflict on stderr, and removes NOTHING — kept stays
+    # fully intact. Today uninstall honors --all first, tears the whole install down,
+    # and returns 0, so this marquee no-mutation pin fails loudly.
+    uninstall_exit: int = main(["uninstall", "--all", "--skill", "kept"])
+    uninstall_err: str = capsys.readouterr().err
+    after_uninstall: State = load_state(state_root)
+    lowered_uninstall: str = uninstall_err.lower()
+    assert uninstall_exit == 2
+    assert kept_link.is_symlink()
+    assert skill_unit_id("kept") in after_uninstall.units
+    assert not absent_link.exists() and not absent_link.is_symlink()
+    assert "--all" in uninstall_err
+    assert "cannot" in lowered_uninstall or "combined" in lowered_uninstall
+
+    # install --all --skill kept: the same usage error on the install command, so main
+    # exits 2 and installs NOTHING — the sentinel 'absent' never links. Today install
+    # honors the named flag first and returns 0, so the exit-code pin fails; a run that
+    # instead wrongly honored --all would link absent and trip the sentinel pin.
+    install_exit: int = main(["install", "--all", "--skill", "kept"])
+    install_err: str = capsys.readouterr().err
+    after_install: State = load_state(state_root)
+    lowered_install: str = install_err.lower()
+    assert install_exit == 2
+    assert not absent_link.exists() and not absent_link.is_symlink()
+    assert skill_unit_id("absent") not in after_install.units
+    assert kept_link.is_symlink()
+    assert "--all" in install_err
+    assert "cannot" in lowered_install or "combined" in lowered_install
+
+
 def test_uninstall_bundle_flag_decrements_refcount_keeping_shared_unit(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:

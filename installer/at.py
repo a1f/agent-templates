@@ -351,6 +351,11 @@ def install(
 ) -> int:
     """Install named units (--skill/--agent/--rule/--hook), packages (--package), or
     bundles (--bundle), or the whole catalog (--all), without the menu; else open it."""
+    if install_all and (skills or agents or rules or hooks or packages or bundles):
+        raise click.UsageError(
+            "--all cannot be combined with "
+            "--skill/--agent/--rule/--hook/--package/--bundle"
+        )
     if packages:
         return _run_packages(names=packages, additive=True)
     if bundles:
@@ -401,6 +406,11 @@ def uninstall(
 ) -> int:
     """Uninstall named units (--skill/--agent/--rule/--hook), packages (--package),
     bundles (--bundle), or the whole catalog (--all); at least one is required."""
+    if uninstall_all and (skills or agents or rules or hooks or packages or bundles):
+        raise click.UsageError(
+            "--all cannot be combined with "
+            "--skill/--agent/--rule/--hook/--package/--bundle"
+        )
     if (
         not skills
         and not agents
