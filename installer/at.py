@@ -389,6 +389,7 @@ def install(
 @click.option("--hook", "hooks", multiple=True, metavar="<name>")
 @click.option("--package", "packages", multiple=True, metavar="<name>")
 @click.option("--bundle", "bundles", multiple=True, metavar="<name>")
+@click.option("--all", "uninstall_all", is_flag=True)
 def uninstall(
     skills: tuple[str, ...],
     agents: tuple[str, ...],
@@ -396,9 +397,10 @@ def uninstall(
     hooks: tuple[str, ...],
     packages: tuple[str, ...],
     bundles: tuple[str, ...],
+    uninstall_all: bool,
 ) -> int:
-    """Uninstall named units (--skill/--agent/--rule/--hook), packages (--package), or
-    bundles (--bundle); at least one is required."""
+    """Uninstall named units (--skill/--agent/--rule/--hook), packages (--package),
+    bundles (--bundle), or the whole catalog (--all); at least one is required."""
     if (
         not skills
         and not agents
@@ -406,15 +408,32 @@ def uninstall(
         and not hooks
         and not packages
         and not bundles
+        and not uninstall_all
     ):
         raise click.UsageError(
             "uninstall requires at least one "
-            "--skill/--agent/--rule/--hook/--package/--bundle <name>"
+            "--skill/--agent/--rule/--hook/--package/--bundle <name> or --all"
         )
     if packages:
         return _run_packages(names=packages, additive=False)
     if bundles:
         return _run_bundles(names=bundles, additive=False)
+    if uninstall_all:
+        # Tear down the whole catalog: every package through the refcount engine, then a
+        # per-kind sweep that removes only the package-less leftover direct units.
+        # Packages MUST run first — a per-kind pass would rip out package-owned units
+        # directly and orphan the staged extras the refcount teardown clears.
+        catalog: Catalog = load_catalog(_catalog_path())
+        package_status: int = _run_packages(
+            names=tuple(list_packages(catalog=catalog)), additive=False
+        )
+        if package_status != 0:
+            return package_status
+        all_kinds: tuple[tuple[_Kind, tuple[str, ...]], ...] = tuple(
+            (kind, tuple(kind.list_names(catalog)))
+            for kind in (_SKILL, _AGENT, _RULE, _HOOK)
+        )
+        return _run_per_kind(all_kinds, additive=False)
     requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
         (_SKILL, skills),
         (_AGENT, agents),
