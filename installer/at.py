@@ -350,7 +350,7 @@ def install(
     install_all: bool,
 ) -> int:
     """Install named units (--skill/--agent/--rule/--hook), packages (--package), or
-    bundles (--bundle), or every skill (--all), without the menu; else open it."""
+    bundles (--bundle), or the whole catalog (--all), without the menu; else open it."""
     if packages:
         return _run_packages(names=packages, additive=True)
     if bundles:
@@ -364,10 +364,21 @@ def install(
         )
         return _run_per_kind(requested, additive=True)
     if install_all:
-        catalog_skills: tuple[str, ...] = tuple(
-            list_skills(load_catalog(_catalog_path()))
+        # Install the whole catalog: every package through the refcount engine, then a
+        # per-kind top-up that installs only the package-less leftovers as direct units.
+        # Packages MUST run first — a per-kind pass over the empty state would seed
+        # @direct units the package could no longer claim as their requester.
+        catalog: Catalog = load_catalog(_catalog_path())
+        package_status: int = _run_packages(
+            names=tuple(list_packages(catalog=catalog)), additive=True
         )
-        return _run_per_kind(((_SKILL, catalog_skills),), additive=True)
+        if package_status != 0:
+            return package_status
+        all_kinds: tuple[tuple[_Kind, tuple[str, ...]], ...] = tuple(
+            (kind, tuple(kind.list_names(catalog)))
+            for kind in (_SKILL, _AGENT, _RULE, _HOOK)
+        )
+        return _run_per_kind(all_kinds, additive=True)
     return launch_tui()
 
 

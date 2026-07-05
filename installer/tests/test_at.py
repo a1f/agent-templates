@@ -26,8 +26,10 @@ from catalog import (
     hook_unit_id,
     list_skills,
     load_catalog,
+    resolve_package,
     rule_unit_id,
     skill_unit_id,
+    unit_id,
 )
 from hashing import hash_unit
 from state import State, load_state
@@ -1508,6 +1510,98 @@ def test_install_all_flag_installs_every_catalog_skill_non_interactively(
         assert (claude_root / "skills" / name).is_symlink()
         assert (state_root / "staged" / "skill" / name).exists()
         assert skill_unit_id(name) in final_state.units
+
+
+def test_install_all_installs_whole_catalog_packages_extras_and_loose_units(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # demo-pack pulls in a skill plus an agent and stages a `gates` extra, while
+    # demo-rule and demo-hook belong to no package. Real sources for every member exist
+    # and nothing is installed up front, so a clean --all run must place the WHOLE
+    # catalog: the package through the refcount engine (its units credited to demo-pack,
+    # its extra staged and recorded) and each package-less unit installed directly.
+    skill_source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    skill_source.parent.mkdir(parents=True)
+    skill_source.write_text("# demo-skill\n", encoding="utf-8")
+    agent_source: Path = repo_root / "agents" / "demo-agent.md"
+    agent_source.parent.mkdir(parents=True)
+    agent_source.write_text("# demo-agent\n", encoding="utf-8")
+    rule_source: Path = repo_root / "rules" / "demo-rule.md"
+    rule_source.parent.mkdir(parents=True)
+    rule_source.write_text("# demo-rule\n", encoding="utf-8")
+    hook_source: Path = repo_root / "hooks" / "demo-hook.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text("#!/bin/sh\necho demo-hook\n", encoding="utf-8")
+    hook_source.chmod(0o755)
+    gate_source: Path = repo_root / "gates" / "check.sh"
+    gate_source.parent.mkdir(parents=True)
+    gate_source.write_text("#!/bin/sh\necho gate\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[units]]\nkind = "agent"\nname = "demo-agent"\n\n'
+        '[[units]]\nkind = "rule"\nname = "demo-rule"\n\n'
+        '[[units]]\nkind = "hook"\nname = "demo-hook"\n\n'
+        '[[packages]]\nname = "demo-pack"\n'
+        'units = ["skill/demo-skill", "agent/demo-agent"]\nextras = ["gates"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Installing the whole catalog must never open the TUI: route each questionary
+    # prompt to a factory that fails loudly, so a regression that falls back through
+    # launch_tui's select/checkbox/confirm trips this guard instead of waiting on a
+    # prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--all", "--non-interactive"])
+
+    # Derive demo-pack's declared members from the catalog and pin them non-empty, so
+    # the per-member loops below can't pass vacuously and can't drift from the fixture.
+    catalog: Catalog = load_catalog(catalog_file)
+    demo_pack: Package = resolve_package(catalog, "demo-pack")
+    final_state: State = load_state(state_root)
+    package_unit_ids: list[str] = [unit_id(unit) for unit in demo_pack.units]
+    assert exit_code == 0
+    assert package_unit_ids == [
+        skill_unit_id("demo-skill"),
+        agent_unit_id("demo-agent"),
+    ]
+    assert demo_pack.extras == ("gates",)
+
+    # Every package unit is linked live and credited to demo-pack as its requester —
+    # proof the refcount engine placed the package, not a loose per-skill install.
+    assert (claude_root / "skills" / "demo-skill").is_symlink()
+    assert (claude_root / "agents" / "demo-agent.md").is_symlink()
+    for identifier in package_unit_ids:
+        assert final_state.requesters[identifier] == ("demo-pack",)
+
+    # The package's declared extra is staged under the state root and recorded in
+    # state.extras, credited to demo-pack the same way its units are.
+    for relpath in demo_pack.extras:
+        assert (state_root / relpath).exists()
+        assert final_state.extras[relpath] == ("demo-pack",)
+
+    # demo-rule and demo-hook belong to no package, so --all installs them directly:
+    # linked live and recorded in state.units.
+    assert (claude_root / "rules" / "demo-rule.md").is_symlink()
+    assert (claude_root / "hooks" / "demo-hook.sh").is_symlink()
+    assert rule_unit_id("demo-rule") in final_state.units
+    assert hook_unit_id("demo-hook") in final_state.units
 
 
 def test_uninstall_skill_flag_removes_named_skill_leaving_others_installed(
