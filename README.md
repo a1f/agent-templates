@@ -4,25 +4,23 @@ A shareable collection of Claude Code skills, language rules, and templates for 
 
 ## Getting Started
 
-Clone the repo and run `install.sh` twice — once to install the global skills
-and once per project to install the per-project language rules:
+Clone the repo and run `./install.sh` once. Everything — skills, agents, rules, hooks,
+and package extras — installs globally: each component is staged under `~/.claude/at/` and
+symlinked into `~/.claude/{skills,agents,rules,hooks}`.
 
 ```bash
 git clone <your-repo-url> agent-templates
 cd agent-templates
-./install.sh                 # installs skills into ~/.claude/
-                             # (rules are skipped here with a warning — see step 2)
-
-cd ~/your-project
-~/path/to/agent-templates/install.sh   # installs rules into this project's .claude/rules/
-                                       # (skills are already global, idempotent)
-
-./uninstall.sh                         # remove everything (restores backups)
+./install.sh                 # install the whole catalog into ~/.claude/
+./uninstall.sh               # remove everything (restores any backed-up files)
 ```
 
-Re-run `./install.sh` to reinstall (picks up local changes). To sync with upstream: `git pull && ./install.sh`.
+Re-run `./install.sh` after a `git pull` to refresh — or run `./at update` to pull and
+refresh installed skills in one step.
 
-For interactive component picking, dry-runs, or installing into a specific project, see [Advanced: `at` CLI](#advanced-at-cli) below.
+For interactive component picking, run `./at install` to open the menu — tabs for Bundles /
+Packages / Skills / Agents / Rules / Hooks, with installed items pre-ticked. See
+[Advanced: `at` CLI](#advanced-at-cli) below for the full command list.
 
 ## Using the Skills
 
@@ -31,9 +29,9 @@ For interactive component picking, dry-runs, or installing into a specific proje
 | Tool | Required by | Install (macOS) | Install (Debian/Ubuntu) |
 |------|-------------|-----------------|--------------------------|
 | `git` ≥ 2.5 | `make-pr`, `pr-babysit`, `latest-rebase` | `brew install git` | `apt install git` |
-| `jq` | Installer (`at`) and several skills | `brew install jq` | `apt install jq` |
+| `jq` | Several skills | `brew install jq` | `apt install jq` |
 | `gh` | `make-pr`, `pr-babysit` | `brew install gh` | `apt install gh` |
-| `uv` | `scripts/` (agent return-schema checks) | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `uv` | Installer (`at` runs the engine via uv); `scripts/` (agent return-schema checks) | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `claude` CLI | All skills (the runtime) | Claude Code installer | Claude Code installer |
 
 Verify the installation with `./validate.sh`.
@@ -144,7 +142,7 @@ Two language-agnostic rules install alongside the language rules and load on bro
 
 ### Installation
 
-Rules are installed per-project into `.claude/rules/` by `./install.sh`. Each `rules/*.md` file is copied to `<project>/.claude/rules/`, where Claude Code picks them up automatically based on the file type being edited.
+Rules install globally as symlinks into `~/.claude/rules/` when you run `./install.sh`. Each `rules/*.md` file is staged under `~/.claude/at/` and symlinked into `~/.claude/rules/`, where Claude Code picks it up automatically based on the file type being edited.
 
 ## Templates
 
@@ -154,64 +152,70 @@ A starter `CLAUDE.md` for new projects — fill in the project name, tech stack,
 
 ## Advanced: `at` CLI
 
-The two scripts above cover the common case. For anything more specific, use the `at` CLI directly:
+The scripts above cover the common case. For anything more specific, use the `at` CLI directly:
 
-- `./at install` — interactive component picker (rules / skills / everything)
-- `./at install --all --dry-run` — preview a full install without writing
-- `./at install --all --target=/path/to/project` — install into a specific project
-- `./at uninstall` — restore backups recorded during install
-- `./at status` — show installation dashboard (what's installed, where, and when)
+- `./at install` — open the interactive menu
+- `./at install --all` — install the whole catalog
+- `./at install --skill <name>` (or `--agent`, `--rule`, `--hook`, `--package`, `--bundle`) — install named components
+- `./at uninstall --all` — remove everything (or the same per-component flags to remove one)
+- `./at update` — pull the repo and refresh installed skills
+- `./at status` — show the installation dashboard
+- `./at validate` — lint the catalog
 - `./at --help` — full command reference
 
 ## Installation Details
 
 | Component | Install Location | Scope |
 |-----------|-----------------|-------|
-| Language Rules | `<project>/.claude/rules/*.md` | Per-project |
-| Skills | `~/.claude/skills/<skill-name>/` | Global (all projects) |
+| Skills | `~/.claude/skills/<name>/` | Global (all projects) |
+| Language Rules | `~/.claude/rules/*.md` | Global (all projects) |
 
-The installer creates timestamped backups (`.bak.<timestamp>`) of any file it overwrites and records them in `.claude/.install-backup-manifest`. Run `./uninstall.sh` to restore all backups.
+Each component is staged under `~/.claude/at/` and symlinked into the matching `~/.claude/` subdirectory. On a collision the existing real file is backed up to `.bak` and restored on uninstall. Install state lives in `~/.claude/at/state.json`.
 
 ## Validation
 
-Validate all artifacts without installing anything:
+`./validate.sh` lints the catalog without installing anything — it loads `installer/catalog.toml` through the same loader the installer uses and reports what it found:
 
 ```bash
-./validate.sh             # Full validation (skills, rules, agent schemas)
-./validate.sh --smoke     # Smoke test: install into a temp dir and verify
-./validate.sh --skills    # Validate only skills
-./validate.sh --rules     # Validate only rules
-./validate.sh --v1        # Validate agent return schemas + prompt shapes
+./validate.sh    # prints: catalog OK — <N> units, <M> packages, <K> bundles
 ```
 
-Validation checks include:
-- Every skill has a `SKILL.md` with valid YAML frontmatter (`name` and `description` fields)
-- Every rule is a non-empty `.md` file
-- Agent prompts match their declared return schemas
-- Smoke test runs the full installer into a temp dir and verifies the expected files land
+A dangling reference, a missing required key, or a malformed catalog fails with a single error line and a non-zero exit.
+
+The full test suite — unit tests plus an end-to-end smoke of the real shims — runs from the installer project, and CI runs it on every PR:
+
+```bash
+cd installer && uv run pytest
+```
+
+The agent return-schema check runs standalone:
+
+```bash
+python3 scripts/check_prompt_schemas.py
+```
 
 ## Contributing
 
 1. Fork the repository and create a feature branch.
-2. Make your changes. If adding a new skill, include a `SKILL.md` with valid YAML frontmatter.
-3. Run `./validate.sh` to ensure all checks pass.
-4. Run `./validate.sh --smoke` to verify the installer still works end-to-end.
+2. Make your changes. If you add a new skill, agent, rule, or hook, register it in `installer/catalog.toml` (a new skill also needs a `SKILL.md` with valid YAML frontmatter).
+3. Run `./validate.sh` to lint the catalog.
+4. Run `cd installer && uv run pytest` to run the full test suite (unit + e2e smoke of the real shims).
 5. Open a pull request with a clear description of the change.
 
 ### Authoring a new skill
 
 1. Copy `skills/latest-rebase/` as the minimal template — it has a single `SKILL.md` with the right frontmatter shape and no supporting files.
-2. `SKILL.md` frontmatter requires two keys: `name` and `description`. The description **must** start with the literal string `"Use when"` — the validator fails otherwise (see `validate_skills` in `at`).
+2. `SKILL.md` frontmatter requires two keys: `name` and `description`. The description **should** start with the literal string `"Use when"` so Claude Code picks the skill reliably — a convention enforced by review, not by `./validate.sh`, which lints only the catalog.
 3. Fill in the skill body below the frontmatter. Claude Code loads the body when the user types `/your-skill-name`.
-4. Run `./validate.sh --skills` to check the frontmatter, then `./validate.sh --smoke` to dry-run the installer end-to-end.
+4. Register the skill in `installer/catalog.toml`, then run `./validate.sh` to lint the catalog and `cd installer && uv run pytest` to run the test suite.
 
 ### Authoring a rule
 
-Rules are per-project coding standards that load on matching file edits.
+Rules are global coding standards that load on matching file edits.
 
 1. Create `rules/<language>.md`.
-2. Frontmatter must include `paths:` as a **comma-separated quoted string** — not a YAML array. Example: `paths: "*.py, *.pyi"`. The validator rejects the `[...]` array form.
-3. Run `./validate.sh --rules`.
+2. Frontmatter must include `paths:` as a **comma-separated quoted string** — not a YAML array. Example: `paths: "*.py, *.pyi"`, not the `[...]` array form.
+3. Register the rule in `installer/catalog.toml`, then run `./validate.sh`.
 
 ## License
 

@@ -12,10 +12,20 @@ on:
     paths:
       - "installer/**"
       - ".github/workflows/installer.yml"
+      # The e2e job round-trips the root shims below, so shim edits must trigger this workflow.
+      - "at"
+      - "install.sh"
+      - "uninstall.sh"
+      - "validate.sh"
   pull_request:
     paths:
       - "installer/**"
       - ".github/workflows/installer.yml"
+      # The e2e job round-trips the root shims below, so shim edits must trigger this workflow.
+      - "at"
+      - "install.sh"
+      - "uninstall.sh"
+      - "validate.sh"
 
 permissions:
   contents: read

@@ -321,6 +321,31 @@ def _run_bundles(*, names: tuple[str, ...], additive: bool) -> int:
     return 0
 
 
+def _run_whole_catalog(*, additive: bool) -> int:
+    """Install or uninstall the entire catalog non-interactively — the shared body both
+    `--all` branches route through, so the packages-first ordering invariant lives in
+    one place. `additive` picks the direction the way `_run_per_kind` does: install
+    (True) tops up the catalog, uninstall (False) tears it down.
+
+    Packages MUST run first, before the per-kind pass: on install so each package's
+    units are credited to it as their requester (a per-kind pass over the empty state
+    would seed @direct units the package could no longer claim), on uninstall so the
+    refcount teardown reconciles extras and refcounts before the direct sweep (a
+    per-kind pass would rip out package-owned units and orphan the staged extras). The
+    per-kind pass then installs or removes only the package-less remainder."""
+    catalog: Catalog = load_catalog(_catalog_path())
+    package_status: int = _run_packages(
+        names=tuple(list_packages(catalog=catalog)), additive=additive
+    )
+    if package_status != 0:
+        return package_status
+    all_kinds: tuple[tuple[_Kind, tuple[str, ...]], ...] = tuple(
+        (kind, tuple(kind.list_names(catalog)))
+        for kind in (_SKILL, _AGENT, _RULE, _HOOK)
+    )
+    return _run_per_kind(all_kinds, additive=additive)
+
+
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
 @click.version_option(
     AT_VERSION, "--version", prog_name="at", message="%(prog)s %(version)s"
@@ -350,7 +375,12 @@ def install(
     install_all: bool,
 ) -> int:
     """Install named units (--skill/--agent/--rule/--hook), packages (--package), or
-    bundles (--bundle), or every skill (--all), without the menu; else open it."""
+    bundles (--bundle), or the whole catalog (--all), without the menu; else open it."""
+    if install_all and (skills or agents or rules or hooks or packages or bundles):
+        raise click.UsageError(
+            "--all cannot be combined with "
+            "--skill/--agent/--rule/--hook/--package/--bundle"
+        )
     if packages:
         return _run_packages(names=packages, additive=True)
     if bundles:
@@ -364,10 +394,7 @@ def install(
         )
         return _run_per_kind(requested, additive=True)
     if install_all:
-        catalog_skills: tuple[str, ...] = tuple(
-            list_skills(load_catalog(_catalog_path()))
-        )
-        return _run_per_kind(((_SKILL, catalog_skills),), additive=True)
+        return _run_whole_catalog(additive=True)
     return launch_tui()
 
 
@@ -378,6 +405,7 @@ def install(
 @click.option("--hook", "hooks", multiple=True, metavar="<name>")
 @click.option("--package", "packages", multiple=True, metavar="<name>")
 @click.option("--bundle", "bundles", multiple=True, metavar="<name>")
+@click.option("--all", "uninstall_all", is_flag=True)
 def uninstall(
     skills: tuple[str, ...],
     agents: tuple[str, ...],
@@ -385,9 +413,15 @@ def uninstall(
     hooks: tuple[str, ...],
     packages: tuple[str, ...],
     bundles: tuple[str, ...],
+    uninstall_all: bool,
 ) -> int:
-    """Uninstall named units (--skill/--agent/--rule/--hook), packages (--package), or
-    bundles (--bundle); at least one is required."""
+    """Uninstall named units (--skill/--agent/--rule/--hook), packages (--package),
+    bundles (--bundle), or the whole catalog (--all); at least one is required."""
+    if uninstall_all and (skills or agents or rules or hooks or packages or bundles):
+        raise click.UsageError(
+            "--all cannot be combined with "
+            "--skill/--agent/--rule/--hook/--package/--bundle"
+        )
     if (
         not skills
         and not agents
@@ -395,15 +429,18 @@ def uninstall(
         and not hooks
         and not packages
         and not bundles
+        and not uninstall_all
     ):
         raise click.UsageError(
             "uninstall requires at least one "
-            "--skill/--agent/--rule/--hook/--package/--bundle <name>"
+            "--skill/--agent/--rule/--hook/--package/--bundle <name> or --all"
         )
     if packages:
         return _run_packages(names=packages, additive=False)
     if bundles:
         return _run_bundles(names=bundles, additive=False)
+    if uninstall_all:
+        return _run_whole_catalog(additive=False)
     requested: tuple[tuple[_Kind, tuple[str, ...]], ...] = (
         (_SKILL, skills),
         (_AGENT, agents),

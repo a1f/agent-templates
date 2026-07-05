@@ -26,8 +26,10 @@ from catalog import (
     hook_unit_id,
     list_skills,
     load_catalog,
+    resolve_package,
     rule_unit_id,
     skill_unit_id,
+    unit_id,
 )
 from hashing import hash_unit
 from state import State, load_state
@@ -1510,6 +1512,98 @@ def test_install_all_flag_installs_every_catalog_skill_non_interactively(
         assert skill_unit_id(name) in final_state.units
 
 
+def test_install_all_installs_whole_catalog_packages_extras_and_loose_units(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # demo-pack pulls in a skill plus an agent and stages a `gates` extra, while
+    # demo-rule and demo-hook belong to no package. Real sources for every member exist
+    # and nothing is installed up front, so a clean --all run must place the WHOLE
+    # catalog: the package through the refcount engine (its units credited to demo-pack,
+    # its extra staged and recorded) and each package-less unit installed directly.
+    skill_source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    skill_source.parent.mkdir(parents=True)
+    skill_source.write_text("# demo-skill\n", encoding="utf-8")
+    agent_source: Path = repo_root / "agents" / "demo-agent.md"
+    agent_source.parent.mkdir(parents=True)
+    agent_source.write_text("# demo-agent\n", encoding="utf-8")
+    rule_source: Path = repo_root / "rules" / "demo-rule.md"
+    rule_source.parent.mkdir(parents=True)
+    rule_source.write_text("# demo-rule\n", encoding="utf-8")
+    hook_source: Path = repo_root / "hooks" / "demo-hook.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text("#!/bin/sh\necho demo-hook\n", encoding="utf-8")
+    hook_source.chmod(0o755)
+    gate_source: Path = repo_root / "gates" / "check.sh"
+    gate_source.parent.mkdir(parents=True)
+    gate_source.write_text("#!/bin/sh\necho gate\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[units]]\nkind = "agent"\nname = "demo-agent"\n\n'
+        '[[units]]\nkind = "rule"\nname = "demo-rule"\n\n'
+        '[[units]]\nkind = "hook"\nname = "demo-hook"\n\n'
+        '[[packages]]\nname = "demo-pack"\n'
+        'units = ["skill/demo-skill", "agent/demo-agent"]\nextras = ["gates"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Installing the whole catalog must never open the TUI: route each questionary
+    # prompt to a factory that fails loudly, so a regression that falls back through
+    # launch_tui's select/checkbox/confirm trips this guard instead of waiting on a
+    # prompt.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    exit_code: int = main(["install", "--all", "--non-interactive"])
+
+    # Derive demo-pack's declared members from the catalog and pin them non-empty, so
+    # the per-member loops below can't pass vacuously and can't drift from the fixture.
+    catalog: Catalog = load_catalog(catalog_file)
+    demo_pack: Package = resolve_package(catalog, "demo-pack")
+    final_state: State = load_state(state_root)
+    package_unit_ids: list[str] = [unit_id(unit) for unit in demo_pack.units]
+    assert exit_code == 0
+    assert package_unit_ids == [
+        skill_unit_id("demo-skill"),
+        agent_unit_id("demo-agent"),
+    ]
+    assert demo_pack.extras == ("gates",)
+
+    # Every package unit is linked live and credited to demo-pack as its requester —
+    # proof the refcount engine placed the package, not a loose per-skill install.
+    assert (claude_root / "skills" / "demo-skill").is_symlink()
+    assert (claude_root / "agents" / "demo-agent.md").is_symlink()
+    for identifier in package_unit_ids:
+        assert final_state.requesters[identifier] == ("demo-pack",)
+
+    # The package's declared extra is staged under the state root and recorded in
+    # state.extras, credited to demo-pack the same way its units are.
+    for relpath in demo_pack.extras:
+        assert (state_root / relpath).exists()
+        assert final_state.extras[relpath] == ("demo-pack",)
+
+    # demo-rule and demo-hook belong to no package, so --all installs them directly:
+    # linked live and recorded in state.units.
+    assert (claude_root / "rules" / "demo-rule.md").is_symlink()
+    assert (claude_root / "hooks" / "demo-hook.sh").is_symlink()
+    assert rule_unit_id("demo-rule") in final_state.units
+    assert hook_unit_id("demo-hook") in final_state.units
+
+
 def test_uninstall_skill_flag_removes_named_skill_leaving_others_installed(
     monkeypatch: MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -1790,6 +1884,86 @@ def test_install_unknown_package_errors_with_exit_two_and_installs_nothing(
     assert "nonesuch" in captured_err
     assert not skill_link.exists() and not skill_link.is_symlink()
     assert skill_unit_id("demo-skill") not in final_state.units
+
+
+def test_all_with_named_flag_is_rejected_on_install_and_uninstall(
+    monkeypatch: MonkeyPatch, capsys: CaptureFixture[str], tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Two real skill sources exist so either could install. Only 'kept' is seeded, so
+    # 'absent' is a live sentinel: a run that wrongly honored --all would link it, and
+    # its staying uninstalled proves the illegal combination installed nothing.
+    for name in ("kept", "absent"):
+        source: Path = repo_root / "skills" / name / "SKILL.md"
+        source.parent.mkdir(parents=True)
+        source.write_text(f"# {name}\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "packages = []\nbundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "kept"\n\n'
+        '[[units]]\nkind = "skill"\nname = "absent"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Rejecting the combination must never open the TUI: route every questionary prompt
+    # to a factory that fails loudly, so a regression that falls back through
+    # launch_tui's select/checkbox/confirm trips this guard instead of prompting.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    # Seed the one real install through the public CLI and guard that it landed while
+    # the sentinel stayed uninstalled, so the intactness pins below are non-vacuous.
+    kept_link: Path = claude_root / "skills" / "kept"
+    absent_link: Path = claude_root / "skills" / "absent"
+    seed_exit: int = main(["install", "--skill", "kept"])
+    seed_state: State = load_state(state_root)
+    assert seed_exit == 0
+    assert kept_link.is_symlink()
+    assert skill_unit_id("kept") in seed_state.units
+    assert not absent_link.exists() and not absent_link.is_symlink()
+    capsys.readouterr()
+
+    # uninstall --all --skill kept: --all combined with a named flag is a usage error,
+    # so main exits 2, names the conflict on stderr, and removes NOTHING — kept stays
+    # fully intact. Today uninstall honors --all first, tears the whole install down,
+    # and returns 0, so this marquee no-mutation pin fails loudly.
+    uninstall_exit: int = main(["uninstall", "--all", "--skill", "kept"])
+    uninstall_err: str = capsys.readouterr().err
+    after_uninstall: State = load_state(state_root)
+    lowered_uninstall: str = uninstall_err.lower()
+    assert uninstall_exit == 2
+    assert kept_link.is_symlink()
+    assert skill_unit_id("kept") in after_uninstall.units
+    assert not absent_link.exists() and not absent_link.is_symlink()
+    assert "--all" in uninstall_err
+    assert "cannot" in lowered_uninstall or "combined" in lowered_uninstall
+
+    # install --all --skill kept: the same usage error on the install command, so main
+    # exits 2 and installs NOTHING — the sentinel 'absent' never links. Today install
+    # honors the named flag first and returns 0, so the exit-code pin fails; a run that
+    # instead wrongly honored --all would link absent and trip the sentinel pin.
+    install_exit: int = main(["install", "--all", "--skill", "kept"])
+    install_err: str = capsys.readouterr().err
+    after_install: State = load_state(state_root)
+    lowered_install: str = install_err.lower()
+    assert install_exit == 2
+    assert not absent_link.exists() and not absent_link.is_symlink()
+    assert skill_unit_id("absent") not in after_install.units
+    assert kept_link.is_symlink()
+    assert "--all" in install_err
+    assert "cannot" in lowered_install or "combined" in lowered_install
 
 
 def test_uninstall_bundle_flag_decrements_refcount_keeping_shared_unit(
@@ -2706,3 +2880,96 @@ def test_validate_reports_error_not_traceback_on_malformed_shape(
     errors: str = capsys.readouterr().err
     assert exit_code == 1
     assert "error:" in errors
+
+
+def test_uninstall_all_removes_whole_catalog_leaving_empty_install(
+    monkeypatch: MonkeyPatch, tmp_path: Path
+) -> None:
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    repo_root: Path = tmp_path / "repo"
+    monkeypatch.setattr("at.STATE_ROOT", state_root)
+    monkeypatch.setattr("at.CLAUDE_ROOT", claude_root)
+    monkeypatch.setattr("at.REPO_ROOT", repo_root)
+
+    # Seed a whole-catalog install the same way the committed install --all test does:
+    # demo-pack pulls in a skill plus an agent and stages a `gates` extra, while
+    # demo-rule and demo-hook belong to no package. Real sources for every member
+    # exist, so `install --all` places the ENTIRE catalog, giving `uninstall --all` a
+    # full tree (a package with units + an extra, plus loose units) to tear back down.
+    skill_source: Path = repo_root / "skills" / "demo-skill" / "SKILL.md"
+    skill_source.parent.mkdir(parents=True)
+    skill_source.write_text("# demo-skill\n", encoding="utf-8")
+    agent_source: Path = repo_root / "agents" / "demo-agent.md"
+    agent_source.parent.mkdir(parents=True)
+    agent_source.write_text("# demo-agent\n", encoding="utf-8")
+    rule_source: Path = repo_root / "rules" / "demo-rule.md"
+    rule_source.parent.mkdir(parents=True)
+    rule_source.write_text("# demo-rule\n", encoding="utf-8")
+    hook_source: Path = repo_root / "hooks" / "demo-hook.sh"
+    hook_source.parent.mkdir(parents=True)
+    hook_source.write_text("#!/bin/sh\necho demo-hook\n", encoding="utf-8")
+    hook_source.chmod(0o755)
+    gate_source: Path = repo_root / "gates" / "check.sh"
+    gate_source.parent.mkdir(parents=True)
+    gate_source.write_text("#!/bin/sh\necho gate\n", encoding="utf-8")
+
+    catalog_file: Path = tmp_path / "catalog.toml"
+    catalog_file.write_text(
+        "bundles = []\n\n"
+        '[[units]]\nkind = "skill"\nname = "demo-skill"\n\n'
+        '[[units]]\nkind = "agent"\nname = "demo-agent"\n\n'
+        '[[units]]\nkind = "rule"\nname = "demo-rule"\n\n'
+        '[[units]]\nkind = "hook"\nname = "demo-hook"\n\n'
+        '[[packages]]\nname = "demo-pack"\n'
+        'units = ["skill/demo-skill", "agent/demo-agent"]\nextras = ["gates"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("at.CATALOG_PATH", catalog_file)
+
+    # Neither the seeding install nor the uninstall may open the TUI: route every
+    # questionary prompt to a factory that fails loudly, so a regression that falls back
+    # through launch_tui's select/checkbox/confirm trips this guard instead of hanging.
+    def forbid_interactive(*args: object, **kwargs: object) -> NoReturn:
+        raise AssertionError("CLI must be non-interactive")
+
+    monkeypatch.setattr("questionary.select", forbid_interactive)
+    monkeypatch.setattr("questionary.checkbox", forbid_interactive)
+    monkeypatch.setattr("questionary.confirm", forbid_interactive)
+
+    install_exit: int = main(["install", "--all", "--non-interactive"])
+
+    # Guard: the whole-catalog seed must land before `uninstall --all` runs, so the
+    # teardown assertions below cannot pass vacuously against a failed install. Every
+    # symlink is live, the extra is staged, and state carries units, requesters, extras.
+    gates_extra: Path = state_root / "gates"
+    seeded_state: State = load_state(state_root)
+    assert install_exit == 0
+    assert (claude_root / "skills" / "demo-skill").is_symlink()
+    assert (claude_root / "agents" / "demo-agent.md").is_symlink()
+    assert (claude_root / "rules" / "demo-rule.md").is_symlink()
+    assert (claude_root / "hooks" / "demo-hook.sh").is_symlink()
+    assert gates_extra.exists()
+    assert seeded_state.units != {}
+    assert seeded_state.requesters != {}
+    assert seeded_state.extras != {}
+
+    exit_code: int = main(["uninstall", "--all"])
+
+    # `uninstall --all` tears the whole install back down to nothing: it exits zero, and
+    # afterwards state carries no units, requesters, or extras, every installed
+    # symlink is gone from the claude root, and the staged extra is gone from disk.
+    final_state: State = load_state(state_root)
+    skill_link: Path = claude_root / "skills" / "demo-skill"
+    agent_link: Path = claude_root / "agents" / "demo-agent.md"
+    rule_link: Path = claude_root / "rules" / "demo-rule.md"
+    hook_link: Path = claude_root / "hooks" / "demo-hook.sh"
+    assert exit_code == 0
+    assert final_state.units == {}
+    assert final_state.requesters == {}
+    assert final_state.extras == {}
+    assert not skill_link.exists() and not skill_link.is_symlink()
+    assert not agent_link.exists() and not agent_link.is_symlink()
+    assert not rule_link.exists() and not rule_link.is_symlink()
+    assert not hook_link.exists() and not hook_link.is_symlink()
+    assert not gates_extra.exists()

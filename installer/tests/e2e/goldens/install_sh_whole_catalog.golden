@@ -1,0 +1,26 @@
+dir .claude/agents
+link .claude/agents/demo-agent.md -> .claude/at/staged/agent/demo-agent
+dir .claude/at
+dir .claude/at/schemas
+file .claude/at/schemas/demo-schema.json 0caf2bd5dfff062ff9d07d6123ce36e1fc5a4f02677f2e913b27c04c6075f98e
+dir .claude/at/staged
+dir .claude/at/staged/agent
+file .claude/at/staged/agent/demo-agent b5ab887c16f11fd42f38c3972bb7019d601a4686b12069ba3e4ef87ac5c5f831
+dir .claude/at/staged/hook
+file .claude/at/staged/hook/demo-hook a17dede5c3b44bff25d3543d16a6d76e3be70370d92619fe428ba1d4f798c70c
+dir .claude/at/staged/rule
+file .claude/at/staged/rule/demo-rule 94b4fcca183f1a395b2231260530d3d608b66d70206d8eff1d0000d680d65d6a
+dir .claude/at/staged/skill
+dir .claude/at/staged/skill/demo-skill
+dir .claude/at/staged/skill/demo-skill-two
+file .claude/at/staged/skill/demo-skill-two/SKILL.md ff3436a0c12035b4212dc3a83fa396ab7f1135f50314e0490715d0848bf8b460
+file .claude/at/staged/skill/demo-skill/SKILL.md 25706be2cbf11d3e92d1cadb63751d482723dbcd91b3f32dc9931859308e1674
+json .claude/at/state.json {"extra_hashes":{"schemas":"e8224ef72a3b8e9463978953355c1fc546f9b5a093e20f0ca8169a2ab20fc752"},"extras":{"schemas":["demo-pack-extras"]},"requesters":{"agent/demo-agent":["demo-pack-a","demo-pack-b"],"rule/demo-rule":["demo-pack-extras"],"skill/demo-skill":["demo-pack-a"],"skill/demo-skill-two":["demo-pack-b"]},"units":{"agent/demo-agent":"b5ab887c16f11fd42f38c3972bb7019d601a4686b12069ba3e4ef87ac5c5f831","hook/demo-hook":"a17dede5c3b44bff25d3543d16a6d76e3be70370d92619fe428ba1d4f798c70c","rule/demo-rule":"94b4fcca183f1a395b2231260530d3d608b66d70206d8eff1d0000d680d65d6a","skill/demo-skill":"763e7d2a3620743afe13cecae56bafec01e4346e8aa945bc63262e24b4ff4248","skill/demo-skill-two":"112a14a7446a409b98435238e9dfdc915640e3aa94434ace60644531e0e09bf5"},"version":1}
+dir .claude/hooks
+link .claude/hooks/demo-hook.sh -> .claude/at/staged/hook/demo-hook
+dir .claude/rules
+link .claude/rules/demo-rule.md -> .claude/at/staged/rule/demo-rule
+file .claude/settings.json 0eeb5eccac0da3c8fa20bc5876e08a87f90090996eb8f46681dc76c3501c1f63
+dir .claude/skills
+link .claude/skills/demo-skill -> .claude/at/staged/skill/demo-skill
+link .claude/skills/demo-skill-two -> .claude/at/staged/skill/demo-skill-two
