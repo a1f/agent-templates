@@ -67,10 +67,8 @@ def test_install_sh_then_uninstall_sh_round_trips_whole_catalog(
     ]
     assert installed_links, "install.sh linked no units into ~/.claude"
 
-    # Leg (2): the one-shot uninstall.sh must tear the whole install back down. Today it
-    # forwards a bare `at uninstall` (no flags), which the CLI rejects with a UsageError
-    # (exit 2), so this returncode assert is the RED. GREEN makes uninstall.sh pass
-    # --all.
+    # Leg (2): the one-shot uninstall.sh forwards `--all`, so the round-trip must tear
+    # the whole install down. The asserts below pin that empty end-state.
     uninstall_result: subprocess.CompletedProcess[str] = run_root_script(
         script="uninstall.sh",
         args=[],

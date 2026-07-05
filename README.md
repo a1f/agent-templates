@@ -205,7 +205,7 @@ python3 scripts/check_prompt_schemas.py
 ### Authoring a new skill
 
 1. Copy `skills/latest-rebase/` as the minimal template — it has a single `SKILL.md` with the right frontmatter shape and no supporting files.
-2. `SKILL.md` frontmatter requires two keys: `name` and `description`. The description **must** start with the literal string `"Use when"` — the validator fails otherwise.
+2. `SKILL.md` frontmatter requires two keys: `name` and `description`. The description **should** start with the literal string `"Use when"` so Claude Code picks the skill reliably — a convention enforced by review, not by `./validate.sh`, which lints only the catalog.
 3. Fill in the skill body below the frontmatter. Claude Code loads the body when the user types `/your-skill-name`.
 4. Register the skill in `installer/catalog.toml`, then run `./validate.sh` to lint the catalog and `cd installer && uv run pytest` to run the test suite.
 
@@ -214,7 +214,7 @@ python3 scripts/check_prompt_schemas.py
 Rules are global coding standards that load on matching file edits.
 
 1. Create `rules/<language>.md`.
-2. Frontmatter must include `paths:` as a **comma-separated quoted string** — not a YAML array. Example: `paths: "*.py, *.pyi"`. The validator rejects the `[...]` array form.
+2. Frontmatter must include `paths:` as a **comma-separated quoted string** — not a YAML array. Example: `paths: "*.py, *.pyi"`, not the `[...]` array form.
 3. Register the rule in `installer/catalog.toml`, then run `./validate.sh`.
 
 ## License
