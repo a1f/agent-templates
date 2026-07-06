@@ -1,0 +1,19 @@
+Agent Templates — status
+Bundles
+  ✅ demo-bundle  (demo-pack-a, demo-pack-extras)
+Packages
+  ✅ demo-pack-a  (skill/demo-skill, agent/demo-agent)
+  ❌ demo-pack-b  (skill/demo-skill-two, agent/demo-agent)
+  ✅ demo-pack-extras  (rule/demo-rule)
+Skills
+  ✅ demo-skill
+  ❌ demo-skill-two
+Agents
+  ✅ demo-agent
+Rules
+  ✅ demo-rule
+Hooks
+  ❌ demo-hook
+Drift
+  demo-skill — up to date
+<SOURCE_ROOT>

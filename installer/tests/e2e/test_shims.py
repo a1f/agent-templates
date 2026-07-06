@@ -25,9 +25,9 @@ def test_validate_sh_reports_catalog_lint_summary(tmp_path: Path) -> None:
         catalog=FIXTURES_DIR / "catalog.toml",
     )
 
-    # The fixture catalog declares 5 units, 3 packages, 0 bundles; the Python engine's
+    # The fixture catalog declares 5 units, 3 packages, 1 bundles; the Python engine's
     # catalog lint prints exactly that one-line summary and exits 0.
-    assert result.stdout.strip() == "catalog OK — 5 units, 3 packages, 0 bundles"
+    assert result.stdout.strip() == "catalog OK — 5 units, 3 packages, 1 bundles"
     assert result.returncode == 0, result.stderr
 
 

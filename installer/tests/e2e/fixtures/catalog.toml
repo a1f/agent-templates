@@ -1,7 +1,17 @@
 # Frozen fixture catalog for installer e2e scenarios. Deliberately minimal and
 # stable so goldens change only when installer BEHAVIOUR changes, never when a
 # real skill under ../../skills is edited.
-bundles = []
+
+# One bundle so e2e can pin the coarsest install tier expanding to its full unit set:
+# installing demo-bundle pulls in every unit of demo-pack-a (skill/demo-skill,
+# agent/demo-agent) and demo-pack-extras (rule/demo-rule + the schemas/ extra). It
+# deliberately omits demo-pack-b, leaving demo-skill-two / demo-pack-b / hook/demo-hook
+# as the not-installed rows the status grid needs. Bundles are never recorded in
+# state.json — bundle-installed is derived from its members' refcounts — so adding it
+# drifts no existing install/uninstall golden.
+[[bundles]]
+name = "demo-bundle"
+packages = ["demo-pack-a", "demo-pack-extras"]
 
 # Two packages that deliberately SHARE agent/demo-agent so e2e can pin the refcount
 # rule: a unit pulled in by both survives uninstalling one package and is removed only
