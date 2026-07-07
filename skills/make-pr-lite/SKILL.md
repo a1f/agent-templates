@@ -126,8 +126,11 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
 7. **Done.** When all behaviors and gates are green, no CRITICAL / `>=70` / aggregate blocker, and
    critic `achieved`. **Squash to one commit:**
    `git reset --soft <base> && git commit -m "<conventional subject>"` (no AI attribution).
-   Confirm only boundary files changed (`git diff --name-only <base>...HEAD`). Summarize, ask the
-   human to confirm done — never push or open a PR unless asked.
+   Confirm only boundary files changed (`git diff --name-only <base>...HEAD`). Then ship it
+   without asking: branch first if still on the default branch, `git push -u origin <branch>`
+   (`--force-with-lease` only if this run already pushed the branch before the squash), and
+   `gh pr create` against the default branch (or the task-named target), referencing the
+   task/issue in the body. Summarize with the PR URL — done needs no human confirmation.
 
 ## Status table
 
