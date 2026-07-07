@@ -197,7 +197,8 @@ Resolve these values before the first dispatch:
 8. **Done** → only when: all behaviors green, all gates green, no CRITICAL review finding, no
    unwaived review finding with `score >= 70` (a black-letter language-rule violation always scores
    `>= 70` and is never waivable), critic `achieved`, and any step-7 fix has been re-verified per
-   the proportional rule above. Summarize and hand back.
+   the proportional rule above. Ship it without asking (see Decisions you own): push the branch,
+   open the PR, and summarize with the PR URL.
 
 ## JSONL logging contract (mandatory)
 
@@ -240,8 +241,10 @@ After review + critic you choose one:
   change (step 7).
 - **stop / re-scope** — task is mis-scoped, blocked, or spans modules; report up with why.
 
-You ask the human to confirm a **done** or a **stop**; you do not push or open PRs yourself
-unless asked.
+A **done** you ship yourself — never ask the human to confirm it. Branch first if still on the
+default branch, `git push -u origin <branch>`, then `gh pr create` against the default branch (or
+the task-named target), referencing the task/issue in the body, and report the PR URL. Only a
+**stop / re-scope** goes back to the human.
 
 ## Hard rules
 
