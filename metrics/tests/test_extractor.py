@@ -6,7 +6,9 @@ from typing import Final
 
 from extractor import RunRecord, extract_run
 
-_MAKE_PR_TRANSCRIPT: Final[Path] = Path(__file__).parent / "fixtures" / "make_pr_session.jsonl"
+_MAKE_PR_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "make_pr_session.jsonl"
+)
 
 
 def test_make_pr_transcript_yields_populated_run_record() -> None:
