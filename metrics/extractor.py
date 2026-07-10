@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
-_TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr"})
+_TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr", "make-pr-lite"})
 
 
 @dataclass(frozen=True)
