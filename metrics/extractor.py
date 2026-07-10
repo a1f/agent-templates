@@ -4,6 +4,9 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Final
+
+_TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr"})
 
 
 @dataclass(frozen=True)
@@ -37,10 +40,11 @@ class RunRecord:
 
 
 def extract_run(*, transcript_path: Path) -> RunRecord | None:
-    """Read a JSONL transcript into its run record, or None when no run is attributed.
+    """Read a JSONL transcript into its run record, or None for an untracked run.
 
     Streams line by line so header lines that lack `attributionSkill`/`timestamp` are
-    tolerated. `started_at` is the earliest `timestamp` anywhere in the file.
+    tolerated. A run is attributed only when its `attributionSkill` is in
+    `_TRACKED_VARIANTS`; `started_at` is the earliest `timestamp` anywhere in the file.
     """
     earliest_at: datetime | None = None
     variant: str | None = None
@@ -54,7 +58,11 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
                 if earliest_at is None or seen_at < earliest_at:
                     earliest_at = seen_at
             skill: object = entry.get("attributionSkill")
-            if variant is None and isinstance(skill, str):
+            if (
+                variant is None
+                and isinstance(skill, str)
+                and skill in _TRACKED_VARIANTS
+            ):
                 variant = skill
                 identifier: object = entry.get("session_id")
                 session_id = identifier if isinstance(identifier, str) else ""
