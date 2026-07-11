@@ -268,3 +268,108 @@ def test_malformed_outcome_signals_degrade_to_unknown(tmp_path: Path) -> None:
     assert record is not None
     assert record.outcome == "unknown"
     assert record.blocked_reason == ""
+
+
+def test_fix_loops_deduped_by_dispatch_identity(tmp_path: Path) -> None:
+    usage: dict[str, object] = {
+        "input_tokens": 5,
+        "output_tokens": 35,
+        "cache_read_input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+    }
+    # L2 and its L3 re-emission are byte-identical: same message id and same
+    # tool_use `id`, so dedup by dispatch identity must count this dispatch once.
+    dispatch_line: dict[str, object] = {
+        "type": "assistant",
+        "uuid": "dd-l2",
+        "timestamp": "2026-07-08T12:01:00.000Z",
+        "attributionSkill": "make-pr-lite",
+        "message": {
+            "id": "msg_dd_02",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-fable-5",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_dd_A",
+                    "name": "Agent",
+                    "input": {
+                        "description": "Fix round 1",
+                        "subagent_type": "coder-lite",
+                        "prompt": "mode: fix\n\nApply blocker 1.",
+                    },
+                }
+            ],
+            "usage": usage,
+        },
+    }
+    entries: list[dict[str, object]] = [
+        {
+            "type": "assistant",
+            "uuid": "dd-l1",
+            "timestamp": "2026-07-08T12:00:00.000Z",
+            "session_id": "44444444-5555-4666-8777-888888888888",
+            "attributionSkill": "make-pr-lite",
+            "message": {
+                "id": "msg_dd_01",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-fable-5",
+                "content": [{"type": "text", "text": "Intake: starting the run."}],
+                "usage": usage,
+            },
+        },
+        dispatch_line,
+        dispatch_line,
+        {
+            "type": "assistant",
+            "uuid": "dd-l4",
+            "timestamp": "2026-07-08T12:02:00.000Z",
+            "attributionSkill": "make-pr-lite",
+            "message": {
+                "id": "msg_dd_03",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-fable-5",
+                "content": [{"type": "text", "text": "Dispatching the follow-up fix."}],
+                "usage": usage,
+            },
+        },
+        {
+            # A second content part of message id msg_dd_03, already seen on L4, still
+            # carries a distinct dispatch (toolu_dd_B) that must count.
+            "type": "assistant",
+            "uuid": "dd-l5",
+            "timestamp": "2026-07-08T12:02:01.000Z",
+            "attributionSkill": "make-pr-lite",
+            "message": {
+                "id": "msg_dd_03",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-fable-5",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_dd_B",
+                        "name": "Agent",
+                        "input": {
+                            "description": "Fix round 2",
+                            "subagent_type": "coder-lite",
+                            "prompt": "mode: fix\n\nApply blocker 2.",
+                        },
+                    }
+                ],
+                "usage": usage,
+            },
+        },
+    ]
+    transcript: Path = tmp_path / "dispatch_dedup_session.jsonl"
+    transcript.write_text(
+        "".join(json.dumps(entry) + "\n" for entry in entries), encoding="utf-8"
+    )
+
+    record: RunRecord | None = extract_run(transcript_path=transcript)
+
+    assert record is not None
+    assert record.n_fix_loops == 2

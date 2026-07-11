@@ -142,12 +142,21 @@ def _dispatch_declares_fix(*, part: object) -> bool:
     return _FIX_MODE_RE.match(first_line) is not None
 
 
-def _count_fix_dispatches(*, message: dict[str, object]) -> int:
-    """Count the fix-mode subagent dispatches carried in a message's content."""
+def _fix_dispatch_ids(*, message: dict[str, object]) -> Iterator[str | None]:
+    """Yield the tool_use `id` of each fix-mode subagent dispatch in a message.
+
+    The id lets the caller dedup a dispatch re-emitted across lines by its
+    identity; a part whose `id` is absent or non-string yields None, which the
+    caller cannot dedup and so counts each time. `_dispatch_declares_fix` stays
+    the single decision of what a fix dispatch is.
+    """
     content: object = message.get("content")
     if not isinstance(content, list):
-        return 0
-    return sum(1 for part in content if _dispatch_declares_fix(part=part))
+        return
+    for part in content:
+        if _dispatch_declares_fix(part=part):
+            part_id: object = part.get("id")
+            yield part_id if isinstance(part_id, str) else None
 
 
 def _parse_return(*, text: str) -> dict[str, object] | None:
@@ -224,6 +233,7 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     variant: str | None = None
     session_id: str = ""
     seen_message_ids: set[str] = set()
+    seen_dispatch_ids: set[str] = set()
     tok_output: int = 0
     tok_cache_read: int = 0
     tok_cache_creation: int = 0
@@ -284,7 +294,16 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
                     blocked_reason = reason if isinstance(reason, str) else ""
             # A fix-mode dispatch rides a tool_use part the return scan skips, so
             # count it here in the same per-line content pass, not a second read.
-            n_fix_loops += _count_fix_dispatches(message=message)
+            # Dedup by the dispatch's tool_use id (not message id): a dispatch
+            # re-emitted across lines counts once, but a distinct dispatch on a
+            # later line of an already-seen message still counts. A dispatch with
+            # no usable id degrades toward counting each occurrence.
+            for dispatch_id in _fix_dispatch_ids(message=message):
+                if dispatch_id is None:
+                    n_fix_loops += 1
+                elif dispatch_id not in seen_dispatch_ids:
+                    seen_dispatch_ids.add(dispatch_id)
+                    n_fix_loops += 1
             usage: object = message.get("usage")
             if not isinstance(usage, dict):
                 continue
