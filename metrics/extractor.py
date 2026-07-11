@@ -12,6 +12,7 @@ from typing import Final
 
 _TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr", "make-pr-lite"})
 _DEFAULT_CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
+_UNKNOWN_SKILL_VERSION: Final[str] = "unknown"
 
 # Anthropic list prices cached 2026-06-24, USD per 1,000,000 tokens as (input, output).
 # An unknown model id is absent here and contributes $0 to the cost estimate.
@@ -224,12 +225,12 @@ class RunRecord:
 
 
 def _resolve_skill_version(*, variant: str, claude_root: Path) -> str:
-    """Resolve the skill version for a tracked run, empty only when nothing is readable.
+    """Resolve a tracked run's skill version, "unknown" only when nothing is readable.
 
     Prefers the installer's `at/state.json` `source_sha` stamp (a non-empty string);
     when that stamp is absent or the file is unparsable, falls back to a short content
     hash of the installed `skills/<variant>/SKILL.md`. A missing or unreadable skill
-    file leaves the result "".
+    file leaves the result "unknown".
     """
     state_path: Path = claude_root / "at" / "state.json"
     try:
@@ -244,7 +245,7 @@ def _resolve_skill_version(*, variant: str, claude_root: Path) -> str:
     try:
         data: bytes = skill_path.read_bytes()
     except OSError:
-        return ""
+        return _UNKNOWN_SKILL_VERSION
     return "installed:" + hashlib.sha256(data).hexdigest()[:8]
 
 
@@ -259,7 +260,8 @@ def extract_run(
     and `active_sec` sums the non-idle gaps between all parsed timestamps. For a
     tracked run, `skill_version` comes from `claude_root/at/state.json`'s
     `source_sha` stamp, falling back to a short content hash of the installed
-    `skills/<variant>/SKILL.md` (see `_resolve_skill_version`).
+    `skills/<variant>/SKILL.md`, and finally to "unknown" when neither is readable
+    (see `_resolve_skill_version`).
     """
     line_timestamps: list[datetime] = []
     variant: str | None = None

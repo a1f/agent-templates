@@ -176,6 +176,17 @@ def test_skill_version_falls_back_to_installed_skill_content_hash(
     assert record.skill_version == expected
 
 
+def test_skill_version_is_unknown_when_no_stamp_and_no_installed_skill(
+    tmp_path: Path,
+) -> None:
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    assert record is not None
+    assert record.skill_version == "unknown"
+
+
 def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:
     lines: list[str] = _TOKEN_COST_TRANSCRIPT.read_text(encoding="utf-8").splitlines()
     random.Random(20260624).shuffle(lines)
