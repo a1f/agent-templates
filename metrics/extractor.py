@@ -268,10 +268,17 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
                 if parsed is None:
                     continue
                 role: object = parsed.get("role")
-                if role == "critic":
-                    verdict: object = parsed.get("verdict")
-                    if isinstance(verdict, str) and verdict in _CRITIC_VERDICTS:
-                        outcome = verdict
+                verdict: object = parsed.get("verdict")
+                # Older make-pr-lite critics return {"score", "verdict", "missing",
+                # "notes"} with no role key (verified against a real transcript). The
+                # verdict enum vocabulary is unique to the critic in this pipeline, so
+                # a role-less verdict-in-enum dict is a critic return — but a dict with
+                # a different role must still be rejected. `role is None` covers both an
+                # absent key and an explicit null.
+                if (role is None or role == "critic") and (
+                    isinstance(verdict, str) and verdict in _CRITIC_VERDICTS
+                ):
+                    outcome = verdict
                 elif role in _CODER_ROLES and parsed.get("status") == "blocked":
                     reason: object = parsed.get("blocked_reason")
                     blocked_reason = reason if isinstance(reason, str) else ""

@@ -34,6 +34,9 @@ _BLOCKED_TRANSCRIPT: Final[Path] = (
 _FIX_LOOP_TRANSCRIPT: Final[Path] = (
     Path(__file__).parent / "fixtures" / "fix_loop_session.jsonl"
 )
+_ROLELESS_CRITIC_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "roleless_critic_session.jsonl"
+)
 
 # Hand-counted from token_cost_session.jsonl: the msg_aaa pair is deduped to one,
 # so only correct dedup (not naive per-line summing) yields these.
@@ -159,6 +162,13 @@ def test_active_sec_sums_gaps_excluding_idle(tmp_path: Path) -> None:
     assert shuffled_record is not None
     assert record.active_sec == pytest.approx(_EXPECTED_ACTIVE_SEC)
     assert shuffled_record.active_sec == pytest.approx(_EXPECTED_ACTIVE_SEC)
+
+
+def test_roleless_critic_verdict_sets_outcome() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_ROLELESS_CRITIC_TRANSCRIPT)
+
+    assert record is not None
+    assert record.outcome == "achieved"
 
 
 def test_malformed_outcome_signals_degrade_to_unknown(tmp_path: Path) -> None:
