@@ -1,0 +1,32 @@
+# uv project for the transcript-metrics extractor: it pins the dev tooling so gates can lint,
+# type-check, and test this directory. The extractor's production code and tests arrive in later
+# TDD cycles (issue #126); PR 1.1 lays down the scaffold only.
+[project]
+name = "metrics"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+  "pytest>=8",
+  "mypy>=1.14",
+  "ruff>=0.9",
+]
+
+[tool.uv]
+package = false  # a metrics dir, not an installable package — just resolve deps
+
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+# The exact selection mandated by rules/python.md.
+select = ["E", "F", "I", "B", "C4", "UP", "SIM", "PIE", "RUF", "DTZ", "PTH", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+
+[tool.pytest.ini_options]
+filterwarnings = ["error"]
