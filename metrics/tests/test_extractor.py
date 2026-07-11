@@ -87,6 +87,35 @@ _EXPECTED_ROLES: Final[dict[str, dict[str, object]]] = {
     },
 }
 
+# Hand-counted per-dispatch usage: one entry per sidechain file in file-name order
+# (agent-a1, then agent-a2, then agent-a3). Each entry sums only that file's own
+# deduped messages, so agent-a1's twice-emitted msg_s1 counts once. Costs use the same
+# rates as _EXPECTED_ROLES (cache_read 0.1x and cache_creation 1.25x the input rate,
+# output at the output rate; fable-5 is 10/50 and opus-4-8 is 5/25 USD per MTok).
+_EXPECTED_DISPATCHES: Final[list[dict[str, object]]] = [
+    {
+        "agent": "tdd-runner",
+        "tok_output": 8,
+        "tok_cache_read": 100,
+        "tok_cache_creation": 40,
+        "est_cost_usd": pytest.approx(0.0015),
+    },
+    {
+        "agent": "worker-coder",
+        "tok_output": 12,
+        "tok_cache_read": 120,
+        "tok_cache_creation": 80,
+        "est_cost_usd": pytest.approx(0.00116),
+    },
+    {
+        "agent": "worker-coder",
+        "tok_output": 6,
+        "tok_cache_read": 60,
+        "tok_cache_creation": 20,
+        "est_cost_usd": pytest.approx(0.00091),
+    },
+]
+
 
 def test_make_pr_transcript_yields_populated_run_record() -> None:
     record: RunRecord | None = extract_run(transcript_path=_MAKE_PR_TRANSCRIPT)
@@ -497,3 +526,11 @@ def test_tokens_partition_by_role_across_sidechains_with_nothing_dropped() -> No
     assert record.est_cost_usd == pytest.approx(
         sum(bucket["est_cost_usd"] for bucket in roles.values())
     )
+
+
+def test_dispatches_listed_one_per_sidechain_file_in_name_order() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_DISPATCH_TRANSCRIPT)
+
+    assert record is not None
+    assert record.n_dispatches == 3
+    assert record.detail.get("dispatches") == _EXPECTED_DISPATCHES

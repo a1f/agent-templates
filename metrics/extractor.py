@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Final
+from typing import Final, Self
 
 _TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr", "make-pr-lite"})
 _DEFAULT_CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
@@ -108,12 +108,19 @@ _MAIN_ROLE: Final[str] = "main"
 
 @dataclass
 class _RoleUsage:
-    """Running token and cost totals for the messages of one attributed role."""
+    """Running token and cost totals for a set of attributed messages."""
 
     tok_output: int = 0
     tok_cache_read: int = 0
     tok_cache_creation: int = 0
     est_cost_usd: float = 0.0
+
+    def add(self, *, other: Self) -> None:
+        """Fold another total in so one contribution can feed several tallies."""
+        self.tok_output += other.tok_output
+        self.tok_cache_read += other.tok_cache_read
+        self.tok_cache_creation += other.tok_cache_creation
+        self.est_cost_usd += other.est_cost_usd
 
 
 def _line_role(*, entry: dict[str, object]) -> str:
@@ -128,30 +135,34 @@ def _accumulate_usage(
     role: str,
     usage_by_role: dict[str, _RoleUsage],
     seen_message_ids: set[str],
-) -> None:
-    """Fold one message's tokens and cost into its role bucket, once per message id.
+) -> _RoleUsage | None:
+    """Fold one first-seen message into its role bucket and return that contribution.
 
-    This is the single place usage is priced and summed, shared by the main transcript
-    and the subagent sidechains. Dedup is global across every file: a message id already
-    counted (re-emitted or shared between files) adds nothing, so a bucket is created
-    only for a usage-bearing message counted for the first time.
+    This is the single place usage is priced and summed, and the single place global
+    dedup is decided: a message with no usage, or an id already counted (re-emitted or
+    shared between files), adds nothing and returns None. The returned bucket lets a
+    caller fold the same first-seen contribution into a second total (e.g. a
+    per-dispatch tally) without recounting it.
     """
     usage: object = message.get("usage")
     if not isinstance(usage, dict):
-        return
+        return None
     message_id: object = message.get("id")
     if isinstance(message_id, str):
         if message_id in seen_message_ids:
-            return
+            return None
         seen_message_ids.add(message_id)
-    bucket: _RoleUsage = usage_by_role.setdefault(role, _RoleUsage())
-    bucket.tok_output += _as_int(value=usage.get("output_tokens"))
-    bucket.tok_cache_read += _as_int(value=usage.get("cache_read_input_tokens"))
-    bucket.tok_cache_creation += _as_int(value=usage.get("cache_creation_input_tokens"))
     model: object = message.get("model")
-    bucket.est_cost_usd += _message_cost_usd(
-        usage=usage, model=model if isinstance(model, str) else ""
+    contribution: _RoleUsage = _RoleUsage(
+        tok_output=_as_int(value=usage.get("output_tokens")),
+        tok_cache_read=_as_int(value=usage.get("cache_read_input_tokens")),
+        tok_cache_creation=_as_int(value=usage.get("cache_creation_input_tokens")),
+        est_cost_usd=_message_cost_usd(
+            usage=usage, model=model if isinstance(model, str) else ""
+        ),
     )
+    usage_by_role.setdefault(role, _RoleUsage()).add(other=contribution)
+    return contribution
 
 
 def _accumulate_sidechains(
@@ -159,29 +170,49 @@ def _accumulate_sidechains(
     transcript_path: Path,
     usage_by_role: dict[str, _RoleUsage],
     seen_message_ids: set[str],
-) -> None:
-    """Fold each subagent sidechain's usage into its role bucket by attribution.
+) -> list[dict[str, object]]:
+    """Fold each sidechain's usage into its role bucket and return one dispatch entry
+    per sidechain file, ordered by file name.
 
-    Sidechain lines feed ONLY the token/cost/role accounting; the outcome, PR-link,
-    fix-loop, timestamp, and variant scans stay derived from the main transcript alone.
-    A missing `<stem>/subagents/` directory means the run dispatched no subagents.
+    One read per file feeds both the shared role buckets and that file's own dispatch
+    tally under the same global dedup, so a re-emitted message counts once in each.
+    Sidechain lines feed ONLY the token/cost/role/dispatch accounting; the outcome,
+    PR-link, fix-loop, timestamp, and variant scans stay derived from the main
+    transcript alone. A missing `<stem>/subagents/` directory means the run dispatched
+    none, so the returned list is empty.
     """
     sidechain_dir: Path = transcript_path.parent / transcript_path.stem / "subagents"
     if not sidechain_dir.is_dir():
-        return
+        return []
+    dispatches: list[dict[str, object]] = []
     for path in sorted(sidechain_dir.glob("agent-*.jsonl")):
+        agent: str = _MAIN_ROLE
+        totals: _RoleUsage = _RoleUsage()
         with path.open(encoding="utf-8") as lines:
             for line in lines:
                 entry: dict[str, object] = json.loads(line)
                 message: object = entry.get("message")
                 if not isinstance(message, dict):
                     continue
-                _accumulate_usage(
+                agent = _line_role(entry=entry)
+                contribution: _RoleUsage | None = _accumulate_usage(
                     message=message,
-                    role=_line_role(entry=entry),
+                    role=agent,
                     usage_by_role=usage_by_role,
                     seen_message_ids=seen_message_ids,
                 )
+                if contribution is not None:
+                    totals.add(other=contribution)
+        dispatches.append(
+            {
+                "agent": agent,
+                "tok_output": totals.tok_output,
+                "tok_cache_read": totals.tok_cache_read,
+                "tok_cache_creation": totals.tok_cache_creation,
+                "est_cost_usd": totals.est_cost_usd,
+            }
+        )
+    return dispatches
 
 
 def _leaf_texts(*, value: object) -> Iterator[str]:
@@ -430,9 +461,9 @@ def extract_run(
             )
     if variant is None:
         return None
-    # Sidechains feed only this per-role usage accounting, after the main transcript
-    # so its message ids are already seen for global dedup.
-    _accumulate_sidechains(
+    # Sidechains feed only this per-role usage accounting and the per-dispatch list,
+    # after the main transcript so its message ids are already seen for global dedup.
+    dispatches: list[dict[str, object]] = _accumulate_sidechains(
         transcript_path=transcript_path,
         usage_by_role=usage_by_role,
         seen_message_ids=seen_message_ids,
@@ -470,10 +501,15 @@ def extract_run(
         tok_cache_read=tok_cache_read,
         tok_cache_creation=tok_cache_creation,
         est_cost_usd=est_cost_usd,
+        n_dispatches=len(dispatches),
         n_fix_loops=n_fix_loops,
         outcome=outcome,
         blocked_reason=blocked_reason if blocked_reason is not None else "",
         pr_number=pr_number,
         pr_url=pr_url,
-        detail={"pricing_version": _PRICING_VERSION, "roles": roles_detail},
+        detail={
+            "pricing_version": _PRICING_VERSION,
+            "roles": roles_detail,
+            "dispatches": dispatches,
+        },
     )
