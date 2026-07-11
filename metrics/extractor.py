@@ -1,6 +1,7 @@
 """Turn a Claude Code session transcript into one run-level metrics row."""
 
 import json
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -36,6 +37,12 @@ _CRITIC_VERDICTS: Final[frozenset[str]] = frozenset(
 # The coder return schemas in this pipeline; both carry status/blocked_reason with
 # identical semantics, so a blocked return from either records the run's friction.
 _CODER_ROLES: Final[frozenset[str]] = frozenset({"coder", "coder-lite"})
+
+# The dispatch tool's current and legacy names; a tool_use part with either name is
+# a subagent dispatch. Such a dispatch counts as a fix loop when its prompt's first
+# line declares fix mode (the whole word `fix`, not `mode: build`/`green`/etc.).
+_DISPATCH_TOOLS: Final[frozenset[str]] = frozenset({"Agent", "Task"})
+_FIX_MODE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*mode:\s*fix\b", re.IGNORECASE)
 
 # A tracked run whose scan found neither a critic verdict nor a coder block degrades
 # to this outcome rather than an empty string, so every tracked run carries a signal.
@@ -100,6 +107,35 @@ def _text_pieces(*, message: dict[str, object]) -> Iterator[str]:
                 yield from _leaf_texts(value=part.get("content"))
 
 
+def _dispatch_declares_fix(*, part: object) -> bool:
+    """Report whether a content part is a subagent dispatch declaring fix mode.
+
+    A missing or malformed part, tool name, input dict, or prompt is simply not a
+    fix loop rather than an error; only a dispatch tool_use whose `input.prompt`
+    first line matches `_FIX_MODE_RE` counts.
+    """
+    if not isinstance(part, dict) or part.get("type") != "tool_use":
+        return False
+    if part.get("name") not in _DISPATCH_TOOLS:
+        return False
+    payload: object = part.get("input")
+    if not isinstance(payload, dict):
+        return False
+    prompt: object = payload.get("prompt")
+    if not isinstance(prompt, str):
+        return False
+    first_line: str = prompt.split("\n", 1)[0]
+    return _FIX_MODE_RE.match(first_line) is not None
+
+
+def _count_fix_dispatches(*, message: dict[str, object]) -> int:
+    """Count the fix-mode subagent dispatches carried in a message's content."""
+    content: object = message.get("content")
+    if not isinstance(content, list):
+        return 0
+    return sum(1 for part in content if _dispatch_declares_fix(part=part))
+
+
 def _parse_return(*, text: str) -> dict[str, object] | None:
     """Parse a text piece into its embedded JSON object, or None when it holds none."""
     stripped: str = text.strip()
@@ -161,6 +197,7 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     tok_cache_read: int = 0
     tok_cache_creation: int = 0
     est_cost_usd: float = 0.0
+    n_fix_loops: int = 0
     outcome: str = ""
     blocked_reason: str | None = None
     with transcript_path.open(encoding="utf-8") as lines:
@@ -201,6 +238,9 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
                 elif role in _CODER_ROLES and parsed.get("status") == "blocked":
                     reason: object = parsed.get("blocked_reason")
                     blocked_reason = reason if isinstance(reason, str) else ""
+            # A fix-mode dispatch rides a tool_use part the return scan skips, so
+            # count it here in the same per-line content pass, not a second read.
+            n_fix_loops += _count_fix_dispatches(message=message)
             usage: object = message.get("usage")
             if not isinstance(usage, dict):
                 continue
@@ -232,6 +272,7 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
         tok_cache_read=tok_cache_read,
         tok_cache_creation=tok_cache_creation,
         est_cost_usd=est_cost_usd,
+        n_fix_loops=n_fix_loops,
         outcome=outcome,
         blocked_reason=blocked_reason if blocked_reason is not None else "",
         detail={"pricing_version": _PRICING_VERSION},

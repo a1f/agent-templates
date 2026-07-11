@@ -31,6 +31,9 @@ _CLEAN_PASS_TRANSCRIPT: Final[Path] = (
 _BLOCKED_TRANSCRIPT: Final[Path] = (
     Path(__file__).parent / "fixtures" / "blocked_session.jsonl"
 )
+_FIX_LOOP_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "fix_loop_session.jsonl"
+)
 
 # Hand-counted from token_cost_session.jsonl: the msg_aaa pair is deduped to one,
 # so only correct dedup (not naive per-line summing) yields these.
@@ -108,6 +111,14 @@ def test_blocked_run_reports_blocked_outcome_and_reason() -> None:
     assert record.blocked_reason == (
         "new dependency psycopg required but dependencies_allowed is false"
     )
+
+
+def test_fix_mode_dispatches_counted_as_fix_loops() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_FIX_LOOP_TRANSCRIPT)
+
+    assert record is not None
+    assert record.n_fix_loops == 2
+    assert record.outcome == "achieved"
 
 
 def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:
