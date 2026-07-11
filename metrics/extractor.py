@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Final
 
 _TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr", "make-pr-lite"})
+_DEFAULT_CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
 
 # Anthropic list prices cached 2026-06-24, USD per 1,000,000 tokens as (input, output).
 # An unknown model id is absent here and contributes $0 to the cost estimate.
@@ -221,13 +222,36 @@ class RunRecord:
     detail: dict[str, object] = field(default_factory=dict)
 
 
-def extract_run(*, transcript_path: Path) -> RunRecord | None:
+def _resolve_skill_version(*, variant: str, claude_root: Path) -> str:
+    """Resolve the skill version stamped for a tracked run, empty when unknown.
+
+    Reads the installer's `at/state.json` and returns its top-level `source_sha`
+    when present as a non-empty string; a missing file or unparsable JSON resolves
+    to "" rather than raising.
+    """
+    state_path: Path = claude_root / "at" / "state.json"
+    try:
+        state: object = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    if isinstance(state, dict):
+        source_sha: object = state.get("source_sha")
+        if isinstance(source_sha, str) and source_sha:
+            return source_sha
+    return ""
+
+
+def extract_run(
+    *, transcript_path: Path, claude_root: Path = _DEFAULT_CLAUDE_ROOT
+) -> RunRecord | None:
     """Read a JSONL transcript into its run record, or None for an untracked run.
 
     Streams line by line so header lines that lack `attributionSkill`/`timestamp` are
     tolerated. A run is attributed only when its `attributionSkill` is in
     `_TRACKED_VARIANTS`; `started_at` is the earliest `timestamp` anywhere in the file
-    and `active_sec` sums the non-idle gaps between all parsed timestamps.
+    and `active_sec` sums the non-idle gaps between all parsed timestamps. For a
+    tracked run, `skill_version` comes from `claude_root/at/state.json`'s
+    `source_sha` stamp, or stays empty when that stamp is absent or unreadable.
     """
     line_timestamps: list[datetime] = []
     variant: str | None = None
@@ -328,8 +352,12 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     if outcome == "":
         outcome = "blocked" if blocked_reason is not None else _UNKNOWN_OUTCOME
     started_at: datetime | None = min(line_timestamps) if line_timestamps else None
+    skill_version: str = _resolve_skill_version(
+        variant=variant, claude_root=claude_root
+    )
     return RunRecord(
         variant=variant,
+        skill_version=skill_version,
         session_id=session_id,
         started_at=started_at,
         active_sec=_active_sec(timestamps=line_timestamps),

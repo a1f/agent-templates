@@ -50,6 +50,9 @@ _EXPECTED_COST_USD: Final[float] = 0.052
 # 3450 s gap (09:02:30 -> 10:00:00) exceeds the 300 s idle threshold and is excluded.
 _EXPECTED_ACTIVE_SEC: Final[float] = 160.0
 
+# A fixed 40-hex commit sha the installer stamps into state.json as "source_sha".
+_SOURCE_SHA: Final[str] = "0123abcd4567ef890123abcd4567ef890123abcd"
+
 
 def test_make_pr_transcript_yields_populated_run_record() -> None:
     record: RunRecord | None = extract_run(transcript_path=_MAKE_PR_TRANSCRIPT)
@@ -133,6 +136,26 @@ def test_fix_mode_dispatches_counted_as_fix_loops() -> None:
     assert record is not None
     assert record.n_fix_loops == 2
     assert record.outcome == "achieved"
+
+
+def test_run_record_carries_installer_source_sha_as_skill_version(
+    tmp_path: Path,
+) -> None:
+    state_dir: Path = tmp_path / "at"
+    state_dir.mkdir()
+    state: dict[str, object] = {
+        "version": 1,
+        "units": {},
+        "source_sha": _SOURCE_SHA,
+    }
+    (state_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    assert record is not None
+    assert record.skill_version == _SOURCE_SHA
 
 
 def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:
