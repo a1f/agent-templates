@@ -1,5 +1,6 @@
 """Turn a Claude Code session transcript into one run-level metrics row."""
 
+import hashlib
 import json
 import re
 from collections.abc import Iterator
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Final
 
 _TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr", "make-pr-lite"})
+_DEFAULT_CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
+_UNKNOWN_SKILL_VERSION: Final[str] = "unknown"
 
 # Anthropic list prices cached 2026-06-24, USD per 1,000,000 tokens as (input, output).
 # An unknown model id is absent here and contributes $0 to the cost estimate.
@@ -221,13 +224,46 @@ class RunRecord:
     detail: dict[str, object] = field(default_factory=dict)
 
 
-def extract_run(*, transcript_path: Path) -> RunRecord | None:
+def _resolve_skill_version(*, variant: str, claude_root: Path) -> str:
+    """Resolve a tracked run's skill version, "unknown" only when nothing is readable.
+
+    Prefers the installer's `at/state.json` `source_sha` stamp (a non-empty string);
+    when that stamp is absent or the file is unreadable or unparsable, falls back to a
+    short content hash of the installed `skills/<variant>/SKILL.md`. A missing or
+    unreadable skill file leaves the result "unknown".
+    """
+    state_path: Path = claude_root / "at" / "state.json"
+    try:
+        # ValueError subsumes json.JSONDecodeError and the UnicodeDecodeError that
+        # read_text raises on invalid UTF-8, so bad bytes degrade instead of raising.
+        state: object = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        state = None
+    if isinstance(state, dict):
+        source_sha: object = state.get("source_sha")
+        if isinstance(source_sha, str) and source_sha:
+            return source_sha
+    skill_path: Path = claude_root / "skills" / variant / "SKILL.md"
+    try:
+        data: bytes = skill_path.read_bytes()
+    except OSError:
+        return _UNKNOWN_SKILL_VERSION
+    return "installed:" + hashlib.sha256(data).hexdigest()[:8]
+
+
+def extract_run(
+    *, transcript_path: Path, claude_root: Path = _DEFAULT_CLAUDE_ROOT
+) -> RunRecord | None:
     """Read a JSONL transcript into its run record, or None for an untracked run.
 
     Streams line by line so header lines that lack `attributionSkill`/`timestamp` are
     tolerated. A run is attributed only when its `attributionSkill` is in
     `_TRACKED_VARIANTS`; `started_at` is the earliest `timestamp` anywhere in the file
-    and `active_sec` sums the non-idle gaps between all parsed timestamps.
+    and `active_sec` sums the non-idle gaps between all parsed timestamps. For a
+    tracked run, `skill_version` comes from `claude_root/at/state.json`'s
+    `source_sha` stamp, falling back to a short content hash of the installed
+    `skills/<variant>/SKILL.md`, and finally to "unknown" when neither is readable
+    (see `_resolve_skill_version`).
     """
     line_timestamps: list[datetime] = []
     variant: str | None = None
@@ -328,8 +364,12 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     if outcome == "":
         outcome = "blocked" if blocked_reason is not None else _UNKNOWN_OUTCOME
     started_at: datetime | None = min(line_timestamps) if line_timestamps else None
+    skill_version: str = _resolve_skill_version(
+        variant=variant, claude_root=claude_root
+    )
     return RunRecord(
         variant=variant,
+        skill_version=skill_version,
         session_id=session_id,
         started_at=started_at,
         active_sec=_active_sec(timestamps=line_timestamps),

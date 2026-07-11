@@ -1,5 +1,6 @@
 """Spec: a make-pr session transcript yields a populated run record."""
 
+import hashlib
 import json
 import random
 from datetime import UTC, datetime
@@ -49,6 +50,9 @@ _EXPECTED_COST_USD: Final[float] = 0.052
 # Hand-summed from clean_pass_session.jsonl consecutive gaps 30 s + 120 s + 10 s; the
 # 3450 s gap (09:02:30 -> 10:00:00) exceeds the 300 s idle threshold and is excluded.
 _EXPECTED_ACTIVE_SEC: Final[float] = 160.0
+
+# A fixed 40-hex commit sha the installer stamps into state.json as "source_sha".
+_SOURCE_SHA: Final[str] = "0123abcd4567ef890123abcd4567ef890123abcd"
 
 
 def test_make_pr_transcript_yields_populated_run_record() -> None:
@@ -133,6 +137,74 @@ def test_fix_mode_dispatches_counted_as_fix_loops() -> None:
     assert record is not None
     assert record.n_fix_loops == 2
     assert record.outcome == "achieved"
+
+
+def test_run_record_carries_installer_source_sha_as_skill_version(
+    tmp_path: Path,
+) -> None:
+    state_dir: Path = tmp_path / "at"
+    state_dir.mkdir()
+    state: dict[str, object] = {
+        "version": 1,
+        "units": {},
+        "source_sha": _SOURCE_SHA,
+    }
+    (state_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
+
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    assert record is not None
+    assert record.skill_version == _SOURCE_SHA
+
+
+def test_skill_version_falls_back_to_installed_skill_content_hash(
+    tmp_path: Path,
+) -> None:
+    skill_bytes: bytes = b"# make-pr\n\nInstalled skill body under test.\n"
+    skill_dir: Path = tmp_path / "skills" / "make-pr"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(skill_bytes)
+
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    expected: str = "installed:" + hashlib.sha256(skill_bytes).hexdigest()[:8]
+    assert record is not None
+    assert record.skill_version == expected
+
+
+def test_corrupt_state_json_degrades_to_installed_hash_instead_of_raising(
+    tmp_path: Path,
+) -> None:
+    state_dir: Path = tmp_path / "at"
+    state_dir.mkdir()
+    (state_dir / "state.json").write_bytes(b'\xff\xfe{"version": 1}')
+    skill_bytes: bytes = b"# make-pr\n\nInstalled skill body under test.\n"
+    skill_dir: Path = tmp_path / "skills" / "make-pr"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(skill_bytes)
+
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    expected: str = "installed:" + hashlib.sha256(skill_bytes).hexdigest()[:8]
+    assert record is not None
+    assert record.skill_version == expected
+
+
+def test_skill_version_is_unknown_when_no_stamp_and_no_installed_skill(
+    tmp_path: Path,
+) -> None:
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    assert record is not None
+    assert record.skill_version == "unknown"
 
 
 def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:

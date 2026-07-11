@@ -1,5 +1,6 @@
 import json
 import stat
+import subprocess
 from pathlib import Path
 
 from actions import (
@@ -17,7 +18,7 @@ from actions import (
 from catalog import Catalog, agent_unit_id, load_catalog, rule_unit_id, skill_unit_id
 from constants import DIRECT_REQUESTER
 from hashing import hash_unit
-from state import State, load_state
+from state import STATE_FILENAME, State, default_state, load_state
 
 
 def test_install_skill_stages_source_and_links_into_claude_skills(
@@ -104,6 +105,141 @@ def test_install_skill_records_staged_content_hash_as_unit_value(
     recorded_hash: str = result.units[skill_unit_id("demo-skill")]
     assert recorded_hash == hash_unit(skill_source)
     assert recorded_hash != ""
+
+
+def test_install_from_git_repo_source_stamps_head_sha_into_state(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo-skill"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo Skill\n", encoding="utf-8")
+
+    # Make the source root a real git repo and commit it, so install has a HEAD to
+    # stamp. The -c config flags keep the commit independent of any global git config.
+    subprocess.run(["git", "init"], cwd=source_root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "-A"], cwd=source_root, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "x"],
+        cwd=source_root,
+        check=True,
+        capture_output=True,
+    )
+    head: subprocess.CompletedProcess[str] = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=source_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    expected_sha: str = head.stdout.strip()
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    install_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=default_state(),
+    )
+
+    assert load_state(state_root).source_sha == expected_sha
+
+
+def test_install_from_plain_source_root_writes_state_without_source_sha_key(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo-skill"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo Skill\n", encoding="utf-8")
+
+    # No `git init`: the source is a plain tree with no HEAD to stamp. The on-disk
+    # store must stay byte-compatible with stores written before the stamp existed —
+    # so the key is omitted entirely, never written as an empty "source_sha": "".
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    install_skill(
+        name="demo-skill",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=default_state(),
+    )
+
+    payload: dict[str, object] = json.loads(
+        (state_root / STATE_FILENAME).read_text(encoding="utf-8")
+    )
+    assert "source_sha" not in payload
+
+
+def test_source_sha_stamp_survives_uninstall_state_write(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("alpha", "beta"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(
+            f"# {skill_name} Skill\n", encoding="utf-8"
+        )
+
+    # Make the source root a real git repo and commit it, so install has a HEAD to
+    # stamp. The -c config flags keep the commit independent of any global git config.
+    subprocess.run(["git", "init"], cwd=source_root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "-A"], cwd=source_root, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "x"],
+        cwd=source_root,
+        check=True,
+        capture_output=True,
+    )
+    head: subprocess.CompletedProcess[str] = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=source_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    expected_sha: str = head.stdout.strip()
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Install two skills so the store still holds a unit after one is removed; the
+    # install stamps the source repo's HEAD sha into the persisted store.
+    state_after_alpha: State = install_skill(
+        name="alpha",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=default_state(),
+    )
+    state_after_beta: State = install_skill(
+        name="beta",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_alpha,
+    )
+
+    uninstall_skill(
+        name="beta",
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_beta,
+    )
+
+    # Uninstalling one unit rewrites the store; that rewrite must carry the stamp
+    # forward rather than silently dropping it.
+    assert load_state(state_root).source_sha == expected_sha
 
 
 def test_install_skill_preserves_existing_requesters_of_other_units(
