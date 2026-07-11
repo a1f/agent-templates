@@ -24,6 +24,9 @@ _OTHER_SKILL_TRANSCRIPT: Final[Path] = (
 _TOKEN_COST_TRANSCRIPT: Final[Path] = (
     Path(__file__).parent / "fixtures" / "token_cost_session.jsonl"
 )
+_CLEAN_PASS_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "clean_pass_session.jsonl"
+)
 
 # Hand-counted from token_cost_session.jsonl: the msg_aaa pair is deduped to one,
 # so only correct dedup (not naive per-line summing) yields these.
@@ -82,6 +85,15 @@ def test_pricing_version_stamped_in_detail() -> None:
 
     assert record is not None
     assert record.detail.get("pricing_version") == "2026-06-24"
+
+
+def test_clean_pass_run_outcome_achieved_from_critic_verdict() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_CLEAN_PASS_TRANSCRIPT)
+
+    assert record is not None
+    assert record.outcome == "achieved"
+    assert record.blocked_reason == ""
+    assert record.n_fix_loops == 0
 
 
 def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:

@@ -1,6 +1,7 @@
 """Turn a Claude Code session transcript into one run-level metrics row."""
 
 import json
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -26,6 +27,11 @@ _PER_MTOK_USD: Final[dict[str, tuple[float, float]]] = {
 _CACHE_READ_MULT: Final[float] = 0.1
 _CACHE_WRITE_5M_MULT: Final[float] = 1.25
 _CACHE_WRITE_1H_MULT: Final[float] = 2.0
+
+# The critic subagent's verdict enum; the last such verdict seen sets the run outcome.
+_CRITIC_VERDICTS: Final[frozenset[str]] = frozenset(
+    {"achieved", "partial", "not_achieved"}
+)
 
 
 def _as_int(*, value: object) -> int:
@@ -61,6 +67,45 @@ def _message_cost_usd(*, usage: dict[str, object], model: str) -> float:
     )
     output: int = _as_int(value=usage.get("output_tokens"))
     return billed_input * input_per_tok + output * output_per_tok
+
+
+def _leaf_texts(*, value: object) -> Iterator[str]:
+    """Yield the text a content leaf carries: a plain string, or a list's text parts."""
+    if isinstance(value, str):
+        yield value
+        return
+    if isinstance(value, list):
+        for part in value:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text: object = part.get("text")
+                if isinstance(text, str):
+                    yield text
+
+
+def _text_pieces(*, message: dict[str, object]) -> Iterator[str]:
+    """Yield every text a critic return could occupy, skipping tool_use inputs."""
+    content: object = message.get("content")
+    yield from _leaf_texts(value=content)
+    if isinstance(content, list):
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "tool_result":
+                yield from _leaf_texts(value=part.get("content"))
+
+
+def _parse_return(*, text: str) -> dict[str, object] | None:
+    """Parse a text piece into its embedded JSON object, or None when it holds none."""
+    stripped: str = text.strip()
+    try:
+        parsed: object = json.loads(stripped)
+    except json.JSONDecodeError:
+        start: int = stripped.find("{")
+        if start == -1:
+            return None
+        try:
+            parsed = json.JSONDecoder().raw_decode(stripped, start)[0]
+        except json.JSONDecodeError:
+            return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 @dataclass(frozen=True)
@@ -108,6 +153,7 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     tok_cache_read: int = 0
     tok_cache_creation: int = 0
     est_cost_usd: float = 0.0
+    outcome: str = ""
     with transcript_path.open(encoding="utf-8") as lines:
         for line in lines:
             entry: dict[str, object] = json.loads(line)
@@ -128,6 +174,15 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
             message: object = entry.get("message")
             if not isinstance(message, dict):
                 continue
+            # Scan content before the usage bookkeeping: the critic return rides a
+            # user line whose message has no `usage` and would otherwise be skipped.
+            for piece in _text_pieces(message=message):
+                parsed: dict[str, object] | None = _parse_return(text=piece)
+                if parsed is None or parsed.get("role") != "critic":
+                    continue
+                verdict: object = parsed.get("verdict")
+                if isinstance(verdict, str) and verdict in _CRITIC_VERDICTS:
+                    outcome = verdict
             usage: object = message.get("usage")
             if not isinstance(usage, dict):
                 continue
@@ -155,5 +210,6 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
         tok_cache_read=tok_cache_read,
         tok_cache_creation=tok_cache_creation,
         est_cost_usd=est_cost_usd,
+        outcome=outcome,
         detail={"pricing_version": _PRICING_VERSION},
     )
