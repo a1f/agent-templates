@@ -1,5 +1,6 @@
 """Spec: a make-pr session transcript yields a populated run record."""
 
+import json
 import random
 from datetime import UTC, datetime
 from pathlib import Path
@@ -121,3 +122,102 @@ def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:
     assert record.tok_output == _EXPECTED_TOK_OUTPUT
     assert record.tok_cache_read == _EXPECTED_TOK_CACHE_READ
     assert record.tok_cache_creation == _EXPECTED_TOK_CACHE_CREATION
+
+
+def test_malformed_outcome_signals_degrade_to_unknown(tmp_path: Path) -> None:
+    truncated_return: str = '{"schema_version": "v1", "role": "critic", "verdi'
+    out_of_enum_return: str = '{"role": "critic", "verdict": "maybe"}'
+    coder_done_return: str = (
+        '{"schema_version": "v1", "role": "coder", "mode": "green", '
+        '"status": "done", "blocked_reason": ""}'
+    )
+    entries: list[dict[str, object]] = [
+        {
+            "type": "assistant",
+            "uuid": "mf-l1",
+            "timestamp": "2026-07-11T08:00:00.000Z",
+            "sessionId": "99999999-8888-4777-8666-555555555555",
+            "session_id": "99999999-8888-4777-8666-555555555555",
+            "attributionSkill": "make-pr",
+            "message": {
+                "id": "msg_mf_01",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-fable-5",
+                "content": [{"type": "text", "text": "Intake: starting the run."}],
+                "usage": {
+                    "input_tokens": 10,
+                    "output_tokens": 50,
+                    "cache_read_input_tokens": 100,
+                    "cache_creation_input_tokens": 20,
+                },
+            },
+        },
+        {
+            "type": "assistant",
+            "uuid": "mf-l2",
+            "timestamp": "not-a-timestamp",
+            "sessionId": "99999999-8888-4777-8666-555555555555",
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "no structured return here, just prose"}
+                ],
+            },
+        },
+        {
+            "type": "user",
+            "uuid": "mf-l3",
+            "timestamp": "2026-07-11T08:01:00.000Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_mf_01",
+                        "content": [{"type": "text", "text": truncated_return}],
+                    }
+                ],
+            },
+        },
+        {
+            "type": "user",
+            "uuid": "mf-l4",
+            "timestamp": "2026-07-11T08:02:00.000Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_mf_02",
+                        "content": [{"type": "text", "text": out_of_enum_return}],
+                    }
+                ],
+            },
+        },
+        {
+            "type": "user",
+            "uuid": "mf-l5",
+            "timestamp": "2026-07-11T08:03:00.000Z",
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "toolu_mf_03",
+                        "content": [{"type": "text", "text": coder_done_return}],
+                    }
+                ],
+            },
+        },
+    ]
+    transcript: Path = tmp_path / "malformed_session.jsonl"
+    transcript.write_text(
+        "".join(json.dumps(entry) + "\n" for entry in entries), encoding="utf-8"
+    )
+
+    record: RunRecord | None = extract_run(transcript_path=transcript)
+
+    assert record is not None
+    assert record.outcome == "unknown"
+    assert record.blocked_reason == ""

@@ -37,6 +37,10 @@ _CRITIC_VERDICTS: Final[frozenset[str]] = frozenset(
 # identical semantics, so a blocked return from either records the run's friction.
 _CODER_ROLES: Final[frozenset[str]] = frozenset({"coder", "coder-lite"})
 
+# A tracked run whose scan found neither a critic verdict nor a coder block degrades
+# to this outcome rather than an empty string, so every tracked run carries a signal.
+_UNKNOWN_OUTCOME: Final[str] = "unknown"
+
 
 def _as_int(*, value: object) -> int:
     """Narrow a usage field to int, treating an absent or non-int value as zero."""
@@ -164,9 +168,13 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
             entry: dict[str, object] = json.loads(line)
             timestamp: object = entry.get("timestamp")
             if isinstance(timestamp, str):
-                seen_at: datetime = datetime.fromisoformat(timestamp)
-                if earliest_at is None or seen_at < earliest_at:
-                    earliest_at = seen_at
+                try:
+                    seen_at: datetime = datetime.fromisoformat(timestamp)
+                except ValueError:
+                    pass  # an unparsable timestamp means no timestamp on this line
+                else:
+                    if earliest_at is None or seen_at < earliest_at:
+                        earliest_at = seen_at
             skill: object = entry.get("attributionSkill")
             if (
                 variant is None
@@ -212,9 +220,10 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
             )
     if variant is None:
         return None
-    # A critic verdict wins; absent one, a coder block sets a "blocked" outcome.
-    if outcome == "" and blocked_reason is not None:
-        outcome = "blocked"
+    # A critic verdict wins; absent one a coder block records "blocked", and a run
+    # with neither signal degrades to "unknown" rather than an empty outcome.
+    if outcome == "":
+        outcome = "blocked" if blocked_reason is not None else _UNKNOWN_OUTCOME
     return RunRecord(
         variant=variant,
         session_id=session_id,
