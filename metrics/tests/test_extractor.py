@@ -43,6 +43,9 @@ _EXPECTED_TOK_CACHE_CREATION: Final[int] = 1750
 # Hand-priced from the same fixture: fable-5 msgs A (0.027) + B (0.015) + D (0.010);
 # msg_ccc's claude-opus-9-9 is unknown so it bills $0 despite carrying tokens.
 _EXPECTED_COST_USD: Final[float] = 0.052
+# Hand-summed from clean_pass_session.jsonl consecutive gaps 30 s + 120 s + 10 s; the
+# 3450 s gap (09:02:30 -> 10:00:00) exceeds the 300 s idle threshold and is excluded.
+_EXPECTED_ACTIVE_SEC: Final[float] = 160.0
 
 
 def test_make_pr_transcript_yields_populated_run_record() -> None:
@@ -133,6 +136,21 @@ def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:
     assert record.tok_output == _EXPECTED_TOK_OUTPUT
     assert record.tok_cache_read == _EXPECTED_TOK_CACHE_READ
     assert record.tok_cache_creation == _EXPECTED_TOK_CACHE_CREATION
+
+
+def test_active_sec_sums_gaps_excluding_idle(tmp_path: Path) -> None:
+    lines: list[str] = _CLEAN_PASS_TRANSCRIPT.read_text(encoding="utf-8").splitlines()
+    random.Random(20260711).shuffle(lines)
+    scrambled: Path = tmp_path / "scrambled.jsonl"
+    scrambled.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    record: RunRecord | None = extract_run(transcript_path=_CLEAN_PASS_TRANSCRIPT)
+    shuffled_record: RunRecord | None = extract_run(transcript_path=scrambled)
+
+    assert record is not None
+    assert shuffled_record is not None
+    assert record.active_sec == pytest.approx(_EXPECTED_ACTIVE_SEC)
+    assert shuffled_record.active_sec == pytest.approx(_EXPECTED_ACTIVE_SEC)
 
 
 def test_malformed_outcome_signals_degrade_to_unknown(tmp_path: Path) -> None:

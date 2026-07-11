@@ -5,6 +5,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Final
 
@@ -47,6 +48,10 @@ _FIX_MODE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*mode:\s*fix\b", re.IGNOR
 # A tracked run whose scan found neither a critic verdict nor a coder block degrades
 # to this outcome rather than an empty string, so every tracked run carries a signal.
 _UNKNOWN_OUTCOME: Final[str] = "unknown"
+
+# Consecutive line timestamps farther apart than this are the user away from the
+# session, not the run working, so that gap is excluded from active_sec.
+_IDLE_GAP_SEC: Final[float] = 300.0
 
 
 def _as_int(*, value: object) -> int:
@@ -152,6 +157,22 @@ def _parse_return(*, text: str) -> dict[str, object] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _active_sec(*, timestamps: list[datetime]) -> float:
+    """Sum the seconds between consecutive line timestamps, dropping idle gaps.
+
+    Timestamps are sorted first, so the total is independent of the order lines
+    were read; a gap wider than `_IDLE_GAP_SEC` is excluded. Fewer than two
+    timestamps leave no gap and yield 0.0.
+    """
+    ordered: list[datetime] = sorted(timestamps)
+    total: float = 0.0
+    for earlier, later in pairwise(ordered):
+        gap: float = (later - earlier).total_seconds()
+        if gap <= _IDLE_GAP_SEC:
+            total += gap
+    return total
+
+
 @dataclass(frozen=True)
 class RunRecord:
     """One flattened metrics row for a single attributed agent run.
@@ -187,9 +208,10 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
 
     Streams line by line so header lines that lack `attributionSkill`/`timestamp` are
     tolerated. A run is attributed only when its `attributionSkill` is in
-    `_TRACKED_VARIANTS`; `started_at` is the earliest `timestamp` anywhere in the file.
+    `_TRACKED_VARIANTS`; `started_at` is the earliest `timestamp` anywhere in the file
+    and `active_sec` sums the non-idle gaps between all parsed timestamps.
     """
-    earliest_at: datetime | None = None
+    line_timestamps: list[datetime] = []
     variant: str | None = None
     session_id: str = ""
     seen_message_ids: set[str] = set()
@@ -210,8 +232,7 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
                 except ValueError:
                     pass  # an unparsable timestamp means no timestamp on this line
                 else:
-                    if earliest_at is None or seen_at < earliest_at:
-                        earliest_at = seen_at
+                    line_timestamps.append(seen_at)
             skill: object = entry.get("attributionSkill")
             if (
                 variant is None
@@ -264,10 +285,12 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     # with neither signal degrades to "unknown" rather than an empty outcome.
     if outcome == "":
         outcome = "blocked" if blocked_reason is not None else _UNKNOWN_OUTCOME
+    started_at: datetime | None = min(line_timestamps) if line_timestamps else None
     return RunRecord(
         variant=variant,
         session_id=session_id,
-        started_at=earliest_at,
+        started_at=started_at,
+        active_sec=_active_sec(timestamps=line_timestamps),
         tok_output=tok_output,
         tok_cache_read=tok_cache_read,
         tok_cache_creation=tok_cache_creation,
