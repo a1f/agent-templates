@@ -33,13 +33,14 @@ from placement import (
     unstage_unit,
 )
 from settings import merge_hook_settings, unmerge_hook_settings
-from state import State, save_state
+from state import State, save_state, source_sha_of
 
 
 def _install_unit(
     *,
     unit: Unit,
     source: Path,
+    source_root: Path,
     link_path: Path,
     state_root: Path,
     state: State,
@@ -53,7 +54,9 @@ def _install_unit(
     mutated. When requester is given, the SAME write also credits that requester to the
     unit, so a package install records the unit and its requester atomically and a crash
     can never leave the unit present-but-uncredited. A direct install (requester None)
-    carries the existing requesters forward untouched, adding no token."""
+    carries the existing requesters forward untouched, adding no token. Also stamps the
+    source repo's HEAD sha (read from source_root via source_sha_of) onto the returned
+    State, keeping the prior stamp when the source is not a git repo."""
     staged_path: Path = stage_unit(
         unit=unit, source=source, staged_root=state_root / STAGED_DIRNAME
     )
@@ -70,12 +73,14 @@ def _install_unit(
             ),
         }
     )
+    sha: str = source_sha_of(source_root=source_root)
     new_state: State = State(
         version=state.version,
         units={**state.units, installed_id: content_hash},
         requesters=new_requesters,
         extras=state.extras,
         extra_hashes=state.extra_hashes,
+        source_sha=sha or state.source_sha,
     )
     save_state(new_state, state_root)
     return new_state
@@ -130,6 +135,7 @@ def install_skill(
     return _install_unit(
         unit=skill_unit(name),
         source=source_root / SKILLS_DIRNAME / name,
+        source_root=source_root,
         link_path=claude_root / SKILLS_DIRNAME / name,
         state_root=state_root,
         state=state,
@@ -152,6 +158,7 @@ def install_agent(
     return _install_unit(
         unit=agent_unit(name),
         source=source_root / AGENTS_DIRNAME / f"{name}.md",
+        source_root=source_root,
         link_path=claude_root / AGENTS_DIRNAME / f"{name}.md",
         state_root=state_root,
         state=state,
@@ -174,6 +181,7 @@ def install_rule(
     return _install_unit(
         unit=rule_unit(name),
         source=source_root / RULES_DIRNAME / f"{name}.md",
+        source_root=source_root,
         link_path=claude_root / RULES_DIRNAME / f"{name}.md",
         state_root=state_root,
         state=state,
@@ -201,6 +209,7 @@ def install_hook(
     new_state: State = _install_unit(
         unit=hook_unit(name),
         source=source_root / HOOKS_DIRNAME / f"{name}.sh",
+        source_root=source_root,
         link_path=claude_root / HOOKS_DIRNAME / f"{name}.sh",
         state_root=state_root,
         state=state,

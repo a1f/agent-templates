@@ -1,4 +1,5 @@
 import json
+import subprocess
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,11 +28,35 @@ class State:
     # last with a default so existing State(version=..., units=..., requesters=...,
     # extras=...) call sites keep working.
     extra_hashes: dict[str, str] = field(default_factory=dict)
+    # the HEAD sha of the source repo this store was installed from, or "" when the
+    # source was not a git repo; declared last with a default so existing State(...)
+    # call sites keep working.
+    source_sha: str = ""
 
 
 def default_state() -> State:
     """The starting point for a root that has never been installed into."""
     return State(version=STATE_VERSION, units={})
+
+
+def source_sha_of(*, source_root: Path) -> str:
+    """Report which source revision an install came from by reading the source repo's
+    HEAD sha, so a store can record it. Requires source_root to be the repo root
+    itself: returns "" when it holds no ".git", so a non-repo source (a fixture tree
+    nested inside an unrelated repo) never picks up the enclosing repo's sha. Also
+    returns "" when git is unavailable or has no commit yet."""
+    if not (source_root / ".git").exists():
+        return ""
+    try:
+        completed: subprocess.CompletedProcess[str] = subprocess.run(
+            ["git", "-C", str(source_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+    return completed.stdout.strip()
 
 
 def save_state(state: State, root: Path) -> None:
@@ -51,6 +76,10 @@ def save_state(state: State, root: Path) -> None:
     # so no tuple handling is needed unlike requesters/extras above.
     if state.extra_hashes:
         payload["extra_hashes"] = state.extra_hashes
+    # Omit an empty source_sha for the same reason; a store installed from a non-repo
+    # source stamps nothing, so committed e2e goldens stay byte-identical.
+    if state.source_sha:
+        payload["source_sha"] = state.source_sha
     # Write a sibling temp file and atomically swap it in, so a failed write
     # leaves the prior store intact rather than a half-written file.
     with tempfile.NamedTemporaryFile(
@@ -97,12 +126,15 @@ def load_state(root: Path) -> State:
         extra_hashes: dict[str, str] = cast(
             "dict[str, str]", raw.get("extra_hashes", {})
         )
+        # A store written before this field has no "source_sha" key; default to "".
+        source_sha: str = cast("str", raw.get("source_sha", ""))
         return State(
             version=version,
             units=units,
             requesters=requesters,
             extras=extras,
             extra_hashes=extra_hashes,
+            source_sha=source_sha,
         )
     root.mkdir(parents=True, exist_ok=True)
     return default_state()
