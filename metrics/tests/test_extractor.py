@@ -1,5 +1,6 @@
 """Spec: a make-pr session transcript yields a populated run record."""
 
+import random
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Final
@@ -20,6 +21,18 @@ _PLAIN_TRANSCRIPT: Final[Path] = (
 _OTHER_SKILL_TRANSCRIPT: Final[Path] = (
     Path(__file__).parent / "fixtures" / "other_skill_session.jsonl"
 )
+_TOKEN_COST_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "token_cost_session.jsonl"
+)
+
+# Hand-counted from token_cost_session.jsonl: the msg_aaa pair is deduped to one,
+# so only correct dedup (not naive per-line summing) yields these.
+_EXPECTED_TOK_OUTPUT: Final[int] = 360
+_EXPECTED_TOK_CACHE_READ: Final[int] = 2100
+_EXPECTED_TOK_CACHE_CREATION: Final[int] = 1750
+# Hand-priced from the same fixture: fable-5 msgs A (0.027) + B (0.015) + D (0.010);
+# msg_ccc's claude-opus-9-9 is unknown so it bills $0 despite carrying tokens.
+_EXPECTED_COST_USD: Final[float] = 0.052
 
 
 def test_make_pr_transcript_yields_populated_run_record() -> None:
@@ -46,3 +59,40 @@ def test_make_pr_lite_transcript_yields_lite_variant_record() -> None:
 )
 def test_non_make_pr_session_yields_none(transcript_path: Path) -> None:
     assert extract_run(transcript_path=transcript_path) is None
+
+
+def test_token_sums_dedup_repeated_message_ids() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_TOKEN_COST_TRANSCRIPT)
+
+    assert record is not None
+    assert record.tok_output == _EXPECTED_TOK_OUTPUT
+    assert record.tok_cache_read == _EXPECTED_TOK_CACHE_READ
+    assert record.tok_cache_creation == _EXPECTED_TOK_CACHE_CREATION
+
+
+def test_estimated_cost_priced_from_table() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_TOKEN_COST_TRANSCRIPT)
+
+    assert record is not None
+    assert record.est_cost_usd == pytest.approx(_EXPECTED_COST_USD)
+
+
+def test_pricing_version_stamped_in_detail() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_TOKEN_COST_TRANSCRIPT)
+
+    assert record is not None
+    assert record.detail.get("pricing_version") == "2026-06-24"
+
+
+def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:
+    lines: list[str] = _TOKEN_COST_TRANSCRIPT.read_text(encoding="utf-8").splitlines()
+    random.Random(20260624).shuffle(lines)
+    scrambled: Path = tmp_path / "scrambled.jsonl"
+    scrambled.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    record: RunRecord | None = extract_run(transcript_path=scrambled)
+
+    assert record is not None
+    assert record.tok_output == _EXPECTED_TOK_OUTPUT
+    assert record.tok_cache_read == _EXPECTED_TOK_CACHE_READ
+    assert record.tok_cache_creation == _EXPECTED_TOK_CACHE_CREATION
