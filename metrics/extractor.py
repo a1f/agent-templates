@@ -1,5 +1,6 @@
 """Turn a Claude Code session transcript into one run-level metrics row."""
 
+import hashlib
 import json
 import re
 from collections.abc import Iterator
@@ -223,22 +224,28 @@ class RunRecord:
 
 
 def _resolve_skill_version(*, variant: str, claude_root: Path) -> str:
-    """Resolve the skill version stamped for a tracked run, empty when unknown.
+    """Resolve the skill version for a tracked run, empty only when nothing is readable.
 
-    Reads the installer's `at/state.json` and returns its top-level `source_sha`
-    when present as a non-empty string; a missing file or unparsable JSON resolves
-    to "" rather than raising.
+    Prefers the installer's `at/state.json` `source_sha` stamp (a non-empty string);
+    when that stamp is absent or the file is unparsable, falls back to a short content
+    hash of the installed `skills/<variant>/SKILL.md`. A missing or unreadable skill
+    file leaves the result "".
     """
     state_path: Path = claude_root / "at" / "state.json"
     try:
         state: object = json.loads(state_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return ""
+        state = None
     if isinstance(state, dict):
         source_sha: object = state.get("source_sha")
         if isinstance(source_sha, str) and source_sha:
             return source_sha
-    return ""
+    skill_path: Path = claude_root / "skills" / variant / "SKILL.md"
+    try:
+        data: bytes = skill_path.read_bytes()
+    except OSError:
+        return ""
+    return "installed:" + hashlib.sha256(data).hexdigest()[:8]
 
 
 def extract_run(
@@ -251,7 +258,8 @@ def extract_run(
     `_TRACKED_VARIANTS`; `started_at` is the earliest `timestamp` anywhere in the file
     and `active_sec` sums the non-idle gaps between all parsed timestamps. For a
     tracked run, `skill_version` comes from `claude_root/at/state.json`'s
-    `source_sha` stamp, or stays empty when that stamp is absent or unreadable.
+    `source_sha` stamp, falling back to a short content hash of the installed
+    `skills/<variant>/SKILL.md` (see `_resolve_skill_version`).
     """
     line_timestamps: list[datetime] = []
     variant: str | None = None

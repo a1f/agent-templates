@@ -1,5 +1,6 @@
 """Spec: a make-pr session transcript yields a populated run record."""
 
+import hashlib
 import json
 import random
 from datetime import UTC, datetime
@@ -156,6 +157,23 @@ def test_run_record_carries_installer_source_sha_as_skill_version(
 
     assert record is not None
     assert record.skill_version == _SOURCE_SHA
+
+
+def test_skill_version_falls_back_to_installed_skill_content_hash(
+    tmp_path: Path,
+) -> None:
+    skill_bytes: bytes = b"# make-pr\n\nInstalled skill body under test.\n"
+    skill_dir: Path = tmp_path / "skills" / "make-pr"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(skill_bytes)
+
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    expected: str = "installed:" + hashlib.sha256(skill_bytes).hexdigest()[:8]
+    assert record is not None
+    assert record.skill_version == expected
 
 
 def test_token_sums_survive_line_shuffle(tmp_path: Path) -> None:
