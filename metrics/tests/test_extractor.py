@@ -106,6 +106,14 @@ def test_clean_pass_run_outcome_achieved_from_critic_verdict() -> None:
     assert record.n_fix_loops == 0
 
 
+def test_pr_link_taken_from_run_tail_over_earlier_mentions() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_CLEAN_PASS_TRANSCRIPT)
+
+    assert record is not None
+    assert record.pr_url == "https://github.com/a1f/agent-templates/pull/132"
+    assert record.pr_number == 132
+
+
 def test_blocked_run_reports_blocked_outcome_and_reason() -> None:
     record: RunRecord | None = extract_run(transcript_path=_BLOCKED_TRANSCRIPT)
 

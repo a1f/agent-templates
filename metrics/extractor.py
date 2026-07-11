@@ -53,6 +53,15 @@ _UNKNOWN_OUTCOME: Final[str] = "unknown"
 # session, not the run working, so that gap is excluded from active_sec.
 _IDLE_GAP_SEC: Final[float] = 300.0
 
+# The GitHub pull-request URL a run opened. Across a transcript's message text
+# pieces the LAST match in file order wins, so a closing "PR open at ..." line
+# beats an earlier "prior slice" mention; dispatch prompts are already excluded
+# upstream by _text_pieces. The path class stops at prose junk (quotes, spaces,
+# backslashes, parens, angle brackets) so punctuation never leaks into the URL.
+_PR_URL_RE: Final[re.Pattern[str]] = re.compile(
+    r"https://github\.com/[^\s\"'\\()<>]+/pull/(\d+)"
+)
+
 
 def _as_int(*, value: object) -> int:
     """Narrow a usage field to int, treating an absent or non-int value as zero."""
@@ -222,6 +231,8 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     n_fix_loops: int = 0
     outcome: str = ""
     blocked_reason: str | None = None
+    pr_url: str = ""
+    pr_number: int | None = None
     with transcript_path.open(encoding="utf-8") as lines:
         for line in lines:
             entry: dict[str, object] = json.loads(line)
@@ -248,6 +259,11 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
             # Scan content before the usage bookkeeping: a subagent return rides a
             # user line whose message has no `usage` and would otherwise be skipped.
             for piece in _text_pieces(message=message):
+                # A PR link often rides a plain line that is not a structured return,
+                # so capture it before the parse-or-continue below skips such a piece.
+                for pr_match in _PR_URL_RE.finditer(piece):
+                    pr_url = pr_match.group(0)
+                    pr_number = int(pr_match.group(1))
                 parsed: dict[str, object] | None = _parse_return(text=piece)
                 if parsed is None:
                     continue
@@ -298,5 +314,7 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
         n_fix_loops=n_fix_loops,
         outcome=outcome,
         blocked_reason=blocked_reason if blocked_reason is not None else "",
+        pr_number=pr_number,
+        pr_url=pr_url,
         detail={"pricing_version": _PRICING_VERSION},
     )
