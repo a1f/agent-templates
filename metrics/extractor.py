@@ -33,6 +33,10 @@ _CRITIC_VERDICTS: Final[frozenset[str]] = frozenset(
     {"achieved", "partial", "not_achieved"}
 )
 
+# The coder return schemas in this pipeline; both carry status/blocked_reason with
+# identical semantics, so a blocked return from either records the run's friction.
+_CODER_ROLES: Final[frozenset[str]] = frozenset({"coder", "coder-lite"})
+
 
 def _as_int(*, value: object) -> int:
     """Narrow a usage field to int, treating an absent or non-int value as zero."""
@@ -83,7 +87,7 @@ def _leaf_texts(*, value: object) -> Iterator[str]:
 
 
 def _text_pieces(*, message: dict[str, object]) -> Iterator[str]:
-    """Yield every text a critic return could occupy, skipping tool_use inputs."""
+    """Yield every text a subagent return could occupy, skipping tool_use inputs."""
     content: object = message.get("content")
     yield from _leaf_texts(value=content)
     if isinstance(content, list):
@@ -154,6 +158,7 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
     tok_cache_creation: int = 0
     est_cost_usd: float = 0.0
     outcome: str = ""
+    blocked_reason: str | None = None
     with transcript_path.open(encoding="utf-8") as lines:
         for line in lines:
             entry: dict[str, object] = json.loads(line)
@@ -174,15 +179,20 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
             message: object = entry.get("message")
             if not isinstance(message, dict):
                 continue
-            # Scan content before the usage bookkeeping: the critic return rides a
+            # Scan content before the usage bookkeeping: a subagent return rides a
             # user line whose message has no `usage` and would otherwise be skipped.
             for piece in _text_pieces(message=message):
                 parsed: dict[str, object] | None = _parse_return(text=piece)
-                if parsed is None or parsed.get("role") != "critic":
+                if parsed is None:
                     continue
-                verdict: object = parsed.get("verdict")
-                if isinstance(verdict, str) and verdict in _CRITIC_VERDICTS:
-                    outcome = verdict
+                role: object = parsed.get("role")
+                if role == "critic":
+                    verdict: object = parsed.get("verdict")
+                    if isinstance(verdict, str) and verdict in _CRITIC_VERDICTS:
+                        outcome = verdict
+                elif role in _CODER_ROLES and parsed.get("status") == "blocked":
+                    reason: object = parsed.get("blocked_reason")
+                    blocked_reason = reason if isinstance(reason, str) else ""
             usage: object = message.get("usage")
             if not isinstance(usage, dict):
                 continue
@@ -202,6 +212,9 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
             )
     if variant is None:
         return None
+    # A critic verdict wins; absent one, a coder block sets a "blocked" outcome.
+    if outcome == "" and blocked_reason is not None:
+        outcome = "blocked"
     return RunRecord(
         variant=variant,
         session_id=session_id,
@@ -211,5 +224,6 @@ def extract_run(*, transcript_path: Path) -> RunRecord | None:
         tok_cache_creation=tok_cache_creation,
         est_cost_usd=est_cost_usd,
         outcome=outcome,
+        blocked_reason=blocked_reason if blocked_reason is not None else "",
         detail={"pricing_version": _PRICING_VERSION},
     )
