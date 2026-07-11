@@ -228,14 +228,16 @@ def _resolve_skill_version(*, variant: str, claude_root: Path) -> str:
     """Resolve a tracked run's skill version, "unknown" only when nothing is readable.
 
     Prefers the installer's `at/state.json` `source_sha` stamp (a non-empty string);
-    when that stamp is absent or the file is unparsable, falls back to a short content
-    hash of the installed `skills/<variant>/SKILL.md`. A missing or unreadable skill
-    file leaves the result "unknown".
+    when that stamp is absent or the file is unreadable or unparsable, falls back to a
+    short content hash of the installed `skills/<variant>/SKILL.md`. A missing or
+    unreadable skill file leaves the result "unknown".
     """
     state_path: Path = claude_root / "at" / "state.json"
     try:
+        # ValueError subsumes json.JSONDecodeError and the UnicodeDecodeError that
+        # read_text raises on invalid UTF-8, so bad bytes degrade instead of raising.
         state: object = json.loads(state_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+    except (OSError, ValueError):
         state = None
     if isinstance(state, dict):
         source_sha: object = state.get("source_sha")

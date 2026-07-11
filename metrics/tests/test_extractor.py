@@ -176,6 +176,26 @@ def test_skill_version_falls_back_to_installed_skill_content_hash(
     assert record.skill_version == expected
 
 
+def test_corrupt_state_json_degrades_to_installed_hash_instead_of_raising(
+    tmp_path: Path,
+) -> None:
+    state_dir: Path = tmp_path / "at"
+    state_dir.mkdir()
+    (state_dir / "state.json").write_bytes(b'\xff\xfe{"version": 1}')
+    skill_bytes: bytes = b"# make-pr\n\nInstalled skill body under test.\n"
+    skill_dir: Path = tmp_path / "skills" / "make-pr"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_bytes(skill_bytes)
+
+    record: RunRecord | None = extract_run(
+        transcript_path=_MAKE_PR_TRANSCRIPT, claude_root=tmp_path
+    )
+
+    expected: str = "installed:" + hashlib.sha256(skill_bytes).hexdigest()[:8]
+    assert record is not None
+    assert record.skill_version == expected
+
+
 def test_skill_version_is_unknown_when_no_stamp_and_no_installed_skill(
     tmp_path: Path,
 ) -> None:
