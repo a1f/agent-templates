@@ -1,6 +1,7 @@
 """Compose the placement primitives into whole installs, so callers ask for
 "install this skill" rather than wiring stage + link + record themselves."""
 
+from dataclasses import replace
 from pathlib import Path
 from typing import Final, Protocol
 
@@ -74,12 +75,10 @@ def _install_unit(
         }
     )
     sha: str = source_sha_of(source_root=source_root)
-    new_state: State = State(
-        version=state.version,
+    new_state: State = replace(
+        state,
         units={**state.units, installed_id: content_hash},
         requesters=new_requesters,
-        extras=state.extras,
-        extra_hashes=state.extra_hashes,
         source_sha=sha or state.source_sha,
     )
     save_state(new_state, state_root)
@@ -102,8 +101,8 @@ def _uninstall_unit(
     unlink_unit(link_path=link_path)
     unstage_unit(unit=unit, staged_root=state_root / STAGED_DIRNAME)
     removed_id: str = unit_id(unit)
-    new_state: State = State(
-        version=state.version,
+    new_state: State = replace(
+        state,
         units={
             existing_id: content
             for existing_id, content in state.units.items()
@@ -114,8 +113,6 @@ def _uninstall_unit(
             for existing_id, tokens in state.requesters.items()
             if existing_id != removed_id
         },
-        extras=state.extras,
-        extra_hashes=state.extra_hashes,
     )
     save_state(new_state, state_root)
     return new_state
@@ -352,57 +349,38 @@ def _drop_requester_token(*, tokens: tuple[str, ...], token: str) -> tuple[str, 
 
 
 def _set_requesters(*, state: State, unit: str, tokens: tuple[str, ...]) -> State:
-    """Replace one unit's requester set on a brand-new immutable State, carrying
-    units, extras, extra hashes, and the other units' requesters forward untouched, so
-    threading a package install never disturbs unrelated bookkeeping."""
-    return State(
-        version=state.version,
-        units=state.units,
-        requesters={**state.requesters, unit: tokens},
-        extras=state.extras,
-        extra_hashes=state.extra_hashes,
-    )
+    """Replace one unit's requester set on a brand-new immutable State, carrying every
+    other field — units, extras, extra hashes, the source stamp, and the other units'
+    requesters — forward untouched, so threading a package install never disturbs
+    unrelated bookkeeping."""
+    return replace(state, requesters={**state.requesters, unit: tokens})
 
 
 def _set_extras(*, state: State, extra: str, tokens: tuple[str, ...]) -> State:
-    """Replace one extra's requester set on a brand-new immutable State, carrying
-    units, requesters, extra hashes, and the other extras forward untouched, so
-    recording one extra never disturbs unrelated bookkeeping — the extras analogue of
-    _set_requesters."""
-    return State(
-        version=state.version,
-        units=state.units,
-        requesters=state.requesters,
-        extras={**state.extras, extra: tokens},
-        extra_hashes=state.extra_hashes,
-    )
+    """Replace one extra's requester set on a brand-new immutable State, carrying every
+    other field — units, requesters, extra hashes, the source stamp, and the other
+    extras — forward untouched, so recording one extra never disturbs unrelated
+    bookkeeping — the extras analogue of _set_requesters."""
+    return replace(state, extras={**state.extras, extra: tokens})
 
 
 def _set_extra_hash(*, state: State, extra: str, content_hash: str) -> State:
     """Replace one extra's recorded content hash on a brand-new immutable State,
-    carrying units, requesters, and the other extras' hashes forward untouched, so
-    recording one extra's hash never disturbs unrelated bookkeeping — the content-hash
-    analogue of _set_extras."""
-    return State(
-        version=state.version,
-        units=state.units,
-        requesters=state.requesters,
-        extras=state.extras,
-        extra_hashes={**state.extra_hashes, extra: content_hash},
-    )
+    carrying every other field — units, requesters, extras, the source stamp, and the
+    other extras' hashes — forward untouched, so recording one extra's hash never
+    disturbs unrelated bookkeeping — the content-hash analogue of _set_extras."""
+    return replace(state, extra_hashes={**state.extra_hashes, extra: content_hash})
 
 
 def _forget_extra(*, state: State, extra: str) -> State:
-    """Drop one extra key entirely from a brand-new immutable State, carrying units,
-    requesters, and the other extras forward untouched, so removing an extra whose last
-    requester is gone never disturbs unrelated bookkeeping — the extras analogue of how
-    the unit loop rebuilds state without the removed unit. Drops both the extra's
-    requester entry and its content-hash entry, so a forgotten extra leaves no orphaned
-    hash behind."""
-    return State(
-        version=state.version,
-        units=state.units,
-        requesters=state.requesters,
+    """Drop one extra key entirely from a brand-new immutable State, carrying every
+    other field — units, requesters, the source stamp, and the other extras — forward
+    untouched, so removing an extra whose last requester is gone never disturbs
+    unrelated bookkeeping — the extras analogue of how the unit loop rebuilds state
+    without the removed unit. Drops both the extra's requester entry and its
+    content-hash entry, so a forgotten extra leaves no orphaned hash behind."""
+    return replace(
+        state,
         extras={
             relpath: tokens
             for relpath, tokens in state.extras.items()

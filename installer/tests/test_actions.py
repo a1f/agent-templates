@@ -178,6 +178,70 @@ def test_install_from_plain_source_root_writes_state_without_source_sha_key(
     assert "source_sha" not in payload
 
 
+def test_source_sha_stamp_survives_uninstall_state_write(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    for skill_name in ("alpha", "beta"):
+        skill_source: Path = source_root / "skills" / skill_name
+        skill_source.mkdir(parents=True)
+        (skill_source / "SKILL.md").write_text(
+            f"# {skill_name} Skill\n", encoding="utf-8"
+        )
+
+    # Make the source root a real git repo and commit it, so install has a HEAD to
+    # stamp. The -c config flags keep the commit independent of any global git config.
+    subprocess.run(["git", "init"], cwd=source_root, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "add", "-A"], cwd=source_root, check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "x"],
+        cwd=source_root,
+        check=True,
+        capture_output=True,
+    )
+    head: subprocess.CompletedProcess[str] = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=source_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    expected_sha: str = head.stdout.strip()
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+
+    # Install two skills so the store still holds a unit after one is removed; the
+    # install stamps the source repo's HEAD sha into the persisted store.
+    state_after_alpha: State = install_skill(
+        name="alpha",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=default_state(),
+    )
+    state_after_beta: State = install_skill(
+        name="beta",
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_alpha,
+    )
+
+    uninstall_skill(
+        name="beta",
+        state_root=state_root,
+        claude_root=claude_root,
+        state=state_after_beta,
+    )
+
+    # Uninstalling one unit rewrites the store; that rewrite must carry the stamp
+    # forward rather than silently dropping it.
+    assert load_state(state_root).source_sha == expected_sha
+
+
 def test_install_skill_preserves_existing_requesters_of_other_units(
     tmp_path: Path,
 ) -> None:
