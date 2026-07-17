@@ -10,6 +10,9 @@ from itertools import pairwise
 from pathlib import Path
 from typing import Final
 
+from constants import MAIN_ROLE
+from ttypes import RoleUsage
+
 _TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr", "make-pr-lite"})
 _DEFAULT_CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
 _UNKNOWN_SKILL_VERSION: Final[str] = "unknown"
@@ -99,6 +102,98 @@ def _message_cost_usd(*, usage: dict[str, object], model: str) -> float:
     )
     output: int = _as_int(value=usage.get("output_tokens"))
     return billed_input * input_per_tok + output * output_per_tok
+
+
+def _line_role(*, entry: dict[str, object]) -> str:
+    """Name the role a transcript line's usage belongs to, defaulting to the run."""
+    agent: object = entry.get("attributionAgent")
+    return agent if isinstance(agent, str) else MAIN_ROLE
+
+
+def _accumulate_usage(
+    *,
+    message: dict[str, object],
+    role: str,
+    usage_by_role: dict[str, RoleUsage],
+    seen_message_ids: set[str],
+) -> RoleUsage | None:
+    """Fold one first-seen message into its role bucket and return that contribution.
+
+    This is the single place usage is priced and summed, and the single place global
+    dedup is decided: a message with no usage, or an id already counted (re-emitted or
+    shared between files), adds nothing and returns None. The returned bucket lets a
+    caller fold the same first-seen contribution into a second total (e.g. a
+    per-dispatch tally) without recounting it.
+    """
+    usage: object = message.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    message_id: object = message.get("id")
+    if isinstance(message_id, str):
+        if message_id in seen_message_ids:
+            return None
+        seen_message_ids.add(message_id)
+    model: object = message.get("model")
+    contribution: RoleUsage = RoleUsage(
+        tok_output=_as_int(value=usage.get("output_tokens")),
+        tok_cache_read=_as_int(value=usage.get("cache_read_input_tokens")),
+        tok_cache_creation=_as_int(value=usage.get("cache_creation_input_tokens")),
+        est_cost_usd=_message_cost_usd(
+            usage=usage, model=model if isinstance(model, str) else ""
+        ),
+    )
+    usage_by_role.setdefault(role, RoleUsage()).add(other=contribution)
+    return contribution
+
+
+def _accumulate_sidechains(
+    *,
+    transcript_path: Path,
+    usage_by_role: dict[str, RoleUsage],
+    seen_message_ids: set[str],
+) -> list[dict[str, object]]:
+    """Fold each sidechain's usage into its role bucket and return one dispatch entry
+    per sidechain file, ordered by file name.
+
+    One read per file feeds both the shared role buckets and that file's own dispatch
+    tally under the same global dedup, so a re-emitted message counts once in each.
+    Sidechain lines feed ONLY the token/cost/role/dispatch accounting; the outcome,
+    PR-link, fix-loop, timestamp, and variant scans stay derived from the main
+    transcript alone. A missing `<stem>/subagents/` directory means the run dispatched
+    none, so the returned list is empty.
+    """
+    sidechain_dir: Path = transcript_path.parent / transcript_path.stem / "subagents"
+    if not sidechain_dir.is_dir():
+        return []
+    dispatches: list[dict[str, object]] = []
+    for path in sorted(sidechain_dir.glob("agent-*.jsonl")):
+        agent: str = MAIN_ROLE
+        totals: RoleUsage = RoleUsage()
+        with path.open(encoding="utf-8") as lines:
+            for line in lines:
+                entry: dict[str, object] = json.loads(line)
+                message: object = entry.get("message")
+                if not isinstance(message, dict):
+                    continue
+                agent = _line_role(entry=entry)
+                contribution: RoleUsage | None = _accumulate_usage(
+                    message=message,
+                    role=agent,
+                    usage_by_role=usage_by_role,
+                    seen_message_ids=seen_message_ids,
+                )
+                if contribution is not None:
+                    totals.add(other=contribution)
+        dispatches.append(
+            {
+                "agent": agent,
+                "tok_output": totals.tok_output,
+                "tok_cache_read": totals.tok_cache_read,
+                "tok_cache_creation": totals.tok_cache_creation,
+                "est_cost_usd": totals.est_cost_usd,
+            }
+        )
+    return dispatches
 
 
 def _leaf_texts(*, value: object) -> Iterator[str]:
@@ -270,10 +365,7 @@ def extract_run(
     session_id: str = ""
     seen_message_ids: set[str] = set()
     seen_dispatch_ids: set[str] = set()
-    tok_output: int = 0
-    tok_cache_read: int = 0
-    tok_cache_creation: int = 0
-    est_cost_usd: float = 0.0
+    usage_by_role: dict[str, RoleUsage] = {}
     n_fix_loops: int = 0
     outcome: str = ""
     blocked_reason: str | None = None
@@ -340,25 +432,23 @@ def extract_run(
                 elif dispatch_id not in seen_dispatch_ids:
                     seen_dispatch_ids.add(dispatch_id)
                     n_fix_loops += 1
-            usage: object = message.get("usage")
-            if not isinstance(usage, dict):
-                continue
-            message_id: object = message.get("id")
-            if isinstance(message_id, str):
-                if message_id in seen_message_ids:
-                    continue
-                seen_message_ids.add(message_id)
-            tok_output += _as_int(value=usage.get("output_tokens"))
-            tok_cache_read += _as_int(value=usage.get("cache_read_input_tokens"))
-            tok_cache_creation += _as_int(
-                value=usage.get("cache_creation_input_tokens")
-            )
-            model: object = message.get("model")
-            est_cost_usd += _message_cost_usd(
-                usage=usage, model=model if isinstance(model, str) else ""
+            # Usage accounting comes last: role is the line's attributionAgent (the
+            # main transcript carries none, so its usage lands in the "main" bucket).
+            _accumulate_usage(
+                message=message,
+                role=_line_role(entry=entry),
+                usage_by_role=usage_by_role,
+                seen_message_ids=seen_message_ids,
             )
     if variant is None:
         return None
+    # Sidechains feed only this per-role usage accounting and the per-dispatch list,
+    # after the main transcript so its message ids are already seen for global dedup.
+    dispatches: list[dict[str, object]] = _accumulate_sidechains(
+        transcript_path=transcript_path,
+        usage_by_role=usage_by_role,
+        seen_message_ids=seen_message_ids,
+    )
     # A critic verdict wins; absent one a coder block records "blocked", and a run
     # with neither signal degrades to "unknown" rather than an empty outcome.
     if outcome == "":
@@ -367,6 +457,21 @@ def extract_run(
     skill_version: str = _resolve_skill_version(
         variant=variant, claude_root=claude_root
     )
+    # The per-role buckets are the single source of truth: each record total is their
+    # sum, so every field's total equals the sum across roles by construction.
+    roles_detail: dict[str, dict[str, object]] = {
+        role: {
+            "tok_output": totals.tok_output,
+            "tok_cache_read": totals.tok_cache_read,
+            "tok_cache_creation": totals.tok_cache_creation,
+            "est_cost_usd": totals.est_cost_usd,
+        }
+        for role, totals in usage_by_role.items()
+    }
+    tok_output: int = sum(t.tok_output for t in usage_by_role.values())
+    tok_cache_read: int = sum(t.tok_cache_read for t in usage_by_role.values())
+    tok_cache_creation: int = sum(t.tok_cache_creation for t in usage_by_role.values())
+    est_cost_usd: float = sum((t.est_cost_usd for t in usage_by_role.values()), 0.0)
     return RunRecord(
         variant=variant,
         skill_version=skill_version,
@@ -377,10 +482,15 @@ def extract_run(
         tok_cache_read=tok_cache_read,
         tok_cache_creation=tok_cache_creation,
         est_cost_usd=est_cost_usd,
+        n_dispatches=len(dispatches),
         n_fix_loops=n_fix_loops,
         outcome=outcome,
         blocked_reason=blocked_reason if blocked_reason is not None else "",
         pr_number=pr_number,
         pr_url=pr_url,
-        detail={"pricing_version": _PRICING_VERSION},
+        detail={
+            "pricing_version": _PRICING_VERSION,
+            "roles": roles_detail,
+            "dispatches": dispatches,
+        },
     )

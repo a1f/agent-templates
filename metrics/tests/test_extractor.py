@@ -38,6 +38,9 @@ _FIX_LOOP_TRANSCRIPT: Final[Path] = (
 _ROLELESS_CRITIC_TRANSCRIPT: Final[Path] = (
     Path(__file__).parent / "fixtures" / "roleless_critic_session.jsonl"
 )
+_DISPATCH_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "dispatch_session.jsonl"
+)
 
 # Hand-counted from token_cost_session.jsonl: the msg_aaa pair is deduped to one,
 # so only correct dedup (not naive per-line summing) yields these.
@@ -53,6 +56,65 @@ _EXPECTED_ACTIVE_SEC: Final[float] = 160.0
 
 # A fixed 40-hex commit sha the installer stamps into state.json as "source_sha".
 _SOURCE_SHA: Final[str] = "0123abcd4567ef890123abcd4567ef890123abcd"
+
+# Hand-counted per-role breakdown of dispatch_session.jsonl and its subagents/
+# sidechains. The main transcript carries no attributionAgent, so both main messages
+# fall in "main"; each sidechain message's attributionAgent is its role, so agent-a2
+# and agent-a3 (both "worker-coder") merge into one bucket. agent-a1 re-emits msg_s1
+# on two lines with identical usage, so correct dedup by message.id counts it once.
+# Costs bill cache_read at 0.1x and cache_creation at 1.25x the input rate (no
+# cache_creation breakdown given), plus output at the output rate: fable-5 is 10/50
+# and opus-4-8 is 5/25 USD per MTok. Summing any field across the three roles
+# reproduces the record's total for that field.
+_EXPECTED_ROLES: Final[dict[str, dict[str, object]]] = {
+    "main": {
+        "tok_output": 30,
+        "tok_cache_read": 600,
+        "tok_cache_creation": 300,
+        "est_cost_usd": pytest.approx(0.0059),
+    },
+    "tdd-runner": {
+        "tok_output": 8,
+        "tok_cache_read": 100,
+        "tok_cache_creation": 40,
+        "est_cost_usd": pytest.approx(0.0015),
+    },
+    "worker-coder": {
+        "tok_output": 18,
+        "tok_cache_read": 180,
+        "tok_cache_creation": 100,
+        "est_cost_usd": pytest.approx(0.00207),
+    },
+}
+
+# Hand-counted per-dispatch usage: one entry per sidechain file in file-name order
+# (agent-a1, then agent-a2, then agent-a3). Each entry sums only that file's own
+# deduped messages, so agent-a1's twice-emitted msg_s1 counts once. Costs use the same
+# rates as _EXPECTED_ROLES (cache_read 0.1x and cache_creation 1.25x the input rate,
+# output at the output rate; fable-5 is 10/50 and opus-4-8 is 5/25 USD per MTok).
+_EXPECTED_DISPATCHES: Final[list[dict[str, object]]] = [
+    {
+        "agent": "tdd-runner",
+        "tok_output": 8,
+        "tok_cache_read": 100,
+        "tok_cache_creation": 40,
+        "est_cost_usd": pytest.approx(0.0015),
+    },
+    {
+        "agent": "worker-coder",
+        "tok_output": 12,
+        "tok_cache_read": 120,
+        "tok_cache_creation": 80,
+        "est_cost_usd": pytest.approx(0.00116),
+    },
+    {
+        "agent": "worker-coder",
+        "tok_output": 6,
+        "tok_cache_read": 60,
+        "tok_cache_creation": 20,
+        "est_cost_usd": pytest.approx(0.00091),
+    },
+]
 
 
 def test_make_pr_transcript_yields_populated_run_record() -> None:
@@ -445,3 +507,30 @@ def test_fix_loops_deduped_by_dispatch_identity(tmp_path: Path) -> None:
 
     assert record is not None
     assert record.n_fix_loops == 2
+
+
+def test_tokens_partition_by_role_across_sidechains_with_nothing_dropped() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_DISPATCH_TRANSCRIPT)
+
+    assert record is not None
+    roles: object = record.detail.get("roles")
+    assert roles == _EXPECTED_ROLES
+    assert isinstance(roles, dict)
+    assert record.tok_output == sum(bucket["tok_output"] for bucket in roles.values())
+    assert record.tok_cache_read == sum(
+        bucket["tok_cache_read"] for bucket in roles.values()
+    )
+    assert record.tok_cache_creation == sum(
+        bucket["tok_cache_creation"] for bucket in roles.values()
+    )
+    assert record.est_cost_usd == pytest.approx(
+        sum(bucket["est_cost_usd"] for bucket in roles.values())
+    )
+
+
+def test_dispatches_listed_one_per_sidechain_file_in_name_order() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_DISPATCH_TRANSCRIPT)
+
+    assert record is not None
+    assert record.n_dispatches == 3
+    assert record.detail.get("dispatches") == _EXPECTED_DISPATCHES
