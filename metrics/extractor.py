@@ -8,7 +8,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from itertools import pairwise
 from pathlib import Path
-from typing import Final, Self
+from typing import Final
+
+from constants import MAIN_ROLE
+from ttypes import RoleUsage
 
 _TRACKED_VARIANTS: Final[frozenset[str]] = frozenset({"make-pr", "make-pr-lite"})
 _DEFAULT_CLAUDE_ROOT: Final[Path] = Path.home() / ".claude"
@@ -101,41 +104,19 @@ def _message_cost_usd(*, usage: dict[str, object], model: str) -> float:
     return billed_input * input_per_tok + output * output_per_tok
 
 
-# A usage-bearing line's `attributionAgent` names the subagent role it belongs to;
-# a main-transcript line carries none, so its usage is attributed to the run itself.
-_MAIN_ROLE: Final[str] = "main"
-
-
-@dataclass
-class _RoleUsage:
-    """Running token and cost totals for a set of attributed messages."""
-
-    tok_output: int = 0
-    tok_cache_read: int = 0
-    tok_cache_creation: int = 0
-    est_cost_usd: float = 0.0
-
-    def add(self, *, other: Self) -> None:
-        """Fold another total in so one contribution can feed several tallies."""
-        self.tok_output += other.tok_output
-        self.tok_cache_read += other.tok_cache_read
-        self.tok_cache_creation += other.tok_cache_creation
-        self.est_cost_usd += other.est_cost_usd
-
-
 def _line_role(*, entry: dict[str, object]) -> str:
     """Name the role a transcript line's usage belongs to, defaulting to the run."""
     agent: object = entry.get("attributionAgent")
-    return agent if isinstance(agent, str) else _MAIN_ROLE
+    return agent if isinstance(agent, str) else MAIN_ROLE
 
 
 def _accumulate_usage(
     *,
     message: dict[str, object],
     role: str,
-    usage_by_role: dict[str, _RoleUsage],
+    usage_by_role: dict[str, RoleUsage],
     seen_message_ids: set[str],
-) -> _RoleUsage | None:
+) -> RoleUsage | None:
     """Fold one first-seen message into its role bucket and return that contribution.
 
     This is the single place usage is priced and summed, and the single place global
@@ -153,7 +134,7 @@ def _accumulate_usage(
             return None
         seen_message_ids.add(message_id)
     model: object = message.get("model")
-    contribution: _RoleUsage = _RoleUsage(
+    contribution: RoleUsage = RoleUsage(
         tok_output=_as_int(value=usage.get("output_tokens")),
         tok_cache_read=_as_int(value=usage.get("cache_read_input_tokens")),
         tok_cache_creation=_as_int(value=usage.get("cache_creation_input_tokens")),
@@ -161,14 +142,14 @@ def _accumulate_usage(
             usage=usage, model=model if isinstance(model, str) else ""
         ),
     )
-    usage_by_role.setdefault(role, _RoleUsage()).add(other=contribution)
+    usage_by_role.setdefault(role, RoleUsage()).add(other=contribution)
     return contribution
 
 
 def _accumulate_sidechains(
     *,
     transcript_path: Path,
-    usage_by_role: dict[str, _RoleUsage],
+    usage_by_role: dict[str, RoleUsage],
     seen_message_ids: set[str],
 ) -> list[dict[str, object]]:
     """Fold each sidechain's usage into its role bucket and return one dispatch entry
@@ -186,8 +167,8 @@ def _accumulate_sidechains(
         return []
     dispatches: list[dict[str, object]] = []
     for path in sorted(sidechain_dir.glob("agent-*.jsonl")):
-        agent: str = _MAIN_ROLE
-        totals: _RoleUsage = _RoleUsage()
+        agent: str = MAIN_ROLE
+        totals: RoleUsage = RoleUsage()
         with path.open(encoding="utf-8") as lines:
             for line in lines:
                 entry: dict[str, object] = json.loads(line)
@@ -195,7 +176,7 @@ def _accumulate_sidechains(
                 if not isinstance(message, dict):
                     continue
                 agent = _line_role(entry=entry)
-                contribution: _RoleUsage | None = _accumulate_usage(
+                contribution: RoleUsage | None = _accumulate_usage(
                     message=message,
                     role=agent,
                     usage_by_role=usage_by_role,
@@ -384,7 +365,7 @@ def extract_run(
     session_id: str = ""
     seen_message_ids: set[str] = set()
     seen_dispatch_ids: set[str] = set()
-    usage_by_role: dict[str, _RoleUsage] = {}
+    usage_by_role: dict[str, RoleUsage] = {}
     n_fix_loops: int = 0
     outcome: str = ""
     blocked_reason: str | None = None
