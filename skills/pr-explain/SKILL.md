@@ -149,12 +149,13 @@ Maintain exactly one marker-delimited block in the PR description:
 ### The story of this PR
 <the bottom-line chapter, verbatim — three sentences>
 
-**[Read the explainer](<artifact-url>)** · map: <n> changed components, <m> untouched neighbors
+**[Read the explainer](<artifact-url>)**<map tail — only when the page has a map>
 <!-- pr-explain:end -->
 ```
 
 - Read the current body (`gh pr view --json body`), remove any existing block between
   the markers, append the fresh block, write back with `gh pr edit --body-file`.
+- The map tail (` · map: <n> changed components, <m> untouched neighbors`) is emitted only when the page includes the map chapter; a non-structural PR's teaser ends at the link.
 - Never touch prose outside the markers. If the body is empty, the block is the body.
 
 ## Report

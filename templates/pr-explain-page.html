@@ -1,6 +1,9 @@
 <!-- pr-explain page skeleton. The skill fills every SLOT comment and deletes unused
      optional sections. Tokens and classes are the contract with the skill's Phase 4:
-     keep names stable. Self-contained: no external requests. -->
+     keep names stable. Self-contained: no external requests.
+     Deliberately a fragment (no DOCTYPE/head/meta): the Artifact publisher wraps the
+     file in its own doctype + head skeleton (charset and viewport included), so the
+     template must not declare them — do not "fix" this. -->
 <title><!-- SLOT: PR #N — imperative title --></title>
 <style>
   :root {
