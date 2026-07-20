@@ -154,7 +154,7 @@ Maintain exactly one marker-delimited block in the PR description:
 ```
 
 - Read the current body (`gh pr view --json body`), remove any existing block between
-  the markers, append the fresh block, write back with `gh pr edit --body-file`.
+  the markers, append the fresh block, write back with `gh pr edit --body-file`. If that fails on a GraphQL projectCards deprecation error (a gh CLI quirk on repos with classic projects), write the same body with `gh api repos/<owner>/<repo>/pulls/<N> -X PATCH -F body=@<file>` instead.
 - The map tail (` · map: <n> changed components, <m> untouched neighbors`) is emitted only when the page includes the map chapter; a non-structural PR's teaser ends at the link.
 - Never touch prose outside the markers. If the body is empty, the block is the body.
 
