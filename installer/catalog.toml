@@ -48,6 +48,10 @@ name = "pr-breakdown"
 
 [[units]]
 kind = "skill"
+name = "pr-explain"
+
+[[units]]
+kind = "skill"
 name = "pr-make"
 
 [[units]]
@@ -163,10 +167,19 @@ units = [
 name = "pr-ops"
 units = [
   "skill/pr-babysit",
+  "skill/pr-explain",
   "skill/pr-make",
   "skill/pr-make-till-merge",
   "skill/latest-rebase",
 ]
+
+# pr-explain publishes a per-PR explainer page; its page skeleton ships as a package
+# extra so an install is self-contained. The skill degrades to inline styling when
+# installed without it (e.g. via pr-ops alone).
+[[packages]]
+name = "pr-explain"
+units = ["skill/pr-explain"]
+extras = ["templates/pr-explain-page.html"]
 
 # --- bundles (provisional) ---
 [[bundles]]
