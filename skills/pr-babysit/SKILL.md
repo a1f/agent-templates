@@ -18,8 +18,8 @@ Loop:
   5. Reply to question comments (bot: auto; human: only approved reply, in parallel)
   6. If CI failing → read logs, fix failures
   7. If conflicts → rebase/merge main and resolve conflicts
-  8. If changes were made → commit & push, reset idle counter
-  9. If nothing left to fix AND CI green AND no conflicts AND no undecided human comments → [READY TO MERGE]
+  8. If changes were made → commit & push, refresh the PR explainer, reset idle counter
+  9. If nothing left to fix AND CI green AND no conflicts AND no undecided human comments → final explainer refresh, then [READY TO MERGE]
  10. Otherwise → wait interval, repeat
 ```
 
@@ -107,9 +107,12 @@ CONSECUTIVE_READY_COUNT = 0              # must reach 2 before declaring ready
 PUSHED_AT = None                         # set to current time after each push
 EXTERNAL_CHECK_PATIENCE = 10             # separate counter for external check waits
 DECISIONS = load_decisions(PR_NUMBER)    # comment_id → {decision, drafted_reply?, custom?} — persisted across iterations and skill runs
+EXPLAINED_DIFF_SHA = load .claude/pr-babysit/<PR_NUMBER>/explained-diff.sha  # empty if missing
 ```
 
 `DECISIONS` persists at `.claude/pr-babysit/<PR_NUMBER>/decisions.json`. Load on startup (create empty if missing), write after every human gate decision. This survives Ctrl-C, re-invocations, and worksheet round-trips so the user is never asked twice about the same comment.
+
+`EXPLAINED_DIFF_SHA` is the sha256 of `git diff origin/<BASE_BRANCH>...HEAD` at the last `/pr-explain` refresh — the diff the explainer page currently matches. Empty means this run hasn't verified page currency yet. Written after every refresh; persisting it avoids republishing an unchanged page across re-invocations.
 
 Three counters prevent infinite loops:
 - `IDLE_ROUNDS_REMAINING` resets when progress is made (commit & push). Exhaustion means the PR stalled.
@@ -399,6 +402,7 @@ Increment `TOTAL_ITERATIONS`.
 4. **Reset `IDLE_ROUNDS_REMAINING` to `max-rounds`** — progress was made
 5. **Reset `CONSECUTIVE_READY_COUNT` to 0** — changes invalidate any previous ready verdict
 6. **Set `PUSHED_AT` to current time** — starts the post-push cooldown
+7. **Refresh the PR explainer** when the diff materially changed: `DIFF_SHA=$(git diff "origin/$BASE_BRANCH"...HEAD | sha256sum | cut -d' ' -f1)`; if it differs from `EXPLAINED_DIFF_SHA`, invoke the `pr-explain` skill (Skill tool, args: `$PR_NUMBER`), then write the new sha to the state file. The refresh republishes to the teaser's existing artifact URL — same link, updated page. A rebase-only push whose diff content is unchanged hashes the same and skips the refresh.
 
 **Post-push cooldown:** If `PUSHED_AT` is set and less than 60 seconds have elapsed since the push, do NOT evaluate readiness. Checks may not be reported yet. Reset `CONSECUTIVE_READY_COUNT` to 0 and wait for the next iteration. Also: if checks are empty and less than 2 minutes have elapsed since `PUSHED_AT`, treat this as "checks pending" not "no checks configured."
 
@@ -421,7 +425,7 @@ Treat unreplied comments by author type:
 
 **If no changes were needed** AND **no unreplied comments exist** AND **at least one check exists** (not empty) AND **every** check has reached a terminal state AND all required checks pass AND no conflicts:
 → Increment `CONSECUTIVE_READY_COUNT`
-→ If `CONSECUTIVE_READY_COUNT >= 2`: print and exit:
+→ If `CONSECUTIVE_READY_COUNT >= 2`: recompute `DIFF_SHA`; if it differs from `EXPLAINED_DIFF_SHA`, invoke `pr-explain` once more and store the sha — the page must match the final diff. Then print and exit:
 ```
 [READY TO MERGE] <PR_URL>
 ```
@@ -492,3 +496,6 @@ Otherwise:
 | Detecting bots by login suffix only | Check all three: `user.type == "Bot"`, login ends in `[bot]`, login in the known-bot allowlist. Bots like `cursor-bugbot` don't have the `[bot]` suffix. |
 | Sleeping/looping while waiting for the worksheet | When >5 human comments trigger the slow path, exit the skill — do NOT sleep indefinitely. User re-invokes after editing the file. |
 | Declaring ready while a human comment is `defer` | `defer` is explicitly "decide later" — it blocks readiness. Only `apply` / `push-back` / `dismiss` (and bot completion) clear the readiness check. |
+| Minting a new artifact URL on refresh | /pr-explain reuses the teaser's URL (its Phase 5) — a refresh lands on the same link, or the link reviewers already have goes stale |
+| Skipping the explainer refresh when headless | /pr-explain writes the story as markdown between its PR-body markers on its own — invoke it regardless |
+| Refreshing the explainer every round | Hash the diff; only a changed hash (a material change) or the final READY check warrants a refresh |

@@ -3,7 +3,7 @@ name: make-pr
 description: Use when explicitly asked to run the architect workflow on an already-scoped PR (the /make-pr command) — drives one single-module coding task to done via a deterministic TDD loop: plans behavior slices, dispatches the tdd-runner/worker-coder/reviewer/critic agents, runs the language gates, and logs every subagent call to a per-run JSONL for validation. Not for feature decomposition, direct coding, exploratory fixes, or multi-module planning.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
-allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Agent, TodoWrite
+allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Agent, TodoWrite, Skill
 ---
 
 # make-pr
@@ -253,7 +253,12 @@ After review + critic, choose one:
 - **done** — the step-8 predicate holds. Ship it yourself — never ask the human to confirm:
   branch first if still on the default branch, `git push -u origin <branch>`, then
   `gh pr create` against the default branch (or the task-named target), referencing the
-  task/issue in the body, and report the PR URL.
+  task/issue in the body, and report the PR URL. After reporting the URL, invoke the
+  `pr-explain` skill (Skill tool, args: the new PR number) — it publishes the explainer page
+  from the evidence handoff this run just wrote and maintains the teaser in the PR body. Invoke
+  it even when the Artifact tool is unavailable (headless/CI): it degrades to writing the story
+  as markdown into the PR body on its own. A pr-explain failure goes in the final summary; it
+  never reopens Done.
 - **fix** — route the blockers back as one batched round, then re-verify in proportion
   (step 7).
 - **stop / re-scope** — mis-scoped, blocked, or spans modules; report up with why. Only
