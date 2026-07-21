@@ -61,13 +61,16 @@ gh pr checks <N> || true
   `gh issue view <N> --json title,body`. The problem chapter comes from there — the
   slice/PR row the body names, else the issue's headline problem — not from the diff.
   None referenced → derive it from the PR body and diff, and say so.
-- **Evidence**: look in `<target_repo>/.v1-runs/` for files whose stem is the head
-  branch with `/`→`_`: `<slug>.jsonl` (run log), `<slug>.tdd-runner.json` (RED witness),
-  `<slug>.coder.json`, `<slug>.reviewer.json`, `<slug>.critic.json`. Never invent
-  evidence: without those files, the proof chapter degrades to `gh pr checks` plus the
-  tests visible in the diff. Checks empty too → cite the diff's test files. Gate numbers
-  claimed in the PR body appear only attributed ("PR body reports: pytest 18 passed"),
-  never as verified chips.
+- **Evidence**: with the head branch slugged (`/` and whitespace → `_`), read
+  `<target_repo>/.v1-runs/evidence/<slug>/evidence.json` — the make-pr/-lite handoff:
+  `behaviors[]` with RED and GREEN witnesses, `gates[]` with the run's real gate numbers,
+  `runtime` artifact paths relative to that dir. The proof chapter quotes it verbatim:
+  the RED tag carries `red.key_output` (the witnessed failure reason), the GREEN tag
+  what made it pass plus `+<lines_added>` lines, one gate chip per `gates[]` row from
+  its `key_output`. Never invent evidence: without that file, the proof chapter degrades
+  to `gh pr checks` plus the tests visible in the diff. Checks empty too → cite the
+  diff's test files. Gate numbers claimed in the PR body appear only attributed
+  ("PR body reports: pytest 18 passed"), never as verified chips.
 
 ## Phase 2 — Understand (before writing a word)
 
