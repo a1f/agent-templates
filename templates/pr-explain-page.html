@@ -1,10 +1,11 @@
-<!-- pr-explain page skeleton. The skill fills every SLOT comment and deletes unused
-     optional sections. Tokens and classes are the contract with the skill's Phase 4:
+<!-- pr-explain page skeleton. The skill fills every SLOT comment and deletes the whole
+     .chapter div of any dropped chapter (the map chapter additionally requires a
+     structural PR). Tokens and classes are the contract with the skill's Phase 4:
      keep names stable. Self-contained: no external requests.
      Deliberately a fragment (no DOCTYPE/head/meta): the Artifact publisher wraps the
      file in its own doctype + head skeleton (charset and viewport included), so the
      template must not declare them — do not "fix" this. -->
-<title><!-- SLOT: PR #N — imperative title --></title>
+<title><!-- SLOT: PR #N — imperative title, ≤ 8 words --></title>
 <style>
   :root {
     --paper: #F8F8F5; --card: #FFFFFF; --ink: #202723; --ink-2: #59635D; --ink-3: #8B948E;
@@ -70,7 +71,7 @@
   .n-dim rect.box { fill: var(--code-bg); stroke: var(--line-strong); stroke-width: 1; }
   .n-dim text { fill: var(--ink-3); }
   .n-mod .badge { fill: var(--amber); } .n-add .badge { fill: var(--green); }
-  .n-del .badge { fill: var(--red); } .badge-glyph { fill: var(--card); }
+  .n-del .badge { fill: var(--red); } .dmap .badge-glyph { fill: var(--card); }
   .e-old { stroke: var(--line-strong); stroke-width: 1.5; opacity: 0.7; }
   .e-new { stroke: var(--green); stroke-width: 2; }
   .e-del { stroke: var(--red); stroke-width: 1; opacity: 0.6; }
@@ -102,7 +103,6 @@
     border-radius: 999px; background: var(--green-soft); color: var(--green); }
   .gate-chip.fail { background: var(--red-soft); color: var(--red); }
   img.evidence { max-width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; }
-  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 </style>
 
 <div class="wrap">
@@ -111,7 +111,7 @@
   <div class="meta"><!-- SLOT: <span> items: branch, +adds −dels, date --></div>
 
   <div class="bottomline">
-    <span class="clabel">Bottom line</span>
+    <div class="clabel">Bottom line</div>
     <p><!-- SLOT: 40-60 words — what, why, impact, risk --></p>
   </div>
 
@@ -120,7 +120,9 @@
     <div class="clabel">The map</div>
     <p><!-- SLOT: ≤ 40 words — what moved at component level --></p>
     <svg class="dmap" viewBox="0 0 640 200" role="img" aria-label="<!-- SLOT: map summary -->">
-      <!-- SLOT: edges first (lines + arrowhead polygons), then node groups:
+      <!-- SLOT: edges first (<line class="e-new|e-old|e-del">, arrowheads
+           <polygon class="ah-new|ah-old|ah-del"> matching their edge), then node groups.
+           Badge circle + glyph on n-add|n-mod|n-del only; n-dim gets rect + text, no badge:
            <g class="n-add|n-mod|n-del|n-dim">
              <rect class="box" x y width height rx="6"/><text x y>name</text>
              <circle class="badge" cx cy r="8"/><text class="badge-txt badge-glyph" x y>+|~|−</text>
@@ -132,7 +134,7 @@
       <span class="k"><span class="sw del"></span>− removed</span>
       <span class="k"><span class="sw dim"></span>unchanged, 1 hop</span>
     </div>
-    <div class="minimap"><!-- SLOT: one .mm-cell per top-level dir, alphabetical;
+    <div class="minimap"><!-- SLOT: one .mm-cell per git-tracked top-level dir, byte-sorted;
       add class "here" to dirs containing changes --></div>
     <div class="mm-caption">you are here — same strip, same order, every PR</div>
   </div>
@@ -156,7 +158,8 @@
          <div class="wit"><span class="tag red">RED</span><span>…failed first, right reason…</span></div>
          <div class="wit"><span class="tag green">GREEN</span><span>…what made it pass…</span></div>
          Gates: <div class="gate-row"><span class="gate-chip">pytest N passed</span>…</div>
-         Without evidence: CI check results as gate chips (class "fail" for red ones). -->
+         Without evidence: CI check results as gate chips (class "fail" for red ones);
+         PR-body claims appear only attributed in prose, never as chips. -->
   </div>
 
   <div class="chapter">
