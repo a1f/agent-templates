@@ -36,12 +36,24 @@
                 "green": { "$ref": "#/$defs/green_witness" }
               }
             }
+          },
+          {
+            "$comment": "A non-behavioral row carries no witnesses; kind is behavioral iff the witness pair is present.",
+            "if": { "required": ["kind"], "properties": { "kind": { "const": "non_behavioral" } } },
+            "then": {
+              "properties": {
+                "test": { "type": "null" },
+                "red": { "type": "null" },
+                "green": { "type": "null" }
+              }
+            }
           }
         ]
       }
     },
     "gates": {
       "type": "array",
+      "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,

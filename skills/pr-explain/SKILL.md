@@ -61,7 +61,7 @@ gh pr checks <N> || true
   `gh issue view <N> --json title,body`. The problem chapter comes from there — the
   slice/PR row the body names, else the issue's headline problem — not from the diff.
   None referenced → derive it from the PR body and diff, and say so.
-- **Evidence**: with the head branch slugged `/`→`_`, read
+- **Evidence**: with the head branch slugged (`/` and whitespace → `_`), read
   `<target_repo>/.v1-runs/evidence/<slug>/evidence.json` — the make-pr/-lite handoff:
   `behaviors[]` with RED and GREEN witnesses, `gates[]` with the run's real gate numbers,
   `runtime` artifact paths relative to that dir. The proof chapter quotes it verbatim:

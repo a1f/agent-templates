@@ -74,7 +74,7 @@ Resolve these values before the first dispatch:
   command there: `git`, verification commands, package-manager setup, and gate runs.
 - **run_root**: a writable directory for logs and transient return JSON, defaulting to
   `<target_cwd>/.v1-runs`. Use this for JSONL logs, `<run-id>.<role>.json`, and the
-  `evidence/<run-id>/` handoff (see Evidence handoff); do not write runtime state into `skill_root`.
+  `evidence/<branch-slug>/` handoff (see Evidence handoff); do not write runtime state into `skill_root`.
 - **Base**: use a base named by the user or task spec. Otherwise use `git merge-base HEAD
   origin/main`; if `origin/main` is unavailable, use `git merge-base HEAD main`. If no base
   can be resolved, stop and ask for one.
@@ -93,7 +93,7 @@ Resolve these values before the first dispatch:
 ## Tool boundaries
 
 - Use `Write`/`Edit` only for files under `<run_root>/` (the `<run-id>.jsonl` log, the transient
-  `<run-id>.<role>.json` return files you write for validation, and the `evidence/<run-id>/` handoff). Do not edit production source, tests,
+  `<run-id>.<role>.json` return files you write for validation, and the `evidence/<branch-slug>/` handoff). Do not edit production source, tests,
   rules, or gates directly while acting as architect; route every code or test change to `worker-coder`.
 - Use `Bash` only for `git`, `date`, JSONL validation, the schema validator
   (`~/.claude/at/scripts/validate_return.py`), **re-running a worker's reported verification (e.g. the
@@ -229,8 +229,10 @@ Example rows — a GREEN dispatch and a non-behavioral skip:
 
 ## Evidence handoff (at Done)
 
-At **Done**, before pushing, distill the run into `<run_root>/evidence/<run-id>/evidence.json`
-— the file `/pr-explain` builds its proof chapter from. It restates only runs already witnessed
+At **Done**, before pushing, distill the run into `<run_root>/evidence/<branch-slug>/evidence.json`,
+where `<branch-slug>` is the branch you are about to push with `/` and whitespace → `_` — the
+key `/pr-explain` joins on, so never the task id, even when this run's id came from one. It is
+the file `/pr-explain` builds its proof chapter from, and restates only runs already witnessed
 in your JSONL log and the agents' returns, never new claims:
 
 - `branch`: the branch you are about to push; `pipeline`: `"make-pr"`.
@@ -243,10 +245,10 @@ in your JSONL log and the agents' returns, never new claims:
 - one `gates[]` entry per gate in the final green gate pass, `key_output` carrying the
   real numbers ("18 passed in 0.42s"), never a summary.
 - `runtime`: paths relative to the evidence dir of any runtime evidence (screenshots, e2e
-  transcripts) you copy into `<run_root>/evidence/<run-id>/runtime/`; `[]` when none.
+  transcripts) you copy into `<run_root>/evidence/<branch-slug>/runtime/`; `[]` when none.
 
 Validate it like any agent return —
-`uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/evidence.schema.json <run_root>/evidence/<run-id>/evidence.json`
+`uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/evidence.schema.json <run_root>/evidence/<branch-slug>/evidence.json`
 — a failing file blocks the push: fix the file, never the schema.
 
 ## Maintaining the task table
