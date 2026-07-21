@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "evidence.schema.json",
   "title": "Run evidence handoff",
-  "$comment": "Written by make-pr / make-pr-lite at Done to <run_root>/evidence/<run-id>/evidence.json; read by pr-explain to build the proof chapter. A distillation of runs the pipeline already witnessed, never new claims.",
+  "$comment": "Written by make-pr / make-pr-lite at Done to <run_root>/evidence/<branch-slug>/evidence.json; read by pr-explain to build the proof chapter. A distillation of runs the pipeline already witnessed, never new claims.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "branch", "pipeline", "behaviors", "gates", "runtime"],
