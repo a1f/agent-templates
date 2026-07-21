@@ -3,7 +3,7 @@ name: make-pr-lite
 description: Use when explicitly asked to run /make-pr-lite on an already-scoped, low-risk single-module PR. A cheaper alternative to /make-pr — one self-TDD coder, the language gates, then a parallel 3-reviewer panel and a critic, squashed to one commit. Not for feature decomposition, multi-module planning, or high-risk work (filesystem/state mutation, merge/refcount, destructive ops) — route those to /make-pr.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
-allowed-tools: Read, Bash, Agent, TodoWrite
+allowed-tools: Read, Write, Bash, Agent, TodoWrite
 ---
 
 # make-pr-lite
@@ -33,6 +33,8 @@ guarantees that.)
   source; pass rule files as absolute paths (a subagent's cwd is the target repo, so bare names
   won't resolve).
 - **target_cwd** — the repo being changed; run every `git`/gate command there.
+- **run_root** — `<target_cwd>/.v1-runs`, writable; lite keeps no JSONL log — use `Write` only
+  for the `evidence/<run-id>/` handoff at Done (`run-id` = branch with `/` and whitespace → `_`).
 - **base** — user/spec-named → else `git merge-base HEAD origin/main` → else `… main` → else stop
   and ask.
 - **gates** — preflight: pick `~/.claude/at/gates/<lang>.json` by the task's language(s) /
@@ -126,7 +128,17 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
 7. **Done.** When all behaviors and gates are green, no CRITICAL / `>=70` / aggregate blocker, and
    critic `achieved`. **Squash to one commit:**
    `git reset --soft <base> && git commit -m "<conventional subject>"` (no AI attribution).
-   Confirm only boundary files changed (`git diff --name-only <base>...HEAD`). Then ship it
+   Confirm only boundary files changed (`git diff --name-only <base>...HEAD`). Write the evidence
+   handoff `<run_root>/evidence/<run-id>/evidence.json` (schema
+   `~/.claude/at/schemas/evidence.schema.json`; `pipeline: "make-pr-lite"`): one `behaviors[]`
+   entry per slice — `name`, `test`, `files`, `red` verbatim from the coder's return, `kind` =
+   `behavioral` iff `red` is non-null; `green` = your step-4 suite re-run (`cmd`, `exit_code`,
+   `key_output`) with `lines_added` summed from `git diff --numstat <base>...HEAD -- <the
+   slice's non-test files>` — plus one `gates[]` entry per gate in the final green pass with its
+   real `key_output` numbers, and `runtime: []` unless you copied artifacts into `.../runtime/`.
+   Validate it:
+   `uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/evidence.schema.json <that file>`
+   — a failing file blocks the push. Then ship it
    without asking: branch first if still on the default branch, `git push -u origin <branch>`
    (`--force-with-lease` only if this run already pushed the branch before the squash), and
    `gh pr create` against the default branch (or the task-named target), referencing the

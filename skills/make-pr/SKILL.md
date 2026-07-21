@@ -73,8 +73,8 @@ Resolve these values before the first dispatch:
 - **target_cwd**: the absolute path to the repository being changed. Run every target-repo
   command there: `git`, verification commands, package-manager setup, and gate runs.
 - **run_root**: a writable directory for logs and transient return JSON, defaulting to
-  `<target_cwd>/.v1-runs`. Use this for JSONL logs and `<run-id>.<role>.json`; do not write
-  runtime state into `skill_root`.
+  `<target_cwd>/.v1-runs`. Use this for JSONL logs, `<run-id>.<role>.json`, and the
+  `evidence/<run-id>/` handoff (see Evidence handoff); do not write runtime state into `skill_root`.
 - **Base**: use a base named by the user or task spec. Otherwise use `git merge-base HEAD
   origin/main`; if `origin/main` is unavailable, use `git merge-base HEAD main`. If no base
   can be resolved, stop and ask for one.
@@ -92,8 +92,8 @@ Resolve these values before the first dispatch:
 
 ## Tool boundaries
 
-- Use `Write`/`Edit` only for files under `<run_root>/` (the `<run-id>.jsonl` log and the transient
-  `<run-id>.<role>.json` return files you write for validation). Do not edit production source, tests,
+- Use `Write`/`Edit` only for files under `<run_root>/` (the `<run-id>.jsonl` log, the transient
+  `<run-id>.<role>.json` return files you write for validation, and the `evidence/<run-id>/` handoff). Do not edit production source, tests,
   rules, or gates directly while acting as architect; route every code or test change to `worker-coder`.
 - Use `Bash` only for `git`, `date`, JSONL validation, the schema validator
   (`~/.claude/at/scripts/validate_return.py`), **re-running a worker's reported verification (e.g. the
@@ -197,8 +197,8 @@ Resolve these values before the first dispatch:
 8. **Done** → only when: all behaviors green, all gates green, no CRITICAL review finding, no
    unwaived review finding with `score >= 70` (a black-letter language-rule violation always scores
    `>= 70` and is never waivable), critic `achieved`, and any step-7 fix has been re-verified per
-   the proportional rule above. Ship it without asking (see Decisions you own): push the branch,
-   open the PR, and summarize with the PR URL.
+   the proportional rule above. Write the evidence handoff (next section), then ship it without
+   asking (see Decisions you own): push the branch, open the PR, and summarize with the PR URL.
 
 ## JSONL logging contract (mandatory)
 
@@ -226,6 +226,28 @@ Example rows — a GREEN dispatch and a non-behavioral skip:
 {"ts":"2026-06-01T14:32:07Z","run":"feat_cart-discount","step":"GREEN","role":"coder","prompt":"Make tests/test_cart.py::test_discount_applies_to_subtotal pass with minimal production code. mode: green. Module boundary: cart.py, tests/test_cart.py. Base: <merge-base>. Rules: <abs>/design-principles.md, <abs>/python.md, <abs>/tdd.md.","result":"{\"schema_version\":\"v1\",\"role\":\"coder\",\"mode\":\"green\",\"status\":\"done\",\"commit\":{\"sha\":\"a1b2c3d\",\"subject\":\"feat: apply cart discount\"},\"files_changed\":[\"cart.py\",\"tests/test_cart.py\"],\"files_staged\":[\"cart.py\",\"tests/test_cart.py\"],\"commands\":[{\"cmd\":\"uv run pytest tests/test_cart.py::test_discount_applies_to_subtotal\",\"exit_code\":1,\"outcome\":\"fail\",\"key_output\":\"AssertionError: expected Money(135), got Money(150)\"},{\"cmd\":\"uv run pytest tests/test_cart.py::test_discount_applies_to_subtotal\",\"exit_code\":0,\"outcome\":\"pass\",\"key_output\":\"1 passed\"},{\"cmd\":\"uv run pytest\",\"exit_code\":0,\"outcome\":\"pass\",\"key_output\":\"42 passed\"}],\"scope_notes\":\"Implemented only the named behavior.\",\"new_dependencies\":[],\"blocked_reason\":\"\"}","verdict":"pass","files":["cart.py","tests/test_cart.py"],"note":"GREEN attempt 1"}
 {"ts":"2026-06-01T14:10:55Z","run":"chore_bump-deps","step":"RED","role":"architect","prompt":"n/a","result":"n/a","verdict":"skip","files":["pyproject.toml"],"note":"non-behavioral: dependency bump"}
 ```
+
+## Evidence handoff (at Done)
+
+At **Done**, before pushing, distill the run into `<run_root>/evidence/<run-id>/evidence.json`
+— the file `/pr-explain` builds its proof chapter from. It restates only runs already witnessed
+in your JSONL log and the agents' returns, never new claims:
+
+- `branch`: the branch you are about to push; `pipeline`: `"make-pr"`.
+- one `behaviors[]` entry per planned behavior: `name` (the behavior sentence), `kind`,
+  `test` (`test_file::test_name`), `files`, `red` (the RED return's failing run: `cmd`,
+  `exit_code`, `key_output` — the witnessed failure reason), and `green` (the passing run
+  from the GREEN return, plus `lines_added`: insertions in that behavior's GREEN commit,
+  from `git show --shortstat <sha>`; `null` only when not derivable). A non-behavioral
+  task is one entry with `kind: "non_behavioral"` and `test`/`red`/`green` null.
+- one `gates[]` entry per gate in the final green gate pass, `key_output` carrying the
+  real numbers ("18 passed in 0.42s"), never a summary.
+- `runtime`: paths relative to the evidence dir of any runtime evidence (screenshots, e2e
+  transcripts) you copy into `<run_root>/evidence/<run-id>/runtime/`; `[]` when none.
+
+Validate it like any agent return —
+`uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/evidence.schema.json <run_root>/evidence/<run-id>/evidence.json`
+— a failing file blocks the push: fix the file, never the schema.
 
 ## Maintaining the task table
 
