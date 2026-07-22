@@ -3,7 +3,7 @@ name: make-pr-lite
 description: Use when explicitly asked to run /make-pr-lite on an already-scoped, low-risk single-module PR. A cheaper alternative to /make-pr — one self-TDD coder, the language gates, then a parallel 3-reviewer panel and a critic, squashed to one commit. Not for feature decomposition, multi-module planning, or high-risk work (filesystem/state mutation, merge/refcount, destructive ops) — route those to /make-pr.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
-allowed-tools: Read, Write, Bash, Agent, TodoWrite
+allowed-tools: Read, Write, Bash, Agent, TodoWrite, Skill
 ---
 
 # make-pr-lite
@@ -145,7 +145,11 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    without asking: branch first if still on the default branch, `git push -u origin <branch>`
    (`--force-with-lease` only if this run already pushed the branch before the squash), and
    `gh pr create` against the default branch (or the task-named target), referencing the
-   task/issue in the body. Summarize with the PR URL — done needs no human confirmation.
+   task/issue in the body. Summarize with the PR URL — done needs no human confirmation. Then
+   invoke the `pr-explain` skill (Skill tool, args: the new PR number) — it publishes the
+   explainer page from the evidence handoff and maintains the PR-body teaser; headless it
+   degrades to markdown in the body on its own, so never skip it; a failure goes in the summary
+   and never reopens done.
 
 ## Status table
 
