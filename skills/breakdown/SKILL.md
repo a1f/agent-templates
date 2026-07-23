@@ -14,7 +14,7 @@ growing GitHub issue**, pausing at each gate. Composes `to-prd`, `to-issues`, an
 
 Phase 1: to-prd       → creates the issue   (gates: clarify, approve)
 Phase 2: to-issues    → appends slices                 (gate: discuss)
-Phase 3: pr-breakdown → appends PR rows                (gate: approve)
+Phase 3: pr-breakdown → appends PR rows + PR-map artifact (gate: approve)
 ```
 
 Run the phases in order; start each only after the previous reports success.
@@ -36,8 +36,9 @@ Invoke `to-issues` with `--issue=N`. It appends the slice plan and reports
 
 ## Phase 3 — PR breakdown
 
-Invoke `pr-breakdown` with `--issue=N`. It appends the PRs and reports
-`PR breakdown appended to issue #N`. Stop if it reports a declined gate.
+Invoke `pr-breakdown` with `--issue=N`. It appends the PR rows, publishes the
+PR-map artifact, and reports `PR breakdown appended to issue #N` with the map URL —
+relay that URL. Stop if it reports a declined gate.
 
 ## If a gate is declined or a phase fails
 
