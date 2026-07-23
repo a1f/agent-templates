@@ -58,7 +58,7 @@ from reconcile import (
     plan_skill_reconcile,
 )
 from state import State, load_state
-from update import skill_drift
+from update import package_extra_drift, skill_drift
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -259,6 +259,19 @@ def _drift_row(*, name: str, source_root: Path, state_root: Path, state: State) 
     return f"{name} — {_drift_label(drift=drift)}"
 
 
+def _package_extra_drift_row(
+    *, name: str, package: Package, source_root: Path, state: State
+) -> str:
+    """Report whether one installed package's staged extras still match what its install
+    recorded, reading divergence through the shared update.package_extra_drift so the
+    dashboard and an `at update` agree on which extras are current."""
+    drifted: tuple[str, ...] = package_extra_drift(
+        package=package, source_root=source_root, state=state
+    )
+    label: str = "upstream changed" if drifted else "up to date"
+    return f"{name} (extras) — {label}"
+
+
 def status_lines(
     *, catalog: Catalog, state: State, source_root: Path, state_root: Path
 ) -> list[str]:
@@ -278,7 +291,8 @@ def status_lines(
     ]
     for title, rows in grid:
         lines.extend(_section(title=title, rows=rows))
-    # Drift is skills-only, as in update.py: agents/rules/hooks carry no drift wiring.
+    # Drift covers the two things an install stages from source and an update refreshes:
+    # skill bodies and package extras. Agents/rules/hooks carry no drift wiring.
     drift_rows: list[str] = [
         _drift_row(
             name=name, source_root=source_root, state_root=state_root, state=state
@@ -286,9 +300,24 @@ def status_lines(
         for name in list_skills(catalog)
         if skill_unit_id(name) in state.units
     ]
-    # No installed skill has any drift to report, so stand in a placeholder rather than
-    # leave the section a bare title.
-    lines.extend(_section(title="Drift", rows=drift_rows or ["(none installed)"]))
+    extra_drift_rows: list[str] = [
+        _package_extra_drift_row(
+            name=name,
+            package=resolve_package(catalog, name),
+            source_root=source_root,
+            state=state,
+        )
+        for name in list_packages(catalog=catalog)
+        if package_installed(catalog=catalog, name=name, state=state)
+        and resolve_package(catalog, name).extras
+    ]
+    # No installed skill or package extra has any drift to report, so stand in a
+    # placeholder rather than leave the section a bare title.
+    lines.extend(
+        _section(
+            title="Drift", rows=drift_rows + extra_drift_rows or ["(none installed)"]
+        )
+    )
     lines.append(str(source_root))
     return lines
 
