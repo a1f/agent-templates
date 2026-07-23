@@ -116,7 +116,7 @@ The draft leaves Phase 3 only past this gate. Run it in order:
 - **Mechanical gate (always).** `wc -w` each chapter and cut any over budget; `grep` the
   draft for every banned word (the list above) and rewrite each hit. Then, **if `vale` is
   on PATH**, write the draft to a scratch `.md` and run `vale --config
-  ~/.claude/at/templates/pr-explain.vale.ini <draft>.md` (run `vale sync` once first if
+  ~/.claude/at/templates/pr-explain.vale.ini <draft>.md` (run `vale --config ~/.claude/at/templates/pr-explain.vale.ini sync` once first if
   `StylesPath` is empty), rewriting every alert. When `vale` is absent or `vale sync`
   can't reach the registry, degrade to the wc + banned-word checks — note it in the
   report, never fail the run. The banned-word list stays owned by the grep; Vale only adds
@@ -127,7 +127,9 @@ The draft leaves Phase 3 only past this gate. Run it in order:
   reason + impact in the first three sentences. **Concrete & tight** — failing command /
   error / diff before any abstraction; ≤ 25-word sentences; data over adjectives. **Budget
   & scope** — every chapter within budget; one big thing, secondary changes one line each.
-  Below **90** → apply the specific misses as one rewrite pass, then re-score once.
+  Below **90** → apply the specific misses as one rewrite pass, then re-score once. After
+  the rewrite, re-run the banned-word `grep` and per-chapter `wc` — these are hard and must
+  still hold at publish.
 - **Ship-flag.** Still < 90 after the rewrite → publish anyway and record the final score +
   unmet dimensions in the report. Never block the publish or loop a third time.
 
