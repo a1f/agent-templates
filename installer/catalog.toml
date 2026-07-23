@@ -179,11 +179,12 @@ units = [
 
 # pr-explain publishes a per-PR explainer page; its page skeleton ships as a package
 # extra so an install is self-contained. The skill degrades to inline styling when
-# installed without it (e.g. via pr-ops alone).
+# installed without it (e.g. via pr-ops alone). The Vale prose-gate config ships alongside
+# the page skeleton; both degrade gracefully when absent.
 [[packages]]
 name = "pr-explain"
 units = ["skill/pr-explain"]
-extras = ["templates/pr-explain-page.html"]
+extras = ["templates/pr-explain-page.html", "templates/pr-explain.vale.ini"]
 
 # --- bundles (provisional) ---
 [[bundles]]

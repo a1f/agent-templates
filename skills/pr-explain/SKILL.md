@@ -24,6 +24,10 @@ defects.
   delta-map, and minimap classes). If it is missing, still ship: build a single-file HTML
   page with inline CSS following the chapter contract — visual polish degrades, the
   contract does not.
+- **Vale config**: `~/.claude/at/templates/pr-explain.vale.ini`, staged with the page
+  template; it names the write-good / proselint / Google packages the mechanical prose
+  gate runs. Missing, or `vale` not installed → the gate degrades to the wc + banned-word
+  checks.
 - **Page file**: write the filled page to the session scratch directory (never the
   target repo) as `pr-<owner>-<repo>-<number>.html`, owner/repo parsed from the PR's `url`.
 - **Target repo**: the git repo of the working directory; run every `gh`/`git` command there.
@@ -105,8 +109,29 @@ Banned on sight: leverages, robust, seamless, comprehensive, delve, streamlined,
 powerful, simply, ensures, significantly, various, clearly, essentially, "it's worth
 noting", and "should" when describing behavior.
 
-Then verify mechanically: `wc -w` each chapter and cut to budget; grep the draft for
-every banned word and rewrite hits.
+### The bar
+
+The draft leaves Phase 3 only past this gate. Run it in order:
+
+- **Mechanical gate (always).** `wc -w` each chapter and cut any over budget; `grep` the
+  draft for every banned word (the list above) and rewrite each hit. Then, **if `vale` is
+  on PATH**, write the draft to a scratch `.md` and run `vale --config
+  ~/.claude/at/templates/pr-explain.vale.ini <draft>.md` (run `vale --config ~/.claude/at/templates/pr-explain.vale.ini sync` once first if
+  `StylesPath` is empty), rewriting every alert. When `vale` is absent or `vale sync`
+  can't reach the registry, degrade to the wc + banned-word checks — note it in the
+  report, never fail the run. The banned-word list stays owned by the grep; Vale only adds
+  fuzzy prose quality (weasel words, passive voice, wordiness).
+- **Critic pass (inline, one rubric, one loop).** Score the draft 0–100, four dimensions ×
+  0–25: **Evidenced** — every claim cites a hunk / number / gate line / screenshot the
+  page shows; no unevidenced faster / safer / fixed. **Bottom-line-first** — change +
+  reason + impact in the first three sentences. **Concrete & tight** — failing command /
+  error / diff before any abstraction; ≤ 25-word sentences; data over adjectives. **Budget
+  & scope** — every chapter within budget; one big thing, secondary changes one line each.
+  Below **90** → apply the specific misses as one rewrite pass, then re-score once. After
+  the rewrite, re-run the banned-word `grep` and per-chapter `wc` — these are hard and must
+  still hold at publish.
+- **Ship-flag.** Still < 90 after the rewrite → publish anyway and record the final score +
+  unmet dimensions in the report. Never block the publish or loop a third time.
 
 ## Phase 4 — Build
 
@@ -155,4 +180,6 @@ Maintain exactly one marker-delimited block in the PR description:
 ## Report
 
 End with: the artifact URL, total prose word count, chapters emitted vs dropped, map
-included or skipped (with the reason), and the PR whose teaser was updated.
+included or skipped (with the reason), the PR whose teaser was updated, the mechanical
+gate result (Vale alerts fixed, or "vale unavailable — wc + grep only"), and the critic
+score — naming any dimensions left under the bar when the page shipped flagged.
