@@ -1,10 +1,14 @@
 from pathlib import Path
 
-from actions import install_skill
-from catalog import Catalog, Unit, skill_unit_id
+from actions import install_package, install_skill
+from catalog import Catalog, Package, Unit, skill_unit_id
 from hashing import hash_unit
 from state import State, load_state
-from update import update_installed_skills, update_skill
+from update import (
+    update_installed_package_extras,
+    update_installed_skills,
+    update_skill,
+)
 
 
 def test_update_skill_restages_upstream_change_and_refreshes_recorded_hash(
@@ -200,3 +204,138 @@ def test_update_installed_skills_updates_installed_skill_and_skips_uninstalled(
     assert (staged_a / "SKILL.md").read_text(encoding="utf-8") == updated_a
     assert skill_unit_id("demo-b") not in result.units
     assert not staged_b.exists()
+
+
+def test_update_package_extras_stages_newly_declared_extra_for_installed_package(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo\n", encoding="utf-8")
+    extra_source: Path = source_root / "extras" / "thing.txt"
+    extra_source.parent.mkdir(parents=True)
+    extra_source.write_text("staged support file\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    unit: Unit = Unit(kind="skill", name="demo")
+    # Install the package before the extra is declared: the unit lands, no extra staged.
+    before: Catalog = Catalog(
+        units=(unit,),
+        packages=(Package(name="demo-pkg", units=(unit,), extras=()),),
+        bundles=(),
+    )
+    installed: State = install_package(
+        name="demo-pkg",
+        catalog=before,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    # A later PR adds the extra to the already-installed package.
+    after: Catalog = Catalog(
+        units=(unit,),
+        packages=(
+            Package(name="demo-pkg", units=(unit,), extras=("extras/thing.txt",)),
+        ),
+        bundles=(),
+    )
+
+    result: State = update_installed_package_extras(
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        catalog=after,
+        state=installed,
+    )
+
+    staged: Path = state_root / "extras" / "thing.txt"
+    assert staged.read_text(encoding="utf-8") == "staged support file\n"
+    assert result.extra_hashes["extras/thing.txt"] == hash_unit(extra_source)
+    assert load_state(state_root).extra_hashes["extras/thing.txt"] == hash_unit(
+        extra_source
+    )
+    assert "extras/thing.txt" not in installed.extra_hashes
+
+
+def test_update_package_extras_restages_upstream_changed_extra_and_refreshes_hash(
+    tmp_path: Path,
+) -> None:
+    source_root: Path = tmp_path / "repo"
+    skill_source: Path = source_root / "skills" / "demo"
+    skill_source.mkdir(parents=True)
+    (skill_source / "SKILL.md").write_text("# Demo\n", encoding="utf-8")
+    extra_source: Path = source_root / "extras" / "thing.txt"
+    extra_source.parent.mkdir(parents=True)
+    extra_source.write_text("original support file\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    unit: Unit = Unit(kind="skill", name="demo")
+    catalog: Catalog = Catalog(
+        units=(unit,),
+        packages=(
+            Package(name="demo-pkg", units=(unit,), extras=("extras/thing.txt",)),
+        ),
+        bundles=(),
+    )
+    installed: State = install_package(
+        name="demo-pkg",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+    install_hash: str = installed.extra_hashes["extras/thing.txt"]
+
+    # The extra changes upstream after it was installed.
+    extra_source.write_text("revised support file\n", encoding="utf-8")
+
+    result: State = update_installed_package_extras(
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        catalog=catalog,
+        state=installed,
+    )
+
+    staged: Path = state_root / "extras" / "thing.txt"
+    assert staged.read_text(encoding="utf-8") == "revised support file\n"
+    assert result.extra_hashes["extras/thing.txt"] == hash_unit(extra_source)
+    assert result.extra_hashes["extras/thing.txt"] != install_hash
+    assert load_state(state_root).extra_hashes["extras/thing.txt"] == hash_unit(
+        extra_source
+    )
+
+
+def test_update_package_extras_skips_uninstalled_package(tmp_path: Path) -> None:
+    source_root: Path = tmp_path / "repo"
+    extra_source: Path = source_root / "extras" / "thing.txt"
+    extra_source.parent.mkdir(parents=True)
+    extra_source.write_text("must not be adopted\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    unit: Unit = Unit(kind="skill", name="demo")
+    # The catalog declares the package and its extra, but nothing is installed.
+    catalog: Catalog = Catalog(
+        units=(unit,),
+        packages=(
+            Package(name="demo-pkg", units=(unit,), extras=("extras/thing.txt",)),
+        ),
+        bundles=(),
+    )
+
+    result: State = update_installed_package_extras(
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        catalog=catalog,
+        state=State(version=1, units={}),
+    )
+
+    assert not (state_root / "extras" / "thing.txt").exists()
+    assert "extras/thing.txt" not in result.extra_hashes

@@ -47,7 +47,7 @@ from reconcile import (
 )
 from state import State, load_state
 from tui import launch_tui, status_lines
-from update import update_installed_skills
+from update import update_installed_package_extras, update_installed_skills
 
 AT_VERSION: Final[str] = "0.2.0"
 
@@ -85,12 +85,22 @@ def _run_update() -> int:
         subprocess.run(["git", "pull", "--ff-only"], cwd=REPO_ROOT, check=True)
     catalog: Catalog = load_catalog(_catalog_path())
     state: State = load_state(STATE_ROOT)
-    update_installed_skills(
+    updated: State = update_installed_skills(
         source_root=source_root,
         state_root=STATE_ROOT,
         claude_root=CLAUDE_ROOT,
         catalog=catalog,
         state=state,
+    )
+    # Skill bodies and package extras are the two things an install stages from source;
+    # refresh both so a newly declared or upstream-changed extra is re-staged too, not
+    # just skills. Thread the post-skill state so both passes persist one State.
+    update_installed_package_extras(
+        source_root=source_root,
+        state_root=STATE_ROOT,
+        claude_root=CLAUDE_ROOT,
+        catalog=catalog,
+        state=updated,
     )
     return 0
 

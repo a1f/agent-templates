@@ -198,3 +198,41 @@ def test_update_rescues_locally_edited_staged_copy(tmp_path: Path) -> None:
         actual=snapshot_after,
         goldens_dir=GOLDENS_DIR,
     )
+
+
+@pytest.mark.e2e
+def test_update_restages_package_extra_on_upstream_bump(tmp_path: Path) -> None:
+    home: Path = tmp_path / "home"
+    home.mkdir()
+    # A mutable copy of the frozen fixture's rule unit and its schemas extra, so the
+    # test can bump the extra's upstream source between install and update while the
+    # catalog stays frozen — the extras analogue of the skill re-stage scenario above.
+    source_root: Path = tmp_path / "src"
+    shutil.copytree(FIXTURES_DIR / "rules", source_root / "rules")
+    shutil.copytree(FIXTURES_DIR / "schemas", source_root / "schemas")
+    catalog: Path = FIXTURES_DIR / "catalog.toml"
+
+    install_result: subprocess.CompletedProcess[str] = run_at(
+        args=["install", "--package", "demo-pack-extras", "--non-interactive"],
+        home=home,
+        source_root=source_root,
+        catalog=catalog,
+    )
+    assert install_result.returncode == 0, install_result.stderr
+    staged_schema: Path = home / ".claude" / "at" / "schemas" / "demo-schema.json"
+    assert staged_schema.exists(), "install must stage the package's schemas extra"
+
+    # The extra changes upstream after install; `at update` must re-stage it.
+    (source_root / "schemas" / "demo-schema.json").write_text(
+        '{"demo": "bumped"}\n', encoding="utf-8"
+    )
+
+    update_result: subprocess.CompletedProcess[str] = run_at(
+        args=["update"],
+        home=home,
+        source_root=source_root,
+        catalog=catalog,
+    )
+    assert update_result.returncode == 0, update_result.stderr
+
+    assert staged_schema.read_text(encoding="utf-8") == '{"demo": "bumped"}\n'

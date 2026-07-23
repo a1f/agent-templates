@@ -44,6 +44,7 @@ from tui import (
     package_rows,
     rule_rows,
     skill_rows,
+    status_lines,
 )
 
 
@@ -2973,3 +2974,42 @@ def test_uninstall_all_removes_whole_catalog_leaving_empty_install(
     assert not rule_link.exists() and not rule_link.is_symlink()
     assert not hook_link.exists() and not hook_link.is_symlink()
     assert not gates_extra.exists()
+
+
+def test_status_drift_reports_upstream_changed_package_extra(tmp_path: Path) -> None:
+    source_root: Path = tmp_path / "repo"
+    (source_root / "skills" / "demo").mkdir(parents=True)
+    (source_root / "skills" / "demo" / "SKILL.md").write_text(
+        "# demo\n", encoding="utf-8"
+    )
+    extra_source: Path = source_root / "extras" / "thing.txt"
+    extra_source.parent.mkdir(parents=True)
+    extra_source.write_text("original\n", encoding="utf-8")
+
+    state_root: Path = tmp_path / "at"
+    claude_root: Path = tmp_path / "claude"
+    unit: Unit = Unit(kind="skill", name="demo")
+    catalog: Catalog = Catalog(
+        units=(unit,),
+        packages=(
+            Package(name="demo-pkg", units=(unit,), extras=("extras/thing.txt",)),
+        ),
+        bundles=(),
+    )
+    state: State = install_package(
+        name="demo-pkg",
+        catalog=catalog,
+        source_root=source_root,
+        state_root=state_root,
+        claude_root=claude_root,
+        state=State(version=1, units={}),
+    )
+
+    # The extra changes upstream after install, so the dashboard must report it drifted.
+    extra_source.write_text("revised\n", encoding="utf-8")
+
+    lines: list[str] = status_lines(
+        catalog=catalog, state=state, source_root=source_root, state_root=state_root
+    )
+
+    assert "demo-pkg (extras) — upstream changed" in "\n".join(lines)
