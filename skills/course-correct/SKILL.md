@@ -120,8 +120,9 @@ Run them in parallel (one message, many calls); collect the findings.
 **Plan edits** — each an explicit op with a one-line reason, naming the row:
 **ADD** / **REMOVE** / **RE-SCOPE** / **RE-ORDER** a slice (`#n` in Build plan —
 *Demoable as / Mode / Size / Blocked by*) or a PR row (`n.k` in PR breakdown —
-*LOC / Done when*). Rows only, no coder prompts; PRs stay ~100–200 LOC excluding
-tests.
+*What / LOC / Blocked by / Status / Done when*). Rows only, no coder prompts; PRs
+stay ~100–200 LOC excluding tests. Edits here change the table but not its PR-map
+artifact — Phase 6 flags a re-run of `/pr-breakdown` to redraw it.
 
 Always write the rebuilt **Status block** to `status.md` — even on track, since
 Phase 6 advances the checkpoint from it. Keep it flat below its heading (`###` /
@@ -203,6 +204,10 @@ gh issue edit "$ISSUE" --body-file "$OUT" \
   && rm -f "$OUT" body.txt status.md buildplan.md prbreakdown.md report.md \
   && echo "Course-correction applied to #$ISSUE"
 ```
+
+If any **PR breakdown** row changed (added, removed, re-scoped, or re-ordered), tell
+the user its PR-map artifact is now stale and to re-run `/pr-breakdown` to redraw it —
+that skill regenerates the map from the table it just edited.
 
 ## Common mistakes
 

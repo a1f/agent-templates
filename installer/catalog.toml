@@ -167,6 +167,16 @@ units = [
   "skill/course-correct",
 ]
 
+# pr-breakdown publishes a PR-map artifact from the issue's PR table; its page skeleton
+# ships as a package extra so an install is self-contained. A dedicated single-skill
+# package carries the extra (like pr-explain) so the multi-skill breakdown package above
+# stays extra-free; the skill degrades to inline HTML (same chip/edge contract) when
+# installed without it. The planning bundle pulls this in so the flagship path ships it.
+[[packages]]
+name = "pr-breakdown"
+units = ["skill/pr-breakdown"]
+extras = ["templates/pr-breakdown-map.html"]
+
 [[packages]]
 name = "pr-ops"
 units = [
@@ -193,4 +203,4 @@ packages = ["architect-pr", "lite-pr"]
 
 [[bundles]]
 name = "planning"
-packages = ["breakdown"]
+packages = ["breakdown", "pr-breakdown"]
