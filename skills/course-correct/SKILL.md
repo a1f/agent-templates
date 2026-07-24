@@ -121,7 +121,8 @@ Run them in parallel (one message, many calls); collect the findings.
 **ADD** / **REMOVE** / **RE-SCOPE** / **RE-ORDER** a slice (`#n` in Build plan —
 *Demoable as / Mode / Size / Blocked by*) or a PR row (`n.k` in PR breakdown —
 *What / LOC / Blocked by / Status / Done when*). Rows only, no coder prompts; PRs
-stay ~100–200 LOC excluding tests. Edits here change the table but not its PR-map
+stay at ~35 counted lines (added lines excluding tests, lockfiles, and generated
+output) — the size gate refuses over 50 across 3+ files, over 100 across 1–2. Edits here change the table but not its PR-map
 artifact — Phase 6 flags a re-run of `/pr-breakdown` to redraw it.
 
 Always write the rebuilt **Status block** to `status.md` — even on track, since

@@ -31,7 +31,8 @@ vocabulary; respect ADRs.
 Each slice carries a **Demoable as** line (how you'd demo or verify it — if you
 can't write one, it isn't end-to-end), a **Mode** (`AFK` = an agent runs it alone;
 `HITL` = needs the user: design taste, UX, a judgment call), a **Size** (`S`/`M`/`L`,
-a rough feel — real LOC come in pr-breakdown), and **Blocked by**.
+a rough feel — real line counts come in pr-breakdown, which budgets each PR at ~35
+counted lines, so an `L` slice means many PRs, never one big one), and **Blocked by**.
 
 ```markdown
 ## Build plan — vertical slices

@@ -142,7 +142,7 @@ Write `findings.md`, one block per surviving candidate:
 <red flag> — <one-line why it trips>
 Evidence: <callers / dep direction / N sites>
 Before: <interface sketch>   →   After: <interface sketch>
-Effort: <boundaries crossed; slice any >~200 LOC>   ·   Depth: <deep / shallow>
+Effort: <boundaries crossed; slice into ~35-counted-line PRs>   ·   Depth: <deep / shallow>
 ```
 
 Lead each headline with its op and the count it kills. **Gate: nothing is acted on
@@ -160,7 +160,7 @@ op, sketch two *After* options (design it twice). If it buckles, redesign with t
 user before any PR opens. Only then:
 
 - A multi-module reshape (several PRs) → `/breakdown` → PRD → slices → PR rows.
-- A single scoped refactor (one ~100–200 LOC PR) → `/make-pr`.
+- A single scoped refactor (one PR of ~35 counted lines) → `/make-pr`.
 
 Seed the pipeline with the candidate's *target · op · evidence · before→after* so it
 starts test-first from the audit. After handoff, offer to record the new boundary in
