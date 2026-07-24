@@ -36,5 +36,10 @@ pythonpath = ["."]  # import the helper modules under test without a package
 # Coverage is a diagnostic (term-missing), never a gate target — a 100% mandate just
 # manufactures tests to paint branches green. Test behaviour, then read coverage to spot
 # a genuinely untested path; don't write a test solely to colour a line.
-addopts = ["--cov=validate_return", "--cov=check_prompt_schemas", "--cov-report=term-missing"]
+addopts = [
+  "--cov=validate_return",
+  "--cov=check_prompt_schemas",
+  "--cov=dispatch",
+  "--cov-report=term-missing",
+]
 filterwarnings = ["error"]

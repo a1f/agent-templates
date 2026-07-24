@@ -30,7 +30,8 @@ Packages / Skills / Agents / Rules / Hooks, with installed items pre-ticked. See
 |------|-------------|-----------------|--------------------------|
 | `git` ≥ 2.5 | `make-pr`, `pr-babysit`, `latest-rebase` | `brew install git` | `apt install git` |
 | `jq` | Several skills | `brew install jq` | `apt install jq` |
-| `gh` | `make-pr`, `pr-babysit` | `brew install gh` | `apt install gh` |
+| `gh` | `make-pr`, `pr-babysit`, `dispatch` | `brew install gh` | `apt install gh` |
+| `tmux` | `dispatch` (one window per PR) | `brew install tmux` | `apt install tmux` |
 | `uv` | Installer (`at` runs the engine via uv); `scripts/` (agent return-schema checks) | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `claude` CLI | All skills (the runtime) | Claude Code installer | Claude Code installer |
 
@@ -68,6 +69,7 @@ Then pick a workflow from the decision tree below -- e.g. `/pr-make-till-merge` 
 |---|---|---|
 | A finished branch (committed work) | A merged PR | `/pr-make-till-merge` |
 | An open PR | A merged PR | `/pr-babysit` |
+| A plan whose next PRs are unblocked | All of them started at once | `/dispatch` |
 
 ### Other daily tasks
 
@@ -100,6 +102,7 @@ Top-level skills that run full workflows by composing lower-level skills.
 |-------|---------|---------|
 | **make-pr** | `/make-pr` | Drive a scoped task to done via a per-behavior TDD loop (tdd-runner + worker-coder), run gates, then review/critic. Best for high-risk work |
 | **make-pr-lite** | `/make-pr-lite` | Lighter, cheaper sibling of make-pr for low-risk/greenfield PRs: one self-TDD coder + gates + a parallel review panel. Trades the live per-behavior RED witness for a test-form review lens |
+| **dispatch** | `/dispatch` | Start the unblocked PRs from a plan in parallel — approval-gated, then one tmux window per PR, each in its own worktree running an agent on `/make-pr <ref> <PR#>` |
 | **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
 | **improve-architecture** | `/improve-architecture` | Read-only audit of a subsystem's module decomposition — ranks SPLIT/MERGE/EXTRACT/MOVE/DELETE/DEEPEN candidates against `design-principles.md` with traced evidence, gates on your pick, hands off to `/breakdown` or `/make-pr` |
