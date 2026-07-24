@@ -1,8 +1,8 @@
 ---
 name: dispatch
 description: Use when the user wants to start the unblocked PRs from a design doc, issue, or artifact in parallel — one tmux window, worktree, and coding agent per PR — or invokes /dispatch.
-argument-hint: "<issue ref, artifact, or design doc> [--session NAME] [--dry-run]"
-allowed-tools: Read, Write, Bash, Grep, Glob
+argument-hint: "[<issue ref, artifact, or design doc>] [--pr <PR#> ...] [--session NAME] [--dry-run]"
+allowed-tools: Read, Write, Bash, Grep, Glob, AskUserQuestion
 ---
 
 # dispatch
@@ -11,16 +11,23 @@ Take the work that is **ready to start** in a plan and fan it out: one tmux wind
 PR, each in its own worktree, each running a coding agent on `/make-pr <ref> <PR#>`.
 
 ```
-/dispatch <issue ref | artifact | design doc> [--session NAME] [--dry-run]
+/dispatch [<issue ref | artifact | design doc>] [--pr <PR#> ...] [--session NAME] [--dry-run]
 
   1. Find the unblocked PRs
-  2. Show the table, wait for approval   (gate)
+  2. Confirm which to schedule   (gate — always)
   3. Write the plan
   4. Fan out — one window per PR
 ```
 
-You own step 1 (judgement: what is actually ready). The script owns steps 2–4 of the
-mechanics (worktree, branch, window, launch) so they are deterministic and repeatable.
+You own steps 1–3 (judgement: what is ready, what the user confirms, the plan). The
+script owns step 4 — the mechanics (worktree, branch, window, launch) — so they are
+deterministic and repeatable.
+
+`--pr <PR#>` schedules just those PRs (repeat the flag for a few, e.g.
+`--pr 1.5 --pr 1.7`) instead of the whole ready set — use it when you want one PR, not the
+batch. It preselects; it does **not** skip the confirmation gate. You still resolve each
+named PR from the source (for its *What* → slug and its ref) and still show the rest of
+the ready list so the user can add to the selection.
 
 ## Phase 1 — Find the unblocked PRs
 
@@ -51,10 +58,24 @@ Give each ready row a short kebab-case **slug** derived from its *What* (`^[a-z0
 2–4 words, e.g. `evidence-schema`). The slug names the branch, the worktree directory,
 and the window, so keep it short and distinct.
 
-## Phase 2 — Approve (gate)
+**When `--pr <PR#>` was given:** resolve each named PR from the source the same way (its
+*What* → slug, its ref), and mark it as the preselected candidate. Still compute the full
+ready set — the gate offers the rest so the user can add. If a named PR is **blocked**
+(a dependency is unmerged) or **already in flight** (has a branch or open PR), do not
+silently drop it: carry it into the gate flagged with the reason, and let the user decide.
 
-Show the table in chat and **wait for approval or edits**. Never dispatch unasked —
-each row spends real tokens.
+## Phase 2 — Confirm which to schedule (gate — always)
+
+**Never schedule without an explicit confirmation this run** — each PR opens a window and
+spends real tokens. This gate runs every time, including when `--pr` named exactly one PR.
+
+Offer the ready PRs as a list the user picks from:
+
+- **A handful (≤ 4):** use `AskUserQuestion` (multiSelect) — one option per ready PR,
+  each labelled `<PR#> <slug>` with the *What* and *why it's ready* in the description.
+  Preselect the `--pr` ones in your recommendation; if `--pr` named none, recommend the
+  whole ready set. The user ticks the subset to launch.
+- **More than that:** show the table in chat and **wait for approval or edits**.
 
 ```markdown
 | PR | What | Slug | Why it's ready |
@@ -62,15 +83,18 @@ each row spends real tokens.
 | 1.5 | Evidence handoff schema | evidence-schema | 1.4 merged (#138) |
 | 1.6 | Vale prose gate | vale-gate | independent of 1.5 |
 
-Blocked, not dispatching: 1.7 (waits on 1.6), 2.1 (waits on slice 1)
+Blocked, not schedulable: 1.7 (waits on 1.6), 2.1 (waits on slice 1)
 ```
 
-State what you are **not** dispatching and why — a silently dropped row reads as
-"everything is covered" when it isn't.
+Always show what you are **not** scheduling and why — blocked rows, and anything the user
+left unticked. A silently dropped row reads as "everything is covered" when it isn't.
+Dispatch only the PRs the user confirmed here.
 
 ## Phase 3 — Write the plan
 
-Write the approved rows to a plan file (use a scratch path, not the repo):
+Write the **confirmed** rows to a plan file (use a scratch path, not the repo). One
+confirmed PR is just a one-item `items` list — the tool dispatches one window all the
+same:
 
 ```json
 {
@@ -134,7 +158,9 @@ is done once the windows are up and reported.
 
 | Mistake | Fix |
 |---------|-----|
-| Dispatching without the approval gate | Always show the table and wait |
+| Scheduling without the confirmation gate | It runs every time — confirm the subset first, even for a single `--pr` |
+| Treating `--pr` as "skip the gate" | `--pr` preselects; the user still confirms, and still sees the rest of the ready list |
+| Dropping a named `--pr` row because it's blocked | Carry it into the gate flagged with the reason; let the user decide |
 | Inventing PR rows the plan does not have | Stop; send the user to `/pr-breakdown` |
 | Dispatching a row that already has a branch or open PR | Check `git branch -a` and `gh pr list` in Phase 1 |
 | Running the script from outside the target repo | `cd` to the repo first — the repo it is run in is the repo it branches |
