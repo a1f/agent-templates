@@ -25,6 +25,7 @@ decide the next step.
 |-------|------|-----|
 | `tdd-runner` | RED, once per behavior | write ONE failing test, prove it fails for the right reason |
 | `worker-coder` | GREEN & REFACTOR (per behavior); non-behavioral edits | minimal code to pass the test, a behavior-preserving refactor, or an exact non-behavioral change; commit |
+| `size-judge` | at the size gate, only on a `review` verdict | did this PR have to be this big, or does it split? |
 | `reviewer` | after gates are green | quality + bugs + security + line-by-line rule conformance on the diff |
 | `critic` | with the reviewer, on the gate-green diff | goal-fit: did the PR achieve the task? |
 
@@ -84,6 +85,11 @@ Resolve before the first dispatch:
   of that profile's `triggers` globs in `~/.claude/at/gates/*.json` (the lists cover both
   root-level and nested forms). A changed language with no gate → stop and report the
   missing gate instead of declaring done.
+- **Size budget** — the PR may add **35 counted lines**; past that it must argue, and
+  past the cap it cannot land (see step 5's size gate). Counted lines exclude tests
+  (including Rust `#[cfg(test)]` blocks), lockfiles, and generated output; prose (`.md`,
+  docs) carries its own budget. The measuring tool is the package staged at
+  `~/.claude/at/scripts/pr_size` — it, not your own count, decides.
 
 ## Tool boundaries
 
@@ -114,7 +120,10 @@ Resolve before the first dispatch:
    failure.
 3. **Plan behaviors.** Per `tdd.md`, list the user-facing **behaviors** (not impl steps) as
    thin vertical slices. Decide: **behavioral** (TDD required) or **non-behavioral**
-   (config/docs/rename — TDD skipped, log the skip + reason). Non-behavioral: log the
+   (config/docs/rename — TDD skipped, log the skip + reason). **Size the plan here**: if
+   the behaviors together head past the 35-line target, stop for re-scope now — splitting
+   is cheapest before the code exists, and step 5's size gate does not negotiate after.
+   Non-behavioral: log the
    skipped RED (`step: RED, verdict: skip`), dispatch `worker-coder` `mode: non_behavioral`
    (logged as `step: NON_BEHAVIORAL`), reproduce any reported passing check, then continue
    at GATE → REVIEW → CRITIC — never enter the RED/GREEN loop.
@@ -152,6 +161,30 @@ Resolve before the first dispatch:
    `mode: non_behavioral` for format/lint/type/build, but a failing **test** gate is a
    behavioral regression that returns to that behavior's RED/GREEN cycle. Max **2 gate-fix
    rounds**, then stop / re-scope.
+
+   **Size gate** — once the language gates are green, and before any judgment pass, run in
+   `target_cwd`:
+
+   ```
+   PYTHONPATH=~/.claude/at/scripts uv run --no-project --with click \
+     python -m pr_size --base <base> --repo <target_cwd>
+   ```
+
+   It prints the counts and a `verdict` (also its exit code: 0 pass, 1 review, 2 block, 3
+   could not measure). Log the run (`step: SIZE, role: architect`) and route — the table is
+   total:
+
+   | verdict | Action |
+   |---|---|
+   | `pass` | continue to review + critic |
+   | `review` | dispatch `size-judge` (base, task spec, `target_cwd`); validate its return against `~/.claude/at/schemas/size-judge.schema.json`; `acceptable` → continue, `split` → **stop / re-scope**, reporting its `split_plan` |
+   | `block` | **stop / re-scope** — over a hard cap (>50 code lines across 3+ files, >100 across 1–2, >150 prose). Report the tool's `files` breakdown and the smallest first PR you can name |
+   | could not measure | report the tool's error; never treat an unmeasured PR as passing |
+
+   The size gate never routes a fix: an oversized PR is re-scoped, never trimmed to fit,
+   and you never edit the counted files to duck a band. **A `block` is not waivable by
+   you** — only the human may override it, and only as an explicit waiver row
+   (`step: SIZE, verdict: skip, note: "waived by human: <reason>"`).
 6. **Review + critic (the judgment pass — once, on the gate-green diff).** Dispatch
    `reviewer` with the base ref (it runs `git diff <base>...HEAD` itself), passing
    `design-principles.md`, the language rule per changed file type, and `tdd.md`. Then
@@ -184,8 +217,8 @@ Resolve before the first dispatch:
    blocker. After 2 rounds: Done if clean, else escalate the remainder as **stop /
    re-scope** (waive-or-rescope decisions for the human, never another loop). On resume,
    log the human's waiver rows, then re-enter step 6 with waived findings excluded.
-8. **Done** → only when: all behaviors green, all gates green, no unwaived blocker per step
-   6's waivability rule, critic `achieved`, and any step-7 fix re-verified per the
+8. **Done** → only when: all behaviors green, all gates green, the size gate `pass` or its
+   judge `acceptable`, no unwaived blocker per step 6's waivability rule, critic `achieved`, and any step-7 fix re-verified per the
    proportional rule. Write the evidence handoff (see Evidence handoff), then ship it
    without asking (see Decisions you own).
 
@@ -196,8 +229,8 @@ Append **one line per subagent call, TDD skip, gate run, and human waiver** to `
 create nested paths. Schema:
 
 ```json
-{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|NON_BEHAVIORAL|GATE|REVIEW|CRITIC",
- "role":"tdd-runner|coder|reviewer|critic|architect","prompt":"<full prompt you sent>",
+{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|NON_BEHAVIORAL|GATE|SIZE|REVIEW|CRITIC",
+ "role":"tdd-runner|coder|size-judge|reviewer|critic|architect","prompt":"<full prompt you sent>",
  "result":"<full agent return>","verdict":"pass|fail|skip","files":["<changed paths>"],
  "note":"<e.g. TDD skip reason, retry #, decision made>"}
 ```

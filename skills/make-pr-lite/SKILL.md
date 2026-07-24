@@ -43,12 +43,18 @@ guarantees that.)
   changed language with no profile → stop and report.
 - **rules to pass** — always `design-principles.md`; `tdd.md` for behavioral work; the language
   rule (`python.md`/`typescript.md`/`rust.md`) per changed file type.
+- **size budget** — the PR may add **35 counted lines**; past that it must argue, past the cap
+  it cannot land (step 4's size gate). Counted lines exclude tests (including Rust
+  `#[cfg(test)]` blocks), lockfiles, and generated output; prose (`.md`, docs) carries its own
+  budget. The measuring tool is the package staged at `~/.claude/at/scripts/pr_size` — it, not
+  your own count, decides.
 
 ## Agents
 
 | Agent | Count | Job |
 |---|---|---|
 | `coder-lite` | 1 (+ fix) | plan behaviors, self-TDD the whole PR, one commit |
+| `size-judge` | 1, only on a `review` size verdict | did this PR have to be this big, or does it split? |
 | `reviewer` | 3, parallel | the panel — each a focused lens-group |
 | `critic` | 1 (+1 on `partial`) | goal-fit: did the PR achieve the task? |
 
@@ -104,6 +110,27 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    | the `test` gate red | `mode: fix` — behavioral regression |
    | any other gate red | `mode: fix` — mechanical; name the gate |
    | gate `setup` itself fails | stop and report (environment, not a coder bug) |
+
+   **Size gate** — with the gates green and before the panel, run in `target_cwd`:
+
+   ```
+   PYTHONPATH=~/.claude/at/scripts uv run --no-project --with click \
+     python -m pr_size --base <base> --repo <target_cwd>
+   ```
+
+   It prints the counts and a `verdict` (also its exit code: 0 pass, 1 review, 2 block, 3
+   could not measure). Route — the table is total:
+
+   | verdict | Action |
+   |---|---|
+   | `pass` | continue to the panel |
+   | `review` | dispatch `size-judge` (base, task spec, `target_cwd`); validate its return against `~/.claude/at/schemas/size-judge.schema.json`; `acceptable` → continue, `split` → stop and report its `split_plan` |
+   | `block` | stop and report — over a hard cap (>50 code lines across 3+ files, >100 across 1–2, >150 prose). Give the tool's `files` breakdown and the smallest first PR you can name |
+   | could not measure | report the tool's error; never treat an unmeasured PR as passing |
+
+   Never route a size fix to the coder and never edit counted files to duck a band: an
+   oversized PR is re-scoped, not trimmed. A `block` is not waivable by you — only the human
+   may override it, and only explicitly.
 5. **Panel + critic (judgment — once, on the green diff).** Dispatch the 3 reviewers (one message),
    then the critic; read the returns directly. Each finding's `score` is severity (1–100, higher =
    worse). **Deduplicate by `(file:line)`** (fall back to `(file:issue)` when a finding has no line),
@@ -126,8 +153,8 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    coverage. One fix round (separate from step 4's budget); a second only if round 1 introduced a
    new blocker.
    Then Done, or escalate the remainder to the human as waive-or-rescope.
-7. **Done.** When all behaviors and gates are green, no CRITICAL / `>=70` / aggregate blocker, and
-   critic `achieved`. **Squash to one commit:**
+7. **Done.** When all behaviors and gates are green, the size gate `pass` or its judge
+   `acceptable`, no CRITICAL / `>=70` / aggregate blocker, and critic `achieved`. **Squash to one commit:**
    `git reset --soft <base> && git commit -m "<conventional subject>"` (no AI attribution).
    Confirm only boundary files changed (`git diff --name-only <base>...HEAD`). Write the evidence
    handoff `<run_root>/evidence/<branch-slug>/evidence.json` (schema

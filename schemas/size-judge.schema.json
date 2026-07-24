@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "size-judge.schema.json",
+  "title": "Size-judge agent return",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "role",
+    "verdict",
+    "size_restated",
+    "reason",
+    "split_plan"
+  ],
+  "properties": {
+    "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
+    "role": { "const": "size-judge" },
+    "verdict": { "enum": ["acceptable", "split"] },
+    "size_restated": {
+      "$comment": "The counted lines and files, restated from the tool's report — never re-derived by eye.",
+      "type": "string"
+    },
+    "reason": { "type": "string" },
+    "split_plan": {
+      "$comment": "How the change would divide into landable PRs; empty only when the size is acceptable.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["pr", "what", "files"],
+        "properties": {
+          "pr": { "type": "string" },
+          "what": { "type": "string" },
+          "files": { "type": "array", "items": { "type": "string" } },
+          "lines": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "note": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "$comment": "A split verdict must say how to split; an acceptable one must not carry a plan.",
+      "if": { "required": ["verdict"], "properties": { "verdict": { "const": "split" } } },
+      "then": { "properties": { "split_plan": { "minItems": 2 } } }
+    },
+    {
+      "if": {
+        "required": ["verdict"],
+        "properties": { "verdict": { "const": "acceptable" } }
+      },
+      "then": { "properties": { "split_plan": { "maxItems": 0 } } }
+    }
+  ]
+}
