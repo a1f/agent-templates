@@ -153,12 +153,13 @@
   .card p { margin: .5rem 0; max-width: 72ch; }
   .card p.why { color: var(--muted); font-size: .88rem; }
 
-  .done { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); padding: 10px 14px; }
-  .done .dh { font: 600 .66rem/1 var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
-  .done ul { list-style: none; margin: 0; padding: 0; }
-  .done li { position: relative; padding: 3px 0 3px 22px; font-size: .85rem; line-height: 1.5; }
-  .done li::before { content: "\2713"; position: absolute; left: 2px; top: 3px; color: var(--accent); font-weight: 700; }
-  .done code, .card code { font: 500 .82em var(--mono); background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+  /* .donewhen, not .done — a bare .done would out-cascade .chip/.tag/.keydemo status classes. */
+  .donewhen { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); padding: 10px 14px; }
+  .donewhen .dh { font: 600 .66rem/1 var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .donewhen ul { list-style: none; margin: 0; padding: 0; }
+  .donewhen li { position: relative; padding: 3px 0 3px 22px; font-size: .85rem; line-height: 1.5; }
+  .donewhen li::before { content: "\2713"; position: absolute; left: 2px; top: 3px; color: var(--accent); font-weight: 700; }
+  .donewhen code, .card code { font: 500 .82em var(--mono); background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
   .ev { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: .82rem; line-height: 1.5; color: var(--muted); }
   .ev a { color: var(--accent); border-bottom: 1px dotted var(--accent); }
   .ev a:hover { text-decoration: none; }
@@ -243,7 +244,7 @@
           <p class="after">after: <a href="#1-1">PR 1.1</a></p>
           <p>What the PR does, in a sentence or two of plain words.</p>
           <p class="why">Why it exists / why it is scoped this way (optional).</p>
-          <div class="done"><div class="dh">Done when</div><ul>
+          <div class="donewhen"><div class="dh">Done when</div><ul>
             <li>An observable, checkable outcome.</li>
           </ul>
           <div class="ev">Landed: <a href="https://github.com/&lt;owner&gt;/&lt;repo&gt;/pull/NN">PR #NN</a> — one line of evidence (only on merged PRs).</div>
