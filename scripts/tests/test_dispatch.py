@@ -12,15 +12,16 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
+from click.testing import CliRunner
 
 from dispatch import (
     DispatchError,
     PlannedWindow,
     load_plan,
-    main,
     plan_windows,
     run_plan,
 )
+from dispatch.cli import cli, run_cli
 
 # git/tmux replies the CLI needs: the repo root, the current session, and the id tmux
 # prints for each window it creates.
@@ -205,12 +206,15 @@ def test_plan_windows_rejects_an_unknown_agent() -> None:
         plan_windows(plan=plan, repo_root=Path("/repo"), session="s", agent="cursor")
 
 
-def test_main_dry_run_resolves_root_and_session_then_prints(
+def test_cli_dry_run_resolves_root_and_session_then_prints(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     runner = FakeRunner(responses=_RESOLVE)
-    code = main(
-        argv=["dispatch", "--plan", _write_plan(tmp_path=tmp_path), "--dry-run"],
+    code = run_cli(
+        plan_path=_write_plan(tmp_path=tmp_path),
+        session=None,
+        agent="claude",
+        dry_run=True,
         run=runner,
     )
     assert code == 0
@@ -220,28 +224,37 @@ def test_main_dry_run_resolves_root_and_session_then_prints(
     assert not any("worktree" in argv and "add" in argv for argv in runner.calls)
 
 
-def test_main_executes_each_window_and_reports_success(tmp_path: Path) -> None:
+def test_cli_executes_each_window_and_reports_success(tmp_path: Path) -> None:
     runner = FakeRunner(responses=_RESOLVE)
-    code = main(
-        argv=["dispatch", "--plan", _write_plan(tmp_path=tmp_path), "--session", "s"],
+    code = run_cli(
+        plan_path=_write_plan(tmp_path=tmp_path),
+        session="s",
+        agent="claude",
+        dry_run=False,
         run=runner,
     )
     assert code == 0
     assert any("send-keys" in argv for argv in runner.calls)
 
 
-def test_main_exits_1_when_a_window_fails(tmp_path: Path) -> None:
+def test_cli_exits_1_when_a_window_fails(tmp_path: Path) -> None:
     runner = FakeRunner(responses=_RESOLVE, fail_on="add")
-    code = main(
-        argv=["dispatch", "--plan", _write_plan(tmp_path=tmp_path), "--session", "s"],
+    code = run_cli(
+        plan_path=_write_plan(tmp_path=tmp_path),
+        session="s",
+        agent="claude",
+        dry_run=False,
         run=runner,
     )
     assert code == 1
 
 
-def test_main_exits_2_on_a_missing_plan_file() -> None:
-    code = main(
-        argv=["dispatch", "--plan", "/no/such/plan.json", "--session", "s"],
+def test_cli_exits_2_on_a_missing_plan_file() -> None:
+    code = run_cli(
+        plan_path="/no/such/plan.json",
+        session="s",
+        agent="claude",
+        dry_run=False,
         run=FakeRunner(responses=_RESOLVE),
     )
     assert code == 2
@@ -265,3 +278,20 @@ def test_main_exits_2_on_a_missing_plan_file() -> None:
 def test_load_plan_rejects_unsafe_or_empty_plans(overrides: dict[str, Any]) -> None:
     with pytest.raises(DispatchError):
         load_plan(text=_plan(**overrides))
+
+
+def test_click_command_parses_options_and_propagates_the_exit_code(
+    tmp_path: Path,
+) -> None:
+    """The decorator wiring itself: run_cli tests bypass click's parsing."""
+    result = CliRunner().invoke(
+        cli, ["--plan", _write_plan(tmp_path=tmp_path), "--session", "s", "--dry-run"]
+    )
+    assert result.exit_code == 0
+    assert "-n pr-1-5 -c" in result.output
+
+
+def test_click_command_rejects_an_unknown_agent() -> None:
+    result = CliRunner().invoke(cli, ["--plan", "-", "--agent", "cursor"])
+    assert result.exit_code == 2
+    assert "cursor" in result.output

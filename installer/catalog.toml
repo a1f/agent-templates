@@ -197,7 +197,7 @@ extras = ["templates/pr-explain-page.html", "templates/pr-explain.vale.ini"]
 [[packages]]
 name = "dispatch"
 units = ["skill/dispatch"]
-extras = ["scripts/dispatch.py"]
+extras = ["scripts/dispatch"]
 
 # --- bundles (provisional) ---
 [[bundles]]

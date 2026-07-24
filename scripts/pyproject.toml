@@ -6,7 +6,10 @@ name = "v1-scripts"
 version = "0"
 description = "Return-contract helpers for the v1 coding workflow."
 requires-python = ">=3.12"
-dependencies = ["jsonschema>=4.18"]  # the reference JSON Schema validator (referencing API)
+dependencies = [
+  "jsonschema>=4.18",  # the reference JSON Schema validator (referencing API)
+  "click>=8.4.1",  # the CLI library the installer already standardises on (at.py)
+]
 
 [dependency-groups]
 dev = [

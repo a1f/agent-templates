@@ -95,12 +95,16 @@ working around a rejection.
 
 ## Phase 4 — Fan out
 
+The tool is the package staged at `~/.claude/at/scripts/dispatch`; run it as a module so
+its imports resolve:
+
 ```bash
-python3 ~/.claude/at/scripts/dispatch.py --plan <plan.json> [--session NAME] [--dry-run]
+PYTHONPATH=~/.claude/at/scripts uv run --no-project --with click \
+  python -m dispatch --plan <plan.json> [--session NAME] [--dry-run]
 ```
 
-Stdlib only — no `uv`, no dependencies. Run it from **inside the target repository**;
-it anchors worktrees at that repo's main checkout even when called from a worktree.
+Run it from **inside the target repository** — it anchors worktrees at that repo's main
+checkout even when called from a worktree.
 
 Per row it creates the worktree `<repo>/.claude/worktrees/<slug>` on a new branch
 `worktree-<slug>`, opens a tmux window `pr-<PR#>` already `cd`'d into it, and types
