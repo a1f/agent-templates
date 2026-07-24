@@ -201,7 +201,7 @@ units = ["skill/pr-explain"]
 extras = ["templates/pr-explain-page.html", "templates/pr-explain.vale.ini"]
 
 # dispatch fans a plan's ready PRs out into parallel tmux windows; the mechanics live in
-# a stdlib-only helper script, shipped as this package's extra so an install is
+# a small click-based helper package, shipped as this package's extra so an install is
 # self-contained. Its own package (not pr-ops) so the extra stages with the one skill
 # that reads it.
 [[packages]]
