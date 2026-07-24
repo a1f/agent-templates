@@ -1,11 +1,10 @@
 <!-- pr-explain page skeleton. The skill fills every SLOT comment and deletes the whole
-     .chapter div of any dropped chapter (the map chapter additionally requires a
-     structural PR). Tokens and classes are the contract with the skill's Phase 4:
-     keep names stable. Self-contained: no external requests.
+     .chapter div of any chapter it drops. Tokens and classes are the contract with the
+     skill's Build phase: keep the names stable. Self-contained: no external requests.
      Deliberately a fragment (no DOCTYPE/head/meta): the Artifact publisher wraps the
      file in its own doctype + head skeleton (charset and viewport included), so the
      template must not declare them — do not "fix" this. -->
-<title><!-- SLOT: PR #N — imperative title, ≤ 8 words --></title>
+<title><!-- SLOT: PR #N — plain title, ≤ 8 words --></title>
 <style>
   :root {
     --paper: #F8F8F5; --card: #FFFFFF; --ink: #202723; --ink-2: #59635D; --ink-3: #8B948E;
@@ -56,114 +55,115 @@
   .bottomline { border: 1px solid var(--line-strong); background: var(--card);
     border-radius: 8px; padding: 18px 22px; margin-top: 28px; }
   .bottomline p { margin: 6px 0 0; }
-  .diff { font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
-    background: var(--code-bg); border-radius: 6px; padding: 10px 12px; margin: 10px 0;
-    overflow-x: auto; white-space: pre; }
-  .diff .ctx { color: var(--ink-3); }
-  .diff .del { color: var(--red); background: var(--red-soft); display: inline-block; width: 100%; }
-  .diff .add { color: var(--green); background: var(--green-soft); display: inline-block; width: 100%; }
-  .dmap { width: 100%; height: auto; display: block; margin: 10px 0 2px; }
-  .dmap text { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
-  .dmap .badge-txt { font-size: 11px; font-weight: 700; }
-  .n-mod rect.box { fill: var(--amber-soft); stroke: var(--amber); stroke-width: 1.5; }
-  .n-add rect.box { fill: var(--green-soft); stroke: var(--green); stroke-width: 1.5; }
-  .n-del rect.box { fill: var(--red-soft); stroke: var(--red); stroke-width: 1.5; }
-  .n-dim rect.box { fill: var(--code-bg); stroke: var(--line-strong); stroke-width: 1; }
-  .n-dim text { fill: var(--ink-3); }
-  .n-mod .badge { fill: var(--amber); } .n-add .badge { fill: var(--green); }
-  .n-del .badge { fill: var(--red); } .dmap .badge-glyph { fill: var(--card); }
-  .e-old { stroke: var(--line-strong); stroke-width: 1.5; opacity: 0.7; }
-  .e-new { stroke: var(--green); stroke-width: 2; }
-  .e-del { stroke: var(--red); stroke-width: 1; opacity: 0.6; }
-  .ah-old { fill: var(--line-strong); opacity: 0.7; } .ah-new { fill: var(--green); }
-  .ah-del { fill: var(--red); opacity: 0.6; }
-  .map-legend { display: flex; gap: 14px; flex-wrap: wrap; font-family: var(--mono);
-    font-size: 11px; color: var(--ink-2); margin: 6px 0 2px; }
-  .map-legend .k { display: inline-flex; align-items: center; gap: 5px; }
-  .sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex: none; }
-  .sw.add { background: var(--green-soft); border: 1.5px solid var(--green); }
-  .sw.mod { background: var(--amber-soft); border: 1.5px solid var(--amber); }
-  .sw.del { background: var(--red-soft); border: 1.5px solid var(--red); }
-  .sw.dim { background: var(--code-bg); border: 1px solid var(--line-strong); }
-  .minimap { display: flex; gap: 4px; margin: 14px 0 2px; }
+
+  /* Chapter 2 — the map: one annotated file tree of the touched subtree. */
+  .minimap { display: flex; gap: 4px; margin: 6px 0 2px; }
   .mm-cell { flex: 1; border: 1px solid var(--line); border-radius: 4px;
     background: var(--code-bg); font-family: var(--mono); font-size: 10px;
     color: var(--ink-3); text-align: center; padding: 7px 2px; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis; }
-  .mm-cell.here { background: var(--amber-soft); border: 2px solid var(--amber);
+  .mm-cell.here { background: var(--accent-soft); border: 2px solid var(--accent);
     color: var(--ink); font-weight: 700; }
-  .mm-caption { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin-top: 4px; }
+  .mm-caption { font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); margin: 4px 0 0; }
+  .tree { font-family: var(--mono); font-size: 13px; line-height: 1.5; margin: 16px 0 4px;
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 14px 16px; overflow-x: auto; }
+  .tree .row { white-space: pre; }
+  .tree .l1 { padding-left: 1.6em; } .tree .l2 { padding-left: 3.2em; } .tree .l3 { padding-left: 4.8em; }
+  .tree .dir { color: var(--ink-2); font-weight: 600; }
+  .tree .file { color: var(--ink-3); }
+  .tree .file.hit { color: var(--ink); font-weight: 700; }
+  .tree .dot { color: var(--accent); font-weight: 700; }
+  .tree .stat { color: var(--ink-3); }
+  .tree .stat .add { color: var(--green); } .tree .stat .del { color: var(--red); }
+  .tree .is-test { color: var(--amber); font-size: 0.82em; letter-spacing: 0.04em; }
+  .tree .note { font-family: var(--serif); font-style: italic; font-size: 14px;
+    color: var(--ink-2); margin: 1px 0 6px; }
+  .tree .note::before { content: "└ "; color: var(--accent); font-style: normal; }
+
+  .diff { font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+    background: var(--code-bg); border-radius: 6px; padding: 10px 12px; margin: 12px 0;
+    overflow-x: auto; white-space: pre; }
+  .diff .ctx { color: var(--ink-3); }
+  .diff .del { color: var(--red); background: var(--red-soft); display: inline-block; width: 100%; }
+  .diff .add { color: var(--green); background: var(--green-soft); display: inline-block; width: 100%; }
+  .diff-note { font-size: 15px; color: var(--ink-2); margin: 6px 0 0; }
+
+  /* Chapter 3 — the tests: RED → GREEN witnesses. */
   .wit { display: flex; gap: 8px; align-items: baseline; font-size: 15px; margin: 8px 0; }
   .wit .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700;
     padding: 1px 7px; border-radius: 4px; flex: none; }
   .tag.red { color: var(--red); background: var(--red-soft); }
   .tag.green { color: var(--green); background: var(--green-soft); }
+
+  /* Chapter 4 — the proof: gate chips + runtime evidence. */
   .gate-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .gate-chip { font-family: var(--mono); font-size: 11.5px; padding: 3px 9px;
     border-radius: 999px; background: var(--green-soft); color: var(--green); }
   .gate-chip.fail { background: var(--red-soft); color: var(--red); }
-  img.evidence { max-width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; }
+  img.evidence { max-width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; margin-top: 12px; }
+
+  /* Chapter 5 — see for yourself: commands the reader can run. */
+  .cmd { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; background: var(--code-bg);
+    border-radius: 6px; padding: 12px 14px; margin: 12px 0; overflow-x: auto; white-space: pre; }
+  .cmd .p { color: var(--accent); font-weight: 700; }
+  .cmd .out { color: var(--ink-3); }
 </style>
 
 <div class="wrap">
   <span class="eyebrow"><!-- SLOT: repo · PR #N --></span>
-  <h1><!-- SLOT: imperative title, ≤ 8 words --></h1>
+  <h1><!-- SLOT: plain title, ≤ 8 words --></h1>
   <div class="meta"><!-- SLOT: <span> items: branch, +adds −dels, date --></div>
 
   <div class="bottomline">
-    <div class="clabel">Bottom line</div>
-    <p><!-- SLOT: 40-60 words — what, why, impact, risk --></p>
+    <div class="clabel">What this is for</div>
+    <!-- SLOT: 60-100 words, plain words — why we built it, what it is, what changes after it merges -->
   </div>
 
-  <!-- OPTIONAL: delete this whole chapter for non-structural PRs -->
   <div class="chapter">
     <div class="clabel">The map</div>
-    <p><!-- SLOT: ≤ 40 words — what moved at component level --></p>
-    <svg class="dmap" viewBox="0 0 640 200" role="img" aria-label="<!-- SLOT: map summary -->">
-      <!-- SLOT: edges first (<line class="e-new|e-old|e-del">, arrowheads
-           <polygon class="ah-new|ah-old|ah-del"> matching their edge), then node groups.
-           Badge circle + glyph on n-add|n-mod|n-del only; n-dim gets rect + text, no badge:
-           <g class="n-add|n-mod|n-del|n-dim">
-             <rect class="box" x y width height rx="6"/><text x y>name</text>
-             <circle class="badge" cx cy r="8"/><text class="badge-txt badge-glyph" x y>+|~|−</text>
-           </g> -->
-    </svg>
-    <div class="map-legend">
-      <span class="k"><span class="sw add"></span>+ added</span>
-      <span class="k"><span class="sw mod"></span>~ modified</span>
-      <span class="k"><span class="sw del"></span>− removed</span>
-      <span class="k"><span class="sw dim"></span>unchanged, 1 hop</span>
-    </div>
     <div class="minimap"><!-- SLOT: one .mm-cell per git-tracked top-level dir, byte-sorted;
-      add class "here" to dirs containing changes --></div>
-    <div class="mm-caption">you are here — same strip, same order, every PR</div>
+      add class "here" to dirs that contain a touched file --></div>
+    <div class="mm-caption">you are here — every top folder in the repo; lit = we touched it</div>
+    <div class="tree">
+      <!-- SLOT: the touched subtree. One .row per line, indent with l1/l2/l3:
+           dir:            <div class="row l1"><span class="dir">installer/</span></div>
+           touched file:   <div class="row l2"><span class="dot">●</span> <span class="file hit">at.py</span>  <span class="stat"><span class="add">+24</span> <span class="del">−6</span></span></div>
+           its callout:    <div class="note l2">what we did here, ≤ 12 plain words</div>
+           test file:      <div class="row l2"><span class="dot">●</span> <span class="file hit">test_at.py</span> <span class="is-test">test</span>  <span class="stat"><span class="add">+40</span></span></div>   (no callout — tests are Chapter 3)
+           untouched sib:  <div class="row l2"><span class="file">catalog.toml</span>  <span class="stat">·</span></div>
+      -->
+    </div>
+    <!-- OPTIONAL: at most 2 key non-test changes shown as real lines, each with one plain sentence:
+      <div class="diff"><span class="ctx">  context</span>
+      <span class="del">- removed</span>
+      <span class="add">+ added</span></div>
+      <p class="diff-note">Here we do X so that Y.</p>
+    -->
   </div>
 
   <div class="chapter">
-    <div class="clabel">The problem</div>
-    <!-- SLOT: 80-120 words; the failing behavior first; one block max -->
-  </div>
-
-  <div class="chapter">
-    <div class="clabel">The story</div>
-    <!-- SLOT: 150-200 words; one <p> per decision; ≤ 2 .diff blocks, ≤ 10 lines each:
-         <div class="diff"><span class="ctx">  context</span>
-         <span class="del">- removed</span>
-         <span class="add">+ added</span></div> -->
+    <div class="clabel">The tests</div>
+    <!-- SLOT: 50-90 words. First the scenario in plain words — what the test sets up and checks.
+         Then the RED → GREEN story from the witnesses:
+         <div class="wit"><span class="tag red">RED</span><span>…failed first, and the exact reason…</span></div>
+         <div class="wit"><span class="tag green">GREEN</span><span>…what made it pass…</span></div>
+         No evidence file → describe the test files in the diff and say the witnesses are absent. -->
   </div>
 
   <div class="chapter">
     <div class="clabel">The proof</div>
-    <!-- SLOT: 40-70 words + evidence. With witnesses:
-         <div class="wit"><span class="tag red">RED</span><span>…failed first, right reason…</span></div>
-         <div class="wit"><span class="tag green">GREEN</span><span>…what made it pass…</span></div>
-         Gates: <div class="gate-row"><span class="gate-chip">pytest N passed</span>…</div>
-         Without evidence: CI check results as gate chips (class "fail" for red ones);
-         PR-body claims appear only attributed in prose, never as chips. -->
+    <!-- SLOT: 40-70 words + evidence. Gate numbers as chips:
+         <div class="gate-row"><span class="gate-chip">pytest 161 passed</span><span class="gate-chip">mypy strict</span></div>
+         Runtime evidence (screenshot, e2e run) as <img class="evidence" src="data:…">.
+         No evidence file → CI check results as chips (class "fail" for red ones);
+         PR-body claims appear only attributed in prose ("PR body reports: …"), never as chips. -->
   </div>
 
   <div class="chapter">
-    <div class="clabel">The limits</div>
-    <p><!-- SLOT: 40-60 words — what didn't change, non-goals, sharp edges --></p>
+    <div class="clabel">See for yourself</div>
+    <!-- SLOT: ≤ 40 words + one command block the reader can paste to confirm the change:
+         <div class="cmd"><span class="p">$</span> at update
+         <span class="out">demo-pack (extras) — up to date</span></div> -->
   </div>
 </div>
