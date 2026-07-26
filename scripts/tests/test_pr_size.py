@@ -48,3 +48,17 @@ def test_every_changed_path_is_reported_even_when_it_only_lost_lines() -> None:
 
     assert numbered["gone.py"] == ()
     assert len(numbered["cart.py"]) == SMALL_CHANGE
+
+
+def test_a_deleted_file_adds_no_phantom_line_to_the_file_before_it() -> None:
+    """git writes `+++ /dev/null` for a deletion; it is a header, not an addition."""
+    diff_text: str = _diff(path="aaa.py", added=1) + (
+        "diff --git a/zzz.py b/zzz.py\n"
+        "deleted file mode 100644\n"
+        "--- a/zzz.py\n"
+        "+++ /dev/null\n"
+        "@@ -1,3 +0,0 @@\n"
+        "-one\n-two\n-three\n"
+    )
+
+    assert added_line_numbers(diff_text=diff_text) == {"aaa.py": (1,)}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from .constants import HUNK_HEADER, NEW_PATH_MARKER
+from .constants import HUNK_HEADER, NEW_PATH_MARKER, POST_IMAGE_MARKER
 
 
 def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
@@ -21,6 +21,8 @@ def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
         if line.startswith(NEW_PATH_MARKER):
             path = line.removeprefix(NEW_PATH_MARKER)
             added.setdefault(path, [])
+        elif line.startswith(POST_IMAGE_MARKER):
+            path = None
         elif header is not None:
             line_number = int(header.group(1))
         elif path is None:
