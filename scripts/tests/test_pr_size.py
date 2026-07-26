@@ -89,3 +89,63 @@ def test_tests_prose_and_generated_files_classify_apart_from_code() -> None:
 def test_a_lockfile_under_tests_is_generated_not_a_test() -> None:
     assert classify(path="tests/fixtures/uv.lock") is FileKind.GENERATED
     assert classify(path="tests/fixtures/data.md") is FileKind.TEST
+
+
+RUST_WITH_INLINE_TESTS: Final[str] = """\
+pub fn total(items: &[u32]) -> u32 {
+    items.iter().sum()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sums_items() {
+        assert_eq!(total(&[1, 2]), 3);
+        assert_eq!(format!("{}", "{"), "{");
+    }
+}
+"""
+RUST_CODE_LINES: Final[int] = 4
+
+
+def _whole_file_diff(*, path: str, content: str) -> str:
+    """A unified diff that adds `content` as a new file, so line numbers line up."""
+    lines: list[str] = content.splitlines()
+    body: str = "".join(f"+{line}\n" for line in lines)
+    return (
+        f"diff --git a/{path} b/{path}\n"
+        f"--- /dev/null\n"
+        f"+++ b/{path}\n"
+        f"@@ -0,0 +1,{len(lines)} @@\n"
+        f"{body}"
+    )
+
+
+def test_a_rust_cfg_test_block_is_charged_to_tests_not_to_code() -> None:
+    path: Final[str] = "src/cart.rs"
+
+    files = changed_files(
+        diff_text=_whole_file_diff(path=path, content=RUST_WITH_INLINE_TESTS),
+        sources={path: RUST_WITH_INLINE_TESTS},
+    )
+
+    assert files[0].lines == RUST_CODE_LINES
+    assert files[0].test_lines == (
+        len(RUST_WITH_INLINE_TESTS.splitlines()) - RUST_CODE_LINES
+    )
+
+
+def test_a_declared_test_module_does_not_swallow_the_code_below_it() -> None:
+    path: Final[str] = "src/lib.rs"
+    source: Final[str] = (
+        "#[cfg(test)]\nmod tests;\n\npub fn total() -> u32 {\n    3\n}\n"
+    )
+
+    files = changed_files(
+        diff_text=_whole_file_diff(path=path, content=source), sources={path: source}
+    )
+
+    assert files[0].test_lines == 2
+    assert files[0].lines == 4

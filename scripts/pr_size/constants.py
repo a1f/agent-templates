@@ -34,3 +34,13 @@ GENERATED_BASENAME: Final[re.Pattern[str]] = re.compile(
 PROSE_SUFFIXES: Final[frozenset[str]] = frozenset(
     {".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc"}
 )
+
+# Languages whose tests can live inside the source file they exercise. The attribute
+# matches `#[test]`, `#[cfg(test)]` and `#[cfg(all(test, …))]` — never `cfg(not(test))`.
+INLINE_TEST_SUFFIXES: Final[frozenset[str]] = frozenset({".rs"})
+RUST_TEST_ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
+    r"^#\[(test\]|cfg\((all\(|any\()?test[,)])"
+)
+RUST_LITERAL_OR_COMMENT: Final[re.Pattern[str]] = re.compile(
+    r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|//.*$"
+)
