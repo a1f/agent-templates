@@ -55,8 +55,11 @@
   .bottomline { border: 1px solid var(--line-strong); background: var(--card);
     border-radius: 8px; padding: 18px 22px; margin-top: 28px; }
   .bottomline p { margin: 6px 0 0; }
+  .goals { margin: 10px 0 0; padding-left: 1.15em; }
+  .goals li { margin: 4px 0; font-size: 15.5px; }
+  .goals li::marker { color: var(--accent); }
 
-  /* Chapter 2 — the map: one annotated file tree of the touched subtree. */
+  /* Chapter 2 — the walkthrough: the tree as index, then every decision hunk. */
   .minimap { display: flex; gap: 4px; margin: 6px 0 2px; }
   .mm-cell { flex: 1; border: 1px solid var(--line); border-radius: 4px;
     background: var(--code-bg); font-family: var(--mono); font-size: 10px;
@@ -81,15 +84,24 @@
     color: var(--ink-2); margin: 1px 0 6px; }
   .tree .note::before { content: "└ "; color: var(--accent); font-style: normal; }
 
+  .hunk-head { font-family: var(--mono); font-size: 12px; color: var(--ink-2);
+    margin: 22px 0 0; }
+  .hunk-head .fname { font-weight: 700; color: var(--ink); }
+  .hunk-head .scope { color: var(--accent); }
   .diff { font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
-    background: var(--code-bg); border-radius: 6px; padding: 10px 12px; margin: 12px 0;
+    background: var(--code-bg); border-radius: 6px; padding: 10px 12px; margin: 8px 0 0;
     overflow-x: auto; white-space: pre; }
   .diff .ctx { color: var(--ink-3); }
   .diff .del { color: var(--red); background: var(--red-soft); display: inline-block; width: 100%; }
   .diff .add { color: var(--green); background: var(--green-soft); display: inline-block; width: 100%; }
   .diff-note { font-size: 15px; color: var(--ink-2); margin: 6px 0 0; }
 
-  /* Chapter 3 — the tests: RED → GREEN witnesses. */
+  /* Chapter 3 — the tests: every test enumerated, then RED → GREEN witnesses. */
+  .testlist { margin: 12px 0; }
+  .tfile { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin: 12px 0 4px; }
+  .trow { display: flex; gap: 10px; align-items: baseline; margin: 3px 0; font-size: 15px; }
+  .trow .tname { font-family: var(--mono); font-size: 12px; color: var(--ink); flex: none; }
+  .trow .tdesc { color: var(--ink-2); }
   .wit { display: flex; gap: 8px; align-items: baseline; font-size: 15px; margin: 8px 0; }
   .wit .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700;
     padding: 1px 7px; border-radius: 4px; flex: none; }
@@ -101,13 +113,18 @@
   .gate-chip { font-family: var(--mono); font-size: 11.5px; padding: 3px 9px;
     border-radius: 999px; background: var(--green-soft); color: var(--green); }
   .gate-chip.fail { background: var(--red-soft); color: var(--red); }
+  .no-proof { border: 1px solid var(--red); background: var(--red-soft); border-radius: 8px;
+    padding: 14px 18px; margin-top: 10px; font-size: 15.5px; }
+  .no-proof .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+    color: var(--red); letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
   img.evidence { max-width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; margin-top: 12px; }
 
-  /* Chapter 5 — see for yourself: commands the reader can run. */
+  /* Chapter 5 — see for yourself: commands the reader can run, with output we captured. */
   .cmd { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; background: var(--code-bg);
     border-radius: 6px; padding: 12px 14px; margin: 12px 0; overflow-x: auto; white-space: pre; }
   .cmd .p { color: var(--accent); font-weight: 700; }
   .cmd .out { color: var(--ink-3); }
+  .cmd .skip { color: var(--amber); font-style: italic; }
 </style>
 
 <div class="wrap">
@@ -116,12 +133,18 @@
   <div class="meta"><!-- SLOT: <span> items: branch, +adds −dels, date --></div>
 
   <div class="bottomline">
-    <div class="clabel">What this is for</div>
-    <!-- SLOT: 60-100 words, plain words — why we built it, what it is, what changes after it merges -->
+    <div class="clabel">What &amp; why</div>
+    <!-- SLOT: ≤ 80 words, three moves and nothing more:
+         <p>One imperative sentence — what this PR does, standing alone.
+            One or two sentences of why — what was missing or broken, and why now.</p>
+         <ul class="goals">
+           <li>an outcome true after merge, checkable on this page</li>
+           <li>2–4 bullets total</li>
+         </ul> -->
   </div>
 
   <div class="chapter">
-    <div class="clabel">The map</div>
+    <div class="clabel">The walkthrough</div>
     <div class="minimap"><!-- SLOT: one .mm-cell per git-tracked top-level dir, byte-sorted;
       add class "here" to dirs that contain a touched file --></div>
     <div class="mm-caption">you are here — every top folder in the repo; lit = we touched it</div>
@@ -134,36 +157,53 @@
            untouched sib:  <div class="row l2"><span class="file">catalog.toml</span>  <span class="stat">·</span></div>
       -->
     </div>
-    <!-- OPTIONAL: at most 2 key non-test changes shown as real lines, each with one plain sentence:
+    <!-- SLOT: the walkthrough — EVERY decision hunk in the diff, in call-path order.
+         One group per hunk:
+      <div class="hunk-head"><span class="fname">api.py</span> · <span class="scope">PUT /api/exercises/{id}/rating</span></div>
       <div class="diff"><span class="ctx">  context</span>
       <span class="del">- removed</span>
       <span class="add">+ added</span></div>
-      <p class="diff-note">Here we do X so that Y.</p>
+      <p class="diff-note">What we do here, why it is needed, where it sits in the flow. ≤ 40 words.</p>
+         Close each file with its mechanical roll-up as a bare note, so every hunk is shown or named:
+      <p class="diff-note">Plus the import and route registration in <code>api.py</code>.</p>
     -->
   </div>
 
   <div class="chapter">
     <div class="clabel">The tests</div>
-    <!-- SLOT: 50-90 words. First the scenario in plain words — what the test sets up and checks.
+    <!-- SLOT: enumerate first — every added/changed test, grouped by file, one line each:
+         <div class="testlist">
+           <div class="tfile">tests/catalog/test_api.py</div>
+           <div class="trow"><span class="tname">rating_of_3_sets_my_rating</span><span class="tdesc">≤ 14 plain words on what it checks</span></div>
+         </div>
          Then the RED → GREEN story from the witnesses:
          <div class="wit"><span class="tag red">RED</span><span>…failed first, and the exact reason…</span></div>
          <div class="wit"><span class="tag green">GREEN</span><span>…what made it pass…</span></div>
-         No evidence file → describe the test files in the diff and say the witnesses are absent. -->
+         No evidence file → the list stands alone; say the witnesses are absent. -->
   </div>
 
   <div class="chapter">
     <div class="clabel">The proof</div>
-    <!-- SLOT: 40-70 words + evidence. Gate numbers as chips:
-         <div class="gate-row"><span class="gate-chip">pytest 161 passed</span><span class="gate-chip">mypy strict</span></div>
+    <!-- SLOT: 40-70 words + evidence — only what actually ran, strongest first:
+         fresh runs from this session, then evidence-file gates, then CI. Chips carry real numbers:
+         <div class="gate-row"><span class="gate-chip">run here — pytest 161 passed</span><span class="gate-chip">mypy strict</span></div>
          Runtime evidence (screenshot, e2e run) as <img class="evidence" src="data:…">.
-         No evidence file → CI check results as chips (class "fail" for red ones);
-         PR-body claims appear only attributed in prose ("PR body reports: …"), never as chips. -->
+         CI check results as chips (class "fail" for red ones);
+         PR-body claims appear only attributed in prose ("PR body reports: …"), never as chips.
+         A behavior PR with NOTHING run → this verdict, verbatim, instead (never drop, never pad):
+         <div class="no-proof"><span class="tag">NO PROOF</span>No proof exists: nothing was run to
+         show this change works. A PR whose proof cannot be written had nothing to prove — that is
+         a finding about the PR, not this page.</div> -->
   </div>
 
   <div class="chapter">
     <div class="clabel">See for yourself</div>
-    <!-- SLOT: ≤ 40 words + one command block the reader can paste to confirm the change:
+    <!-- SLOT: ≤ 40 words + command blocks the reader can paste. Output is REAL — captured by
+         running the command in Phase 3, never imagined:
          <div class="cmd"><span class="p">$</span> at update
-         <span class="out">demo-pack (extras) — up to date</span></div> -->
+         <span class="out">demo-pack (extras) — up to date</span></div>
+         A command you could not run here:
+         <div class="cmd"><span class="p">$</span> flutter run
+         <span class="skip">not run here — needs a device</span></div> -->
   </div>
 </div>
