@@ -9,6 +9,9 @@ from __future__ import annotations
 
 from typing import Final
 
+import pytest
+
+from pr_size.policy import code_budget
 from pr_size.sizing import added_line_numbers, changed_files, classify
 from pr_size.types import ChangedFile, FileKind
 
@@ -149,3 +152,26 @@ def test_a_declared_test_module_does_not_swallow_the_code_below_it() -> None:
 
     assert files[0].test_lines == 2
     assert files[0].lines == 4
+
+
+@pytest.mark.parametrize(
+    ("files", "lines", "verdict", "band"),
+    [
+        (1, 35, "pass", "target"),
+        (5, 35, "pass", "target"),
+        (3, 36, "review", "many-files"),
+        (3, 50, "review", "many-files"),
+        (3, 51, "block", "over-limit"),
+        (9, 400, "block", "over-limit"),
+        (1, 36, "review", "cohesion"),
+        (2, 75, "review", "cohesion"),
+        (2, 76, "review", "cohesion-strict"),
+        (2, 100, "review", "cohesion-strict"),
+        (2, 101, "block", "over-limit"),
+    ],
+)
+def test_code_bands(files: int, lines: int, verdict: str, band: str) -> None:
+    budget = code_budget(files=files, lines=lines)
+
+    assert budget.verdict == verdict
+    assert budget.band == band

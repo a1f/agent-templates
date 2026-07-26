@@ -44,3 +44,12 @@ RUST_TEST_ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
 RUST_LITERAL_OR_COMMENT: Final[re.Pattern[str]] = re.compile(
     r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|//.*$"
 )
+
+# The code policy, in five numbers. Plan to the target; the caps are where judgment
+# stops being invited. Few files buy a larger cap because one or two files can be a
+# single unit a split would break — many files never are.
+CODE_TARGET_LINES: Final[int] = 35
+CODE_LIMIT_FEW_FILES: Final[int] = 100
+CODE_LIMIT_MANY_FILES: Final[int] = 50
+CODE_COHESION_STRICT_LINES: Final[int] = 76
+FEW_FILES: Final[int] = 2
