@@ -58,3 +58,15 @@ FEW_FILES: Final[int] = 2
 # cannot, so the case that earns code its larger cap does not arise.
 PROSE_TARGET_LINES: Final[int] = 100
 PROSE_LIMIT_LINES: Final[int] = 150
+
+# How the shell talks to git. `--unified=0` keeps the parse honest (no context line can
+# be mistaken for an addition); `core.quotePath=false` keeps non-ASCII paths readable
+# rather than octal-escaped.
+GIT_DIFF_FLAGS: Final[tuple[str, ...]] = (
+    "-c",
+    "core.quotePath=false",
+    "diff",
+    "--unified=0",
+    "--no-color",
+    "--find-renames",
+)

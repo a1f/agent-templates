@@ -11,6 +11,7 @@ from typing import Final
 
 import pytest
 
+from pr_size.cli import report_for
 from pr_size.policy import code_budget, measure
 from pr_size.sizing import added_line_numbers, changed_files, classify
 from pr_size.types import ChangedFile, FileKind
@@ -199,3 +200,43 @@ def test_a_change_is_only_as_good_as_its_worst_budget() -> None:
     assert report.code.verdict == "pass"
     assert report.verdict == "block"
     assert report.tests.lines == BIG_CHANGE
+
+
+class FakeGit:
+    """Answers the two git questions the shell asks, and records every argv."""
+
+    def __init__(self, *, diff: str, sources: dict[str, str] | None = None) -> None:
+        self.calls: list[tuple[str, ...]] = []
+        self._diff = diff
+        self._sources = sources or {}
+
+    def __call__(self, *, argv: tuple[str, ...]) -> str:
+        self.calls.append(argv)
+        if "diff" in argv:
+            return self._diff
+        if "show" in argv:
+            return self._sources[argv[-1].split(":", 1)[1]]
+        return ""
+
+
+def test_the_shell_asks_git_for_the_diff_between_base_and_head() -> None:
+    git = FakeGit(diff=_diff(path="cart.py", added=SMALL_CHANGE))
+
+    report = report_for(base="origin/main", head="HEAD", repo="/repo", run=git)
+
+    assert report.code.lines == SMALL_CHANGE
+    assert git.calls[0][:3] == ("git", "-C", "/repo")
+    assert git.calls[0][-1] == "origin/main...HEAD"
+
+
+def test_the_shell_reads_rust_post_images_so_inline_tests_are_excluded() -> None:
+    path: Final[str] = "src/cart.rs"
+    git = FakeGit(
+        diff=_whole_file_diff(path=path, content=RUST_WITH_INLINE_TESTS),
+        sources={path: RUST_WITH_INLINE_TESTS},
+    )
+
+    report = report_for(base="main", head="HEAD", repo="/repo", run=git)
+
+    assert report.code.lines == RUST_CODE_LINES
+    assert ("git", "-C", "/repo", "show", f"HEAD:{path}") in git.calls
