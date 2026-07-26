@@ -7,14 +7,15 @@ and the shell through an injected fake runner — never a real git.
 
 from __future__ import annotations
 
+import json
 from typing import Final
 
 import pytest
 
-from pr_size.cli import report_for
+from pr_size.cli import report_for, run_cli
 from pr_size.policy import code_budget, measure
 from pr_size.sizing import added_line_numbers, changed_files, classify
-from pr_size.types import ChangedFile, FileKind
+from pr_size.types import ChangedFile, FileKind, SizeError
 
 
 def _diff(*, path: str, added: int, start: int = 1) -> str:
@@ -240,3 +241,46 @@ def test_the_shell_reads_rust_post_images_so_inline_tests_are_excluded() -> None
 
     assert report.code.lines == RUST_CODE_LINES
     assert ("git", "-C", "/repo", "show", f"HEAD:{path}") in git.calls
+
+
+def _spread(*, files: int, lines: int) -> str:
+    """A diff over `files` code files carrying `lines` added lines between them."""
+    each: list[int] = [1] * files
+    each[0] += lines - files
+    return "".join(
+        _diff(path=f"src/module{index}.py", added=added)
+        for index, added in enumerate(each)
+    )
+
+
+def test_the_report_is_printed_as_json_and_the_verdict_is_the_exit_code(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    git = FakeGit(diff=_spread(files=4, lines=60))
+
+    exit_code: int = run_cli(base="origin/main", head="HEAD", repo=".", run=git)
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 2
+    assert payload["verdict"] == "block"
+    assert payload["code"] == {
+        "files": 4,
+        "lines": 60,
+        "target": 35,
+        "limit": 50,
+        "band": "over-limit",
+        "verdict": "block",
+    }
+    assert payload["summary"].startswith("block: code 60 added lines across 4 file(s)")
+
+
+def test_an_unmeasurable_change_exits_non_zero_without_a_verdict(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def explode(*, argv: tuple[str, ...]) -> str:
+        raise SizeError(f"bad revision: {argv[-1]}")
+
+    exit_code: int = run_cli(base="nope", head="HEAD", repo=".", run=explode)
+
+    assert exit_code not in {0, 1, 2}
+    assert capsys.readouterr().out == ""

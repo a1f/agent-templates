@@ -70,3 +70,7 @@ GIT_DIFF_FLAGS: Final[tuple[str, ...]] = (
     "--no-color",
     "--find-renames",
 )
+
+# The gate could not measure — distinct from any verdict, so an unmeasured change is
+# never mistaken for a passing one.
+EXIT_ERROR: Final[int] = 3
