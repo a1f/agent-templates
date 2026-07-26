@@ -53,3 +53,8 @@ CODE_LIMIT_FEW_FILES: Final[int] = 100
 CODE_LIMIT_MANY_FILES: Final[int] = 50
 CODE_COHESION_STRICT_LINES: Final[int] = 76
 FEW_FILES: Final[int] = 2
+
+# Prose gets one budget and no file-count relief: a document splits where a module
+# cannot, so the case that earns code its larger cap does not arise.
+PROSE_TARGET_LINES: Final[int] = 100
+PROSE_LIMIT_LINES: Final[int] = 150

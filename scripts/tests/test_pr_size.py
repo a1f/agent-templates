@@ -11,7 +11,7 @@ from typing import Final
 
 import pytest
 
-from pr_size.policy import code_budget
+from pr_size.policy import code_budget, measure
 from pr_size.sizing import added_line_numbers, changed_files, classify
 from pr_size.types import ChangedFile, FileKind
 
@@ -175,3 +175,27 @@ def test_code_bands(files: int, lines: int, verdict: str, band: str) -> None:
 
     assert budget.verdict == verdict
     assert budget.band == band
+
+
+@pytest.mark.parametrize(
+    ("lines", "verdict"),
+    [(100, "pass"), (101, "review"), (150, "review"), (151, "block")],
+)
+def test_prose_bands(lines: int, verdict: str) -> None:
+    report = measure(diff_text=_diff(path="skills/thing/SKILL.md", added=lines))
+
+    assert report.prose.verdict == verdict
+    assert report.code.verdict == "pass"
+    assert report.verdict == verdict
+
+
+def test_a_change_is_only_as_good_as_its_worst_budget() -> None:
+    report = measure(
+        diff_text=_diff(path="cart.py", added=SMALL_CHANGE)
+        + _diff(path="README.md", added=200)
+        + _diff(path="tests/test_cart.py", added=BIG_CHANGE)
+    )
+
+    assert report.code.verdict == "pass"
+    assert report.verdict == "block"
+    assert report.tests.lines == BIG_CHANGE
