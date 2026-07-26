@@ -1,12 +1,12 @@
 ---
 name: pr-breakdown
-description: Use when a PRD issue's slice plan needs breaking into small ~100–200 LOC pull requests recorded as a table in that same issue and drawn as a private claude.ai PR-map artifact, or invokes /pr-breakdown.
+description: Use when a PRD issue's slice plan needs breaking into small pull requests (~35 counted lines each, tests excluded) recorded as a table in that same issue and drawn as a private claude.ai PR-map artifact, or invokes /pr-breakdown.
 ---
 
 # PR Breakdown
 
-Break the slice plan in a PRD issue into **small PRs (~100–200 LOC, excluding tests)**
-and keep two views of them: a **table** in the same issue, one row per PR, and a **PR
+Break the slice plan in a PRD issue into **small PRs (~35 counted lines each)** and
+keep two views of them: a **table** in the same issue, one row per PR, and a **PR
 map** — a private claude.ai artifact laying the PRs out as waves, with blocked-by edges
 and a card per PR.
 
@@ -42,15 +42,19 @@ artifact).
 ## Phase 2 — Write the PR rows
 
 Split each slice into PRs — one cohesive, reviewable, demoable change each, foundations
-before the PRs that use them, over ~200 LOC means split again. **Rows only**: no coder
+before the PRs that use them. **Budget each PR at ~35 counted lines** — added lines
+excluding tests, lockfiles, and generated output, with prose (`.md`, docs) counted apart.
+A PR the size gate will not pass is a PR you must split now: **over 50 counted lines is
+unlandable once it touches 3+ files, over 100 on 1–2 files, over 150 of prose.** Estimate
+high: a row you guess at 40 lands at 60. More, smaller rows are always the right answer. **Rows only**: no coder
 prompts (module boundaries, acceptance criteria) — those come later, one PR at a time.
 
 ```markdown
 ### Slice 1 — <name> (2 PRs)
 | PR | What | LOC | Blocked by | Status | Done when |
 |----|------|-----|-----------|--------|-----------|
-| 1.1 | ... | ~120 | — | Todo | <observable result> |
-| 1.2 | ... | ~140 | 1.1 | Todo | ... |
+| 1.1 | ... | ~30 | — | Todo | <observable result> |
+| 1.2 | ... | ~35 | 1.1 | Todo | ... |
 ```
 
 Close the tables with `**Estimated total:** ~P PRs · W waves.`
