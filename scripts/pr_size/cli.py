@@ -13,6 +13,8 @@ import sys
 from dataclasses import asdict
 from typing import Any
 
+import click
+
 from .constants import EXIT_ERROR, GIT_DIFF_FLAGS, INLINE_TEST_SUFFIXES
 from .policy import measure
 from .sizing import added_line_numbers
@@ -82,3 +84,12 @@ def run_cli(
     }
     print(json.dumps(payload, indent=2))
     return list(Verdict).index(Verdict(report.verdict))
+
+
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.option("--base", required=True, metavar="REF", help="Ref the PR branches from.")
+@click.option("--head", default="HEAD", show_default=True, help="Ref being measured.")
+@click.option("--repo", default=".", show_default=True, help="Repository to measure.")
+def cli(*, base: str, head: str, repo: str) -> None:
+    """Judge a change's size: which lines count, and whether that many may proceed."""
+    raise SystemExit(run_cli(base=base, head=head, repo=repo))
