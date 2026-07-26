@@ -51,3 +51,55 @@ class Tally:
 
     files: int
     lines: int
+
+
+class Verdict(StrEnum):
+    """What the gate says about a size, declared best-first: order is severity."""
+
+    PASS = "pass"
+    REVIEW = "review"
+    BLOCK = "block"
+
+    @property
+    def severity(self) -> int:
+        """So the worse of two budget classes can be taken without a lookup table."""
+        return list(Verdict).index(self)
+
+
+class Band(StrEnum):
+    """Where a count sits against its budget — the judge's dispatch key.
+
+    `target` needs no judgment and `over-limit` admits none; the rest are the grey
+    zone, and `cohesion-strict` is the one that must argue integrity to survive.
+    """
+
+    TARGET = "target"
+    MANY_FILES = "many-files"
+    COHESION = "cohesion"
+    COHESION_STRICT = "cohesion-strict"
+    OVER_TARGET = "over-target"
+    OVER_LIMIT = "over-limit"
+
+
+@dataclass(frozen=True)
+class Budget:
+    """A class's counted lines, judged against that class's target and cap."""
+
+    files: int
+    lines: int
+    target: int
+    limit: int
+    band: Band
+    verdict: Verdict
+
+
+@dataclass(frozen=True)
+class SizeReport:
+    """Every budget class, and the worst verdict among them."""
+
+    code: Budget
+    prose: Budget
+    tests: Tally
+    generated: Tally
+    files: tuple[ChangedFile, ...]
+    verdict: Verdict
