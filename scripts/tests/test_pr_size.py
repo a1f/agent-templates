@@ -9,7 +9,8 @@ from __future__ import annotations
 
 from typing import Final
 
-from pr_size.sizing import added_line_numbers
+from pr_size.sizing import added_line_numbers, changed_files, classify
+from pr_size.types import ChangedFile, FileKind
 
 
 def _diff(*, path: str, added: int, start: int = 1) -> str:
@@ -48,3 +49,43 @@ def test_every_changed_path_is_reported_even_when_it_only_lost_lines() -> None:
 
     assert numbered["gone.py"] == ()
     assert len(numbered["cart.py"]) == SMALL_CHANGE
+
+
+BIG_CHANGE: Final[int] = 40
+
+
+def _kind_lines(*, diff_text: str, kind: FileKind) -> int:
+    return sum(
+        file.lines for file in changed_files(diff_text=diff_text) if file.kind is kind
+    )
+
+
+def test_a_code_file_is_reported_with_the_lines_it_gained() -> None:
+    files = changed_files(diff_text=_diff(path="cart.py", added=SMALL_CHANGE))
+
+    assert files == (
+        ChangedFile(
+            path="cart.py", kind=FileKind.CODE, lines=SMALL_CHANGE, test_lines=0
+        ),
+    )
+
+
+def test_tests_prose_and_generated_files_classify_apart_from_code() -> None:
+    diff_text: str = (
+        _diff(path="cart.py", added=SMALL_CHANGE)
+        + _diff(path="tests/test_cart.py", added=BIG_CHANGE)
+        + _diff(path="web/cart.test.ts", added=BIG_CHANGE)
+        + _diff(path="docs/guide.md", added=BIG_CHANGE)
+        + _diff(path="uv.lock", added=BIG_CHANGE)
+        + _diff(path="web/dist/bundle.js", added=BIG_CHANGE)
+    )
+
+    assert _kind_lines(diff_text=diff_text, kind=FileKind.CODE) == SMALL_CHANGE
+    assert _kind_lines(diff_text=diff_text, kind=FileKind.TEST) == BIG_CHANGE * 2
+    assert _kind_lines(diff_text=diff_text, kind=FileKind.PROSE) == BIG_CHANGE
+    assert _kind_lines(diff_text=diff_text, kind=FileKind.GENERATED) == BIG_CHANGE * 2
+
+
+def test_a_lockfile_under_tests_is_generated_not_a_test() -> None:
+    assert classify(path="tests/fixtures/uv.lock") is FileKind.GENERATED
+    assert classify(path="tests/fixtures/data.md") is FileKind.TEST
