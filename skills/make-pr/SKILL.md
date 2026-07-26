@@ -1,6 +1,6 @@
 ---
 name: make-pr
-description: Use when explicitly asked to run the architect workflow on an already-scoped PR (the /make-pr command) — drives one single-module coding task to done via a deterministic TDD loop: plans behavior slices, dispatches the tdd-runner/worker-coder/reviewer/critic agents, runs the language gates, and logs every subagent call to a per-run JSONL for validation. Not for feature decomposition, direct coding, exploratory fixes, or multi-module planning.
+description: Use when explicitly asked to run the architect workflow on an already-scoped PR (the /make-pr command) — drives one single-module coding task to done via a deterministic TDD loop: plans behavior slices, dispatches the tdd-runner/worker-coder/size-judge/reviewer/critic agents, runs the language and size gates, and logs every subagent call to a per-run JSONL for validation. Not for feature decomposition, direct coding, exploratory fixes, or multi-module planning.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Agent, TodoWrite, Skill
@@ -25,6 +25,7 @@ decide the next step.
 |-------|------|-----|
 | `tdd-runner` | RED, once per behavior | write ONE failing test, prove it fails for the right reason |
 | `worker-coder` | GREEN & REFACTOR (per behavior); non-behavioral edits | minimal code to pass the test, a behavior-preserving refactor, or an exact non-behavioral change; commit |
+| `size-judge` | on a size-gate `review` (+1 on `unmeasured`) | did this PR have to be this big, or does it split? |
 | `reviewer` | after gates are green | quality + bugs + security + line-by-line rule conformance on the diff |
 | `critic` | with the reviewer, on the gate-green diff | goal-fit: did the PR achieve the task? |
 
@@ -32,12 +33,14 @@ Dispatch via the Agent tool. Give each agent the **task context + base + `target
 module boundary + allowed paths + exact files it needs + absolute rule paths**, and give
 `worker-coder` its **`mode`** (`green` | `refactor` | `non_behavioral`) plus
 `dependencies_allowed` (and any named dependency/version) when the task permits dependencies —
-otherwise the coder blocks on any new dependency. Keep each dispatch prompt tight and scoped
-to one job. Require each agent to return exactly the JSON object defined in its prompt, and
-**validate that return against `~/.claude/at/schemas/<role>.schema.json`** (keyed by the
-return's `role` field). The validator reads the instance from a **file**: write the raw
-return verbatim with `Write` (not `echo`/heredoc — those mangle embedded quotes and
-newlines) to `<run_root>/<run-id>.<role>.json`, then run:
+otherwise the coder blocks on any new dependency. Keep each dispatch prompt tight and
+scoped to one job. The `size-judge` is the one exception to the payload list: it gets the
+base ref, task spec, `target_cwd` and the size report the gate just printed — no rule paths.
+Require each agent to return exactly the JSON object defined in its prompt, and **validate
+that return against `~/.claude/at/schemas/<role>.schema.json`** (keyed by the return's
+`role` field). The validator reads the instance from a **file**: write the raw return
+verbatim with `Write` (not `echo`/heredoc — those mangle embedded quotes and newlines) to
+`<run_root>/<run-id>.<role>.json`, then run:
 
 `uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/<role>.schema.json <run_root>/<run-id>.<role>.json`
 
@@ -142,7 +145,7 @@ Resolve before the first dispatch:
    c. **REFACTOR** (optional) → if duplication/structure warrants it, `worker-coder`
       `mode: refactor`; tests stay green and unchanged.
    Log every dispatch (see JSONL contract).
-5. **Gate (objective — before any LLM judgment).** Run the selected
+5. **Gate (objective — language, then size; before any LLM judgment).** Run the selected
    `~/.claude/at/gates/<lang>.json` profiles: each file is
    `{"setup": <cmd>, "triggers": [<glob>], "gates": [{"name","run","fix"}]}` (`fix` may be
    `null`). Run `setup` once, then each `gates[].run` in order. Setup failing because the
@@ -152,6 +155,25 @@ Resolve before the first dispatch:
    `mode: non_behavioral` for format/lint/type/build, but a failing **test** gate is a
    behavioral regression that returns to that behavior's RED/GREEN cycle. Max **2 gate-fix
    rounds**, then stop / re-scope.
+
+   **Size gate**:
+   `PYTHONPATH=~/.claude/at/scripts uv run --no-project --with click python -m pr_size --base <base> --repo <target_cwd>`
+
+   Route on the **top-level** `verdict` in the JSON it prints (the report also carries one
+   per budget class) — never on the exit code, which a launch or usage failure shares with
+   `review` or `block`. Log the gate run (`step: SIZE, role: architect`) and any judge
+   dispatch (`step: SIZE, role: size-judge`); the table is total:
+
+   | Verdict | Action |
+   |---|---|
+   | `pass` | continue to review + critic |
+   | `review` | dispatch `size-judge`. `acceptable` → continue; `split` → **stop / re-scope** reporting its `split_plan` |
+   | `block` | **stop / re-scope** — over a hard cap (>50 code lines across 3+ code files that add lines, >100 across 1–2, >150 prose). Report the tool's `files` breakdown and the smallest first PR you can name |
+   | no JSON printed | **stop and report** the tool's stderr — an unmergeable base, a diff block it could not read, else an environment gap |
+
+   A judge `unmeasured` names its cause: re-dispatch once if that cause is an input you can
+   supply, otherwise escalate. The size gate never routes a fix and you never edit counted
+   files to duck a band.
 6. **Review + critic (the judgment pass — once, on the gate-green diff).** Dispatch
    `reviewer` with the base ref (it runs `git diff <base>...HEAD` itself), passing
    `design-principles.md`, the language rule per changed file type, and `tdd.md`. Then
