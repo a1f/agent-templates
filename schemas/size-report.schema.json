@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "size-report.schema.json",
+  "title": "Size gate report",
+  "$comment": "What `python -m pr_size` prints. Not an agent return: the gate emits it, the skills route on it, the size-judge is handed it, and evidence and metrics read it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "role", "base", "head", "code", "prose", "tests", "generated", "files", "verdict", "summary"],
+  "properties": {
+    "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
+    "role": { "const": "size-report" },
+    "base": { "type": "string" },
+    "head": { "type": "string" },
+    "code": { "$ref": "#/$defs/budget" },
+    "prose": { "$ref": "#/$defs/budget" },
+    "tests": { "$ref": "#/$defs/tally" },
+    "generated": { "$ref": "#/$defs/tally" },
+    "files": { "type": "array", "items": { "$ref": "#/$defs/changed_file" } },
+    "verdict": { "$comment": "The worse of the budgeted classes; the skills route on this, never on the exit code.", "$ref": "#/$defs/verdict" },
+    "summary": { "type": "string" }
+  },
+  "$defs": {
+    "verdict": { "enum": ["pass", "review", "block"] },
+    "count": { "type": "integer", "minimum": 0 },
+    "tally": {
+      "$comment": "An unbudgeted class: reported so a reader sees what was excluded, never judged.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "lines"],
+      "properties": { "files": { "$ref": "#/$defs/count" }, "lines": { "$ref": "#/$defs/count" } }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["files", "lines", "target", "limit", "band", "verdict"],
+      "properties": {
+        "files": { "$ref": "#/$defs/count" },
+        "lines": { "$ref": "#/$defs/count" },
+        "target": { "$ref": "#/$defs/count" },
+        "limit": { "$ref": "#/$defs/count" },
+        "band": { "enum": ["target", "many-files", "cohesion", "cohesion-strict", "over-target", "over-limit"] },
+        "verdict": { "$ref": "#/$defs/verdict" }
+      }
+    },
+    "changed_file": {
+      "$comment": "`lines` is charged to `kind`; `test_lines` are tests living inside the file.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind", "lines", "test_lines"],
+      "properties": {
+        "path": { "type": "string" },
+        "kind": { "enum": ["code", "prose", "test", "generated"] },
+        "lines": { "$ref": "#/$defs/count" },
+        "test_lines": { "$ref": "#/$defs/count" }
+      }
+    }
+  }
+}
