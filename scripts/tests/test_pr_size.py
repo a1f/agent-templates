@@ -12,11 +12,21 @@ from pathlib import Path
 from typing import Final
 
 import pytest
+from click.testing import CliRunner, Result
 
-from pr_size.cli import report_for, run_cli
-from pr_size.policy import code_budget, measure
-from pr_size.sizing import added_line_numbers, changed_files, classify
-from pr_size.types import ChangedFile, FileKind, SizeError
+from pr_size import (
+    Budget,
+    ChangedFile,
+    FileKind,
+    SizeError,
+    SizeReport,
+    added_line_numbers,
+    changed_files,
+    measure,
+)
+from pr_size.cli import cli, report_for, run_cli
+from pr_size.policy import code_budget
+from pr_size.sizing import classify
 from validate_return import errors_against
 
 SCHEMAS: Final[Path] = Path(__file__).resolve().parents[2] / "schemas"
@@ -70,7 +80,9 @@ def _kind_lines(*, diff_text: str, kind: FileKind) -> int:
 
 
 def test_a_code_file_is_reported_with_the_lines_it_gained() -> None:
-    files = changed_files(diff_text=_diff(path="cart.py", added=SMALL_CHANGE))
+    files: tuple[ChangedFile, ...] = changed_files(
+        diff_text=_diff(path="cart.py", added=SMALL_CHANGE)
+    )
 
     assert files == (
         ChangedFile(
@@ -133,9 +145,9 @@ def _whole_file_diff(*, path: str, content: str) -> str:
 
 
 def test_a_rust_cfg_test_block_is_charged_to_tests_not_to_code() -> None:
-    path: Final[str] = "src/cart.rs"
+    path: str = "src/cart.rs"
 
-    files = changed_files(
+    files: tuple[ChangedFile, ...] = changed_files(
         diff_text=_whole_file_diff(path=path, content=RUST_WITH_INLINE_TESTS),
         sources={path: RUST_WITH_INLINE_TESTS},
     )
@@ -147,12 +159,10 @@ def test_a_rust_cfg_test_block_is_charged_to_tests_not_to_code() -> None:
 
 
 def test_a_declared_test_module_does_not_swallow_the_code_below_it() -> None:
-    path: Final[str] = "src/lib.rs"
-    source: Final[str] = (
-        "#[cfg(test)]\nmod tests;\n\npub fn total() -> u32 {\n    3\n}\n"
-    )
+    path: str = "src/lib.rs"
+    source: str = "#[cfg(test)]\nmod tests;\n\npub fn total() -> u32 {\n    3\n}\n"
 
-    files = changed_files(
+    files: tuple[ChangedFile, ...] = changed_files(
         diff_text=_whole_file_diff(path=path, content=source), sources={path: source}
     )
 
@@ -176,8 +186,10 @@ def test_a_declared_test_module_does_not_swallow_the_code_below_it() -> None:
         (2, 101, "block", "over-limit"),
     ],
 )
-def test_code_bands(files: int, lines: int, verdict: str, band: str) -> None:
-    budget = code_budget(files=files, lines=lines)
+def test_three_or_more_code_files_lose_the_larger_cap(
+    files: int, lines: int, verdict: str, band: str
+) -> None:
+    budget: Budget = code_budget(files=files, lines=lines)
 
     assert budget.verdict == verdict
     assert budget.band == band
@@ -187,8 +199,10 @@ def test_code_bands(files: int, lines: int, verdict: str, band: str) -> None:
     ("lines", "verdict"),
     [(100, "pass"), (101, "review"), (150, "review"), (151, "block")],
 )
-def test_prose_bands(lines: int, verdict: str) -> None:
-    report = measure(diff_text=_diff(path="skills/thing/SKILL.md", added=lines))
+def test_prose_past_its_own_target_asks_for_review(lines: int, verdict: str) -> None:
+    report: SizeReport = measure(
+        diff_text=_diff(path="skills/thing/SKILL.md", added=lines)
+    )
 
     assert report.prose.verdict == verdict
     assert report.code.verdict == "pass"
@@ -196,7 +210,7 @@ def test_prose_bands(lines: int, verdict: str) -> None:
 
 
 def test_a_change_is_only_as_good_as_its_worst_budget() -> None:
-    report = measure(
+    report: SizeReport = measure(
         diff_text=_diff(path="cart.py", added=SMALL_CHANGE)
         + _diff(path="README.md", added=200)
         + _diff(path="tests/test_cart.py", added=BIG_CHANGE)
@@ -225,9 +239,11 @@ class FakeGit:
 
 
 def test_the_shell_asks_git_for_the_diff_between_base_and_head() -> None:
-    git = FakeGit(diff=_diff(path="cart.py", added=SMALL_CHANGE))
+    git: FakeGit = FakeGit(diff=_diff(path="cart.py", added=SMALL_CHANGE))
 
-    report = report_for(base="origin/main", head="HEAD", repo="/repo", run=git)
+    report: SizeReport = report_for(
+        base="origin/main", head="HEAD", repo="/repo", run=git
+    )
 
     assert report.code.lines == SMALL_CHANGE
     assert git.calls[0][:3] == ("git", "-C", "/repo")
@@ -235,13 +251,13 @@ def test_the_shell_asks_git_for_the_diff_between_base_and_head() -> None:
 
 
 def test_the_shell_reads_rust_post_images_so_inline_tests_are_excluded() -> None:
-    path: Final[str] = "src/cart.rs"
-    git = FakeGit(
+    path: str = "src/cart.rs"
+    git: FakeGit = FakeGit(
         diff=_whole_file_diff(path=path, content=RUST_WITH_INLINE_TESTS),
         sources={path: RUST_WITH_INLINE_TESTS},
     )
 
-    report = report_for(base="main", head="HEAD", repo="/repo", run=git)
+    report: SizeReport = report_for(base="main", head="HEAD", repo="/repo", run=git)
 
     assert report.code.lines == RUST_CODE_LINES
     assert ("git", "-C", "/repo", "show", f"HEAD:{path}") in git.calls
@@ -260,11 +276,11 @@ def _spread(*, files: int, lines: int) -> str:
 def test_the_report_is_printed_as_json_and_the_verdict_is_the_exit_code(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    git = FakeGit(diff=_spread(files=4, lines=60))
+    git: FakeGit = FakeGit(diff=_spread(files=4, lines=60))
 
     exit_code: int = run_cli(base="origin/main", head="HEAD", repo=".", run=git)
 
-    payload = json.loads(capsys.readouterr().out)
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
     assert exit_code == 2
     assert payload["verdict"] == "block"
     assert payload["code"] == {
@@ -275,7 +291,9 @@ def test_the_report_is_printed_as_json_and_the_verdict_is_the_exit_code(
         "band": "over-limit",
         "verdict": "block",
     }
-    assert payload["summary"].startswith("block: code 60 added lines across 4 file(s)")
+    assert str(payload["summary"]).startswith(
+        "block: code 60 added lines across 4 file(s)"
+    )
 
 
 def test_an_unmeasurable_change_exits_non_zero_without_a_verdict(
@@ -461,3 +479,35 @@ def test_the_printed_report_matches_its_schema(
         )
         == []
     )
+
+
+def test_a_test_file_with_inline_tests_is_counted_once() -> None:
+    """`tests/` files and `#[cfg(test)]` blocks are one tally, not two."""
+    path: str = "tests/integration.rs"
+    source: str = "use crate::x;\n\n#[test]\nfn works() {\n    assert!(true);\n}\n"
+
+    report: SizeReport = measure(
+        diff_text=_whole_file_diff(path=path, content=source), sources={path: source}
+    )
+
+    assert report.tests.files == 1
+    assert report.tests.lines == len(source.splitlines())
+
+
+def test_click_command_parses_options_and_propagates_the_exit_code(
+    tmp_path: Path,
+) -> None:
+    """The decorator wiring itself: run_cli tests bypass click's parsing."""
+    result: Result = CliRunner().invoke(
+        cli, ["--base", "nope", "--repo", str(tmp_path)]
+    )
+
+    assert result.exit_code == 3
+    assert "error:" in result.output
+
+
+def test_click_command_requires_a_base() -> None:
+    result: Result = CliRunner().invoke(cli, [])
+
+    assert result.exit_code == 2
+    assert "--base" in result.output

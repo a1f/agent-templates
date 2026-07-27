@@ -47,7 +47,7 @@ class ChangedFile:
 
 @dataclass(frozen=True)
 class Tally:
-    """How much of one unbudgeted class a diff changed — reported, never judged."""
+    """A class's files and lines, counted the same way for every class."""
 
     files: int
     lines: int
@@ -62,7 +62,10 @@ class Verdict(StrEnum):
 
     @property
     def severity(self) -> int:
-        """So the worse of two budget classes can be taken without a lookup table."""
+        """So the worse of two budget classes can be taken without a lookup table.
+
+        Also the gate's exit code, so the declaration order above is load-bearing.
+        """
         return list(Verdict).index(self)
 
 
@@ -95,7 +98,10 @@ class Budget:
 
 @dataclass(frozen=True)
 class SizeReport:
-    """Every budget class, and the worst verdict among them."""
+    """Every budget class, and the worst verdict among them.
+
+    `tests` and `generated` are counted for the reader only — no budget judges them.
+    """
 
     code: Budget
     prose: Budget

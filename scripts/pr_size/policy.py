@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from .constants import (
-    CODE_COHESION_STRICT_LINES,
+    CODE_COHESION_LINES,
     CODE_LIMIT_FEW_FILES,
     CODE_LIMIT_MANY_FILES,
     CODE_TARGET_LINES,
@@ -19,6 +19,23 @@ from .constants import (
 )
 from .sizing import changed_files
 from .types import Band, Budget, ChangedFile, FileKind, SizeReport, Tally, Verdict
+
+
+def measure(*, diff_text: str, sources: Mapping[str, str] | None = None) -> SizeReport:
+    """Charge a diff's added lines to their budget classes and judge the total."""
+    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text, sources=sources)
+    code_counts: Tally = _counts(files=files, kind=FileKind.CODE)
+    code: Budget = code_budget(files=code_counts.files, lines=code_counts.lines)
+    prose_counts: Tally = _counts(files=files, kind=FileKind.PROSE)
+    prose: Budget = prose_budget(files=prose_counts.files, lines=prose_counts.lines)
+    return SizeReport(
+        code=code,
+        prose=prose,
+        tests=_test_tally(files=files),
+        generated=_counts(files=files, kind=FileKind.GENERATED),
+        files=files,
+        verdict=max(code.verdict, prose.verdict, key=lambda item: item.severity),
+    )
 
 
 def code_budget(*, files: int, lines: int) -> Budget:
@@ -35,15 +52,6 @@ def code_budget(*, files: int, lines: int) -> Budget:
     )
 
 
-def verdict_of(*, band: Band) -> Verdict:
-    """A band is only ever a pass, a question for the judge, or a refusal."""
-    if band is Band.TARGET:
-        return Verdict.PASS
-    if band is Band.OVER_LIMIT:
-        return Verdict.BLOCK
-    return Verdict.REVIEW
-
-
 def _code_band(*, files: int, lines: int, limit: int) -> Band:
     """Name what a code count is, so the judge is told which bar to hold it to."""
     if lines <= CODE_TARGET_LINES:
@@ -52,24 +60,9 @@ def _code_band(*, files: int, lines: int, limit: int) -> Band:
         return Band.OVER_LIMIT
     if files > FEW_FILES:
         return Band.MANY_FILES
-    if lines >= CODE_COHESION_STRICT_LINES:
+    if lines > CODE_COHESION_LINES:
         return Band.COHESION_STRICT
     return Band.COHESION
-
-
-def measure(*, diff_text: str, sources: Mapping[str, str] | None = None) -> SizeReport:
-    """Charge a diff's added lines to their budget classes and judge the total."""
-    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text, sources=sources)
-    code: Budget = code_budget(**_counts(files=files, kind=FileKind.CODE))
-    prose: Budget = prose_budget(**_counts(files=files, kind=FileKind.PROSE))
-    return SizeReport(
-        code=code,
-        prose=prose,
-        tests=_test_tally(files=files),
-        generated=Tally(**_counts(files=files, kind=FileKind.GENERATED)),
-        files=files,
-        verdict=max(code.verdict, prose.verdict, key=lambda item: item.severity),
-    )
 
 
 def prose_budget(*, files: int, lines: int) -> Budget:
@@ -89,17 +82,17 @@ def prose_budget(*, files: int, lines: int) -> Budget:
     )
 
 
-def _counts(*, files: tuple[ChangedFile, ...], kind: FileKind) -> dict[str, int]:
+def _counts(*, files: tuple[ChangedFile, ...], kind: FileKind) -> Tally:
     """One class's files and lines. A file that only lost lines is free."""
     charged: list[ChangedFile] = [
         file for file in files if file.kind is kind and file.lines > 0
     ]
-    return {"files": len(charged), "lines": sum(file.lines for file in charged)}
+    return Tally(files=len(charged), lines=sum(file.lines for file in charged))
 
 
 def _test_tally(*, files: tuple[ChangedFile, ...]) -> Tally:
     """Test lines, wherever they lived: their own files, and inside source files."""
-    counts: dict[str, int] = _counts(files=files, kind=FileKind.TEST)
+    counts: Tally = _counts(files=files, kind=FileKind.TEST)
     carrying: set[str] = {
         file.path
         for file in files
@@ -107,5 +100,14 @@ def _test_tally(*, files: tuple[ChangedFile, ...]) -> Tally:
     }
     return Tally(
         files=len(carrying),
-        lines=counts["lines"] + sum(file.test_lines for file in files),
+        lines=counts.lines + sum(file.test_lines for file in files),
     )
+
+
+def verdict_of(*, band: Band) -> Verdict:
+    """A band is only ever a pass, a question for the judge, or a refusal."""
+    if band is Band.TARGET:
+        return Verdict.PASS
+    if band is Band.OVER_LIMIT:
+        return Verdict.BLOCK
+    return Verdict.REVIEW

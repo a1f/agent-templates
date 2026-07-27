@@ -65,11 +65,12 @@ RUST_LITERAL_OR_COMMENT: Final[re.Pattern[str]] = re.compile(
 
 # The code policy, in five numbers. Plan to the target; the caps are where judgment
 # stops being invited. Few files buy a larger cap because one or two files can be a
-# single unit a split would break — many files never are.
+# single unit a split would break — many files never are. Past the cohesion line, a
+# few-file PR has to name the piece a split would break, not just argue cohesion.
 CODE_TARGET_LINES: Final[int] = 35
 CODE_LIMIT_FEW_FILES: Final[int] = 100
 CODE_LIMIT_MANY_FILES: Final[int] = 50
-CODE_COHESION_STRICT_LINES: Final[int] = 76
+CODE_COHESION_LINES: Final[int] = 75
 FEW_FILES: Final[int] = 2
 
 # Prose gets one budget and no file-count relief: a document splits where a module
