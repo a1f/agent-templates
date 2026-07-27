@@ -1,7 +1,9 @@
 """The imperative shell: real git subprocesses, JSON on stdout, verdict as exit code.
 
 Exit codes are the verdict — 0 pass, 1 review (a judge must rule), 2 block, 3 the gate
-could not measure — so an unmeasured change never reads as a passing one.
+could not measure — so an unmeasured change never reads as a passing one. A launch or
+usage failure exits 1 or 2 as well, which is why the JSON `verdict`, not the exit code,
+is what a caller routes on.
 """
 
 from __future__ import annotations
@@ -15,7 +17,13 @@ from typing import Any
 
 import click
 
-from .constants import EXIT_ERROR, GIT_DIFF_FLAGS, INLINE_TEST_SUFFIXES
+from .constants import (
+    EXIT_ERROR,
+    GIT_DIFF_FLAGS,
+    INLINE_TEST_SUFFIXES,
+    REPORT_ROLE,
+    SCHEMA_VERSION,
+)
 from .policy import measure
 from .sizing import added_line_numbers
 from .types import CommandRunner, SizeError, SizeReport, Verdict
@@ -50,7 +58,7 @@ def report_for(*, base: str, head: str, repo: str, run: CommandRunner) -> SizeRe
 
 
 def summarize(*, report: SizeReport) -> str:
-    """One line a human or a judge can act on: the counts, the caps, the call."""
+    """One line to act on: the counts, the caps, and the call."""
     return (
         f"{report.verdict}: code {report.code.lines} added lines across "
         f"{report.code.files} file(s) (target {report.code.target}, cap "
@@ -76,7 +84,8 @@ def run_cli(
         print(f"error: {error}", file=sys.stderr)
         return EXIT_ERROR
     payload: dict[str, Any] = {
-        "schema_version": "v1",
+        "schema_version": SCHEMA_VERSION,
+        "role": REPORT_ROLE,
         "base": base,
         "head": head,
         **asdict(report),

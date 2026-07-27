@@ -45,6 +45,7 @@ def verdict_of(*, band: Band) -> Verdict:
 
 
 def _code_band(*, files: int, lines: int, limit: int) -> Band:
+    """Name what a code count is, so the judge is told which bar to hold it to."""
     if lines <= CODE_TARGET_LINES:
         return Band.TARGET
     if lines > limit:
@@ -98,9 +99,13 @@ def _counts(*, files: tuple[ChangedFile, ...], kind: FileKind) -> dict[str, int]
 
 def _test_tally(*, files: tuple[ChangedFile, ...]) -> Tally:
     """Test lines, wherever they lived: their own files, and inside source files."""
-    inline: list[ChangedFile] = [file for file in files if file.test_lines > 0]
     counts: dict[str, int] = _counts(files=files, kind=FileKind.TEST)
+    carrying: set[str] = {
+        file.path
+        for file in files
+        if file.test_lines > 0 or (file.kind is FileKind.TEST and file.lines > 0)
+    }
     return Tally(
-        files=counts["files"] + len(inline),
-        lines=counts["lines"] + sum(file.test_lines for file in inline),
+        files=len(carrying),
+        lines=counts["lines"] + sum(file.test_lines for file in files),
     )

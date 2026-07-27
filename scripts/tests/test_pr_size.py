@@ -8,6 +8,7 @@ and the shell through an injected fake runner — never a real git.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Final
 
 import pytest
@@ -16,6 +17,9 @@ from pr_size.cli import report_for, run_cli
 from pr_size.policy import code_budget, measure
 from pr_size.sizing import added_line_numbers, changed_files, classify
 from pr_size.types import ChangedFile, FileKind, SizeError
+from validate_return import errors_against
+
+SCHEMAS: Final[Path] = Path(__file__).resolve().parents[2] / "schemas"
 
 
 def _diff(*, path: str, added: int, start: int = 1) -> str:
@@ -440,3 +444,20 @@ def test_a_test_attribute_inside_a_string_cannot_claim_the_code_after_it() -> No
     )
 
     assert files[0].lines == 4
+
+
+def test_the_printed_report_matches_its_schema(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The schema is the report's contract; nothing else pins the emitter to it."""
+    git: FakeGit = FakeGit(diff=_spread(files=4, lines=60))
+
+    run_cli(base="origin/main", head="HEAD", repo=".", run=git)
+
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert (
+        errors_against(
+            instance=payload, schema_path=SCHEMAS / "size-report.schema.json"
+        )
+        == []
+    )

@@ -97,3 +97,7 @@ GIT_DIFF_FLAGS: Final[tuple[str, ...]] = (
 # The gate could not measure — distinct from any verdict, so an unmeasured change is
 # never mistaken for a passing one.
 EXIT_ERROR: Final[int] = 3
+
+# The envelope the report is printed with, matching size-report.schema.json.
+SCHEMA_VERSION: Final[str] = "v1"
+REPORT_ROLE: Final[str] = "size-report"
