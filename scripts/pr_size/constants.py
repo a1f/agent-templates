@@ -8,6 +8,11 @@ from typing import Final
 # The unified diff we ask git for: the post-image path marker, and the hunk header we
 # read new-file line numbers from.
 NEW_PATH_MARKER: Final[str] = "+++ b/"
+PRE_IMAGE_MARKER: Final[str] = "--- "
+FILE_BLOCK_MARKER: Final[str] = "diff --git "
+DELETED_POST_IMAGE: Final[str] = "+++ /dev/null"
+ADDED_LINE_MARKER: Final[str] = "+"
+CONTEXT_LINE_MARKER: Final[str] = " "
 HUNK_HEADER: Final[re.Pattern[str]] = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)")
 
 # A file is a test when its directory or its name says so — one regex per question, so
@@ -26,13 +31,22 @@ GENERATED_DIR_SEGMENTS: Final[frozenset[str]] = frozenset(
     {"vendor", "node_modules", "dist", "build", "target", "__snapshots__", ".venv"}
 )
 GENERATED_BASENAME: Final[re.Pattern[str]] = re.compile(
-    r"^([^/]*\.lock|[^/]*-lock\.json|go\.sum|[^/]+\.min\.(js|css)|[^/]+\.snap)$"
+    r"^([^/]*\.lock[b]?"
+    r"|[^/]*\.lock\.json"
+    r"|[^/]*\.lockfile"
+    r"|[^/]*\.lock\.hcl"
+    r"|[^/]*-lock\.(json|yaml|yml)"
+    r"|go\.work\.sum"
+    r"|npm-shrinkwrap\.json"
+    r"|go\.sum"
+    r"|[^/]+\.min\.(js|css)"
+    r"|[^/]+\.snap)$"
 )
 
 # Prose is the writing a change ships — prompts, docs, a README. Authored, so budgeted;
 # not code, so budgeted apart.
 PROSE_SUFFIXES: Final[frozenset[str]] = frozenset(
-    {".md", ".markdown", ".mdx", ".rst", ".txt", ".adoc"}
+    {".md", ".markdown", ".mdx", ".rst", ".adoc"}
 )
 
 # Languages whose tests can live inside the source file they exercise. The attribute
@@ -40,6 +54,10 @@ PROSE_SUFFIXES: Final[frozenset[str]] = frozenset(
 INLINE_TEST_SUFFIXES: Final[frozenset[str]] = frozenset({".rs"})
 RUST_TEST_ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
     r"^#\[(test\]|cfg\((all\(|any\()?test[,)])"
+)
+# What starts a new top-level item, and therefore bounds the one before it.
+RUST_ITEM_START: Final[re.Pattern[str]] = re.compile(
+    r"^(pub |fn |mod |use |impl |struct |enum |trait |type |const |static |unsafe |#\[)"
 )
 RUST_LITERAL_OR_COMMENT: Final[re.Pattern[str]] = re.compile(
     r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|//.*$"
@@ -61,10 +79,15 @@ PROSE_LIMIT_LINES: Final[int] = 150
 
 # How the shell talks to git. `--unified=0` keeps the parse honest (no context line can
 # be mistaken for an addition); `core.quotePath=false` keeps non-ASCII paths readable
-# rather than octal-escaped.
+# rather than octal-escaped; the two prefix settings override a user config that would
+# drop or rename the `a/`+`b/` prefixes the header parse keys on.
 GIT_DIFF_FLAGS: Final[tuple[str, ...]] = (
     "-c",
     "core.quotePath=false",
+    "-c",
+    "diff.noprefix=false",
+    "-c",
+    "diff.mnemonicPrefix=false",
     "diff",
     "--unified=0",
     "--no-color",

@@ -284,3 +284,159 @@ def test_an_unmeasurable_change_exits_non_zero_without_a_verdict(
 
     assert exit_code not in {0, 1, 2}
     assert capsys.readouterr().out == ""
+
+
+def test_an_added_line_that_looks_like_a_header_is_still_counted() -> None:
+    """git renders an added line `++ x` as `+++ x`; only a paired header ends a file."""
+    diff_text: str = (
+        "diff --git a/notes.py b/notes.py\n"
+        "--- a/notes.py\n"
+        "+++ b/notes.py\n"
+        "@@ -0,0 +1,3 @@\n"
+        "+++ quoting a diff header\n"
+        "+real = 1\n"
+        "+also_real = 2\n"
+    )
+
+    assert added_line_numbers(diff_text=diff_text) == {"notes.py": (1, 2, 3)}
+
+
+def test_a_deleted_file_adds_no_phantom_line_to_the_file_before_it() -> None:
+    """git writes `+++ /dev/null` for a deletion; it is a header, not an addition."""
+    diff_text: str = _diff(path="aaa.py", added=1) + (
+        "diff --git a/zzz.py b/zzz.py\n"
+        "deleted file mode 100644\n"
+        "--- a/zzz.py\n"
+        "+++ /dev/null\n"
+        "@@ -1,3 +0,0 @@\n"
+        "-one\n-two\n-three\n"
+    )
+
+    assert added_line_numbers(diff_text=diff_text) == {"aaa.py": (1,)}
+
+
+def test_every_lockfile_flavour_is_generated_not_code() -> None:
+    flavours: tuple[str, ...] = (
+        "pnpm-lock.yaml",
+        "package-lock.json",
+        "uv.lock",
+        "bun.lockb",
+        "packages.lock.json",
+        "gradle.lockfile",
+        "go.work.sum",
+        ".terraform.lock.hcl",
+    )
+    for path in flavours:
+        assert classify(path=path) is FileKind.GENERATED, path
+
+
+RUST_UNBALANCED_TEST_MOD: Final[str] = """\
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn multiline_raw_string() {
+        let expected = r#"
+{ a brace no line-local strip can see
+"#;
+        assert!(render() == expected);
+    }
+}
+
+pub fn render() -> String {
+    String::new()
+}
+"""
+
+
+def test_an_unclosable_test_module_stops_at_the_modules_own_closing_brace() -> None:
+    """A multi-line raw string can hide a brace; code below the mod is still code."""
+    path: str = "src/lib.rs"
+
+    files: tuple[ChangedFile, ...] = changed_files(
+        diff_text=_whole_file_diff(path=path, content=RUST_UNBALANCED_TEST_MOD),
+        sources={path: RUST_UNBALANCED_TEST_MOD},
+    )
+
+    assert files[0].test_lines == 10
+    assert files[0].lines == 4
+
+
+RUST_SPACED_CLOSE: Final[str] = (
+    "#[cfg(test)]\nmod tests {\n    fn hidden() {\n"
+    '        let raw = r#"\n{ hidden brace\n"#;\n'
+    "    }\n} // end of tests\n\npub fn one() -> u32 {\n    1\n}\n"
+)
+
+
+def test_a_test_module_stops_at_a_close_at_its_own_indent() -> None:
+    """A close can carry a trailing comment; the region still ends there, not later."""
+    path: str = "src/lib.rs"
+
+    files: tuple[ChangedFile, ...] = changed_files(
+        diff_text=_whole_file_diff(path=path, content=RUST_SPACED_CLOSE),
+        sources={path: RUST_SPACED_CLOSE},
+    )
+
+    assert files[0].lines == 4
+
+
+def test_a_removed_line_that_looks_like_a_header_does_not_end_the_file() -> None:
+    """Only a `---`/`+++` pair naming a path is a header; look-alike content is not."""
+    diff_text: str = (
+        "diff --git a/notes.md b/notes.md\n"
+        "--- a/notes.md\n"
+        "+++ b/notes.md\n"
+        "@@ -1,1 +1,3 @@\n"
+        "--- old marker\n"
+        "+++ b/tests/free.py\n"
+        "+extra one\n"
+        "+extra two\n"
+    )
+
+    assert len(added_line_numbers(diff_text=diff_text)["notes.md"]) == 3
+
+
+@pytest.mark.parametrize(
+    ("source", "code_lines"),
+    [
+        ("#[test]\nfn placeholder() {}\npub fn one() -> u32 {\n    1\n}\n", 3),
+        ("#[cfg(test)]\nuse a::{\n    b,\n};\npub fn one() -> u32 {\n    1\n}\n", 3),
+        (
+            # a `;` inside the type ends this one at the attribute — early, which
+            # charges its two remaining lines to code, never the reverse
+            "#[cfg(test)]\nconst C: [u8; 1] = [\n    0,\n];\n"
+            "pub fn one() -> u32 {\n    1\n}\n",
+            5,
+        ),
+    ],
+)
+def test_a_test_item_ends_where_its_own_braces_close(
+    source: str, code_lines: int
+) -> None:
+    """A one-line body and a `};` close the item they opened; an unreadable shape
+    ends early, charging its lines to code."""
+    path: str = "src/lib.rs"
+
+    files: tuple[ChangedFile, ...] = changed_files(
+        diff_text=_whole_file_diff(path=path, content=source), sources={path: source}
+    )
+
+    assert files[0].lines == code_lines
+
+
+RUST_ATTRIBUTE_IN_A_STRING: Final[str] = (
+    'const EXPECTED: &str = "\n#[cfg(test)]\nmod tests {\n";\n'
+    "pub fn parse() -> u32 {\n    1\n}\n"
+)
+
+
+def test_a_test_attribute_inside_a_string_cannot_claim_the_code_after_it() -> None:
+    """The region stops at the next top-level item, whatever the braces did."""
+    path: str = "src/lib.rs"
+
+    files: tuple[ChangedFile, ...] = changed_files(
+        diff_text=_whole_file_diff(path=path, content=RUST_ATTRIBUTE_IN_A_STRING),
+        sources={path: RUST_ATTRIBUTE_IN_A_STRING},
+    )
+
+    assert files[0].lines == 4

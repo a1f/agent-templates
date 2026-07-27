@@ -8,12 +8,18 @@ from collections.abc import Mapping
 from pathlib import PurePosixPath
 
 from .constants import (
+    ADDED_LINE_MARKER,
+    CONTEXT_LINE_MARKER,
+    DELETED_POST_IMAGE,
+    FILE_BLOCK_MARKER,
     GENERATED_BASENAME,
     GENERATED_DIR_SEGMENTS,
     HUNK_HEADER,
     INLINE_TEST_SUFFIXES,
     NEW_PATH_MARKER,
+    PRE_IMAGE_MARKER,
     PROSE_SUFFIXES,
+    RUST_ITEM_START,
     RUST_LITERAL_OR_COMMENT,
     RUST_TEST_ATTRIBUTE,
     TEST_BASENAME,
@@ -25,7 +31,10 @@ from .types import ChangedFile, FileKind
 def changed_files(
     *, diff_text: str, sources: Mapping[str, str] | None = None
 ) -> tuple[ChangedFile, ...]:
-    """Every path the diff touches, classified, with the lines it gained.
+    """Every path the diff adds to, classified, with the lines it gained.
+
+    A modified file that only lost lines is here with zero; a deletion, a pure rename
+    and a binary are absent — none of them is anything to read.
 
     `sources` carries the post-image content of files whose tests live inside them
     (Rust); a file absent from it is charged entirely by its path, which can only
@@ -54,10 +63,8 @@ def _charge(
 def test_line_numbers(*, path: str, source: str) -> frozenset[int]:
     """The 1-based line numbers of `source` that belong to an in-file test item.
 
-    Brace matching over literal-stripped lines is a heuristic, not a parser: a raw
-    string (`r#"…"#`) spanning lines with unbalanced braces can mis-size a region. It
-    errs toward ending the region early, which charges test lines to code — never the
-    reverse, so the gate cannot be widened by a crafted test module.
+    Reading it back is a heuristic, not a parser — `_item_end` states exactly where a
+    region is taken to end, and which shapes it can still mis-size.
     """
     if not path.endswith(tuple(INLINE_TEST_SUFFIXES)):
         return frozenset()
@@ -75,18 +82,40 @@ def test_line_numbers(*, path: str, source: str) -> frozenset[int]:
 
 
 def _item_end(*, lines: list[str], start: int) -> int:
-    """The 0-based index of the line closing the item attributed at `start`."""
+    """The 0-based index of the line closing the item attributed at `start`.
+
+    Brace depth over literal-stripped lines finds the real close, whatever shape it
+    takes — `{}` on one line, `};`, `}];`. Depth alone is not enough: a brace hidden in
+    a multi-line string leaves the count open, so the region is also bounded by the
+    first close at the attribute's own indentation and by the next top-level item to
+    start after the body opened, whichever comes first. Both bounds key on the
+    attribute's own indentation, so an unreadable region ends at the next column-0 item
+    — charging its own lines to code, and at worst carrying indented items between the
+    two with it.
+    """
+    indent: int = len(lines[start]) - len(lines[start].lstrip())
     depth: int = 0
     opened: bool = False
-    for index in range(start, len(lines)):
+    backstop: int | None = None
+    for index in range(start + 1, len(lines)):
         code: str = RUST_LITERAL_OR_COMMENT.sub("", lines[index])
+        # Whether the body was already open *before* this line: the attributed item
+        # opens it and is itself an item start, so only a later one bounds the region.
+        was_open: bool = opened
         depth += code.count("{") - code.count("}")
         opened = opened or "{" in code
-        if opened and depth <= 0:
-            return index
         if not opened and ";" in code:
             return index
-    return len(lines) - 1
+        if opened and depth <= 0:
+            return index
+        at_or_left: bool = len(lines[index]) - len(lines[index].lstrip()) <= indent
+        if not at_or_left:
+            continue
+        if backstop is None and code.strip().startswith("}"):
+            backstop = index
+        if was_open and RUST_ITEM_START.match(lines[index]):
+            return min(backstop, index - 1) if backstop is not None else index - 1
+    return backstop if backstop is not None else start
 
 
 def classify(*, path: str) -> FileKind:
@@ -118,18 +147,38 @@ def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
     added: dict[str, list[int]] = {}
     path: str | None = None
     line_number: int = 0
+    previous: str = ""
+    awaiting_header: bool = False
     for line in diff_text.splitlines():
         header: re.Match[str] | None = HUNK_HEADER.match(line)
-        if line.startswith(NEW_PATH_MARKER):
+        # A post-image header is the `+++` half of the `---`/`+++` pair that opens a
+        # `diff --git` block. All three are needed: content lines can imitate either
+        # half — an added line starting `++` renders as `+++ …`, a removed line
+        # starting `--` renders as `--- …` — but only once per block can they follow a
+        # `diff --git` line with no header seen since.
+        if line.startswith(FILE_BLOCK_MARKER):
+            awaiting_header = True
+        is_header: bool = (
+            awaiting_header
+            and previous.startswith(PRE_IMAGE_MARKER)
+            and (line.startswith(NEW_PATH_MARKER) or line == DELETED_POST_IMAGE)
+        )
+        awaiting_header = awaiting_header and not is_header
+        previous = line
+        if is_header and line.startswith(NEW_PATH_MARKER):
             path = line.removeprefix(NEW_PATH_MARKER)
             added.setdefault(path, [])
+        elif is_header:
+            # A post-image we cannot attribute — `+++ /dev/null`, a deletion. Charge
+            # nothing until the next real file starts.
+            path = None
         elif header is not None:
             line_number = int(header.group(1))
         elif path is None:
             continue
-        elif line.startswith("+"):
+        elif line.startswith(ADDED_LINE_MARKER):
             added[path].append(line_number)
             line_number += 1
-        elif line.startswith(" "):
+        elif line.startswith(CONTEXT_LINE_MARKER):
             line_number += 1
     return {path: tuple(numbers) for path, numbers in added.items()}
