@@ -38,6 +38,12 @@ _FIX_LOOP_TRANSCRIPT: Final[Path] = (
 _ROLELESS_CRITIC_TRANSCRIPT: Final[Path] = (
     Path(__file__).parent / "fixtures" / "roleless_critic_session.jsonl"
 )
+_SIZE_BLOCK_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "size_block_session.jsonl"
+)
+_SIZE_SPLIT_TRANSCRIPT: Final[Path] = (
+    Path(__file__).parent / "fixtures" / "size_split_session.jsonl"
+)
 _DISPATCH_TRANSCRIPT: Final[Path] = (
     Path(__file__).parent / "fixtures" / "dispatch_session.jsonl"
 )
@@ -534,3 +540,18 @@ def test_dispatches_listed_one_per_sidechain_file_in_name_order() -> None:
     assert record is not None
     assert record.n_dispatches == 3
     assert record.detail.get("dispatches") == _EXPECTED_DISPATCHES
+
+
+def test_size_judge_split_sets_run_outcome() -> None:
+    record: RunRecord | None = extract_run(transcript_path=_SIZE_SPLIT_TRANSCRIPT)
+
+    assert record is not None
+    assert record.outcome == "size_split"
+
+
+def test_size_gate_block_sets_run_outcome_though_no_judge_was_dispatched() -> None:
+    # a `block` stops the run at the gate, so the report is the only signal there is
+    record: RunRecord | None = extract_run(transcript_path=_SIZE_BLOCK_TRANSCRIPT)
+
+    assert record is not None
+    assert record.outcome == "size_block"

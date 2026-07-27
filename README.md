@@ -32,7 +32,7 @@ Packages / Skills / Agents / Rules / Hooks, with installed items pre-ticked. See
 | `jq` | Several skills | `brew install jq` | `apt install jq` |
 | `gh` | `make-pr`, `pr-babysit`, `dispatch` | `brew install gh` | `apt install gh` |
 | `tmux` | `dispatch` (one window per PR) | `brew install tmux` | `apt install tmux` |
-| `uv` | Installer (`at` runs the engine via uv); `scripts/` (agent return-schema checks) | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| `uv` | Installer (`at` runs the engine via uv); `scripts/` (agent return-schema checks, the size gate) | `brew install uv` | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
 | `claude` CLI | All skills (the runtime) | Claude Code installer | Claude Code installer |
 
 Verify the installation with `./validate.sh`.
@@ -100,8 +100,8 @@ Top-level skills that run full workflows by composing lower-level skills.
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| **make-pr** | `/make-pr` | Drive a scoped task to done via a per-behavior TDD loop (tdd-runner + worker-coder), run gates, then review/critic. Best for high-risk work |
-| **make-pr-lite** | `/make-pr-lite` | Lighter, cheaper sibling of make-pr for low-risk/greenfield PRs: one self-TDD coder + gates + a parallel review panel. Trades the live per-behavior RED witness for a test-form review lens |
+| **make-pr** | `/make-pr` | Drive a scoped task to done via a per-behavior TDD loop (tdd-runner + worker-coder), run the language and size gates, then review/critic. Best for high-risk work |
+| **make-pr-lite** | `/make-pr-lite` | Lighter, cheaper sibling of make-pr for low-risk/greenfield PRs: one self-TDD coder + the language and size gates + a parallel review panel. Trades the live per-behavior RED witness for a test-form review lens |
 | **dispatch** | `/dispatch` | Start the unblocked PRs from a plan in parallel — approval-gated, then one tmux window per PR, each in its own worktree running an agent on `/make-pr <ref> <PR#>` |
 | **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
@@ -119,7 +119,7 @@ that plan honest as PRs land.
 | **breakdown** | `/breakdown` | Run the whole pipeline (PRD -> slices -> PR rows) into one issue, gating at each step. Composes the three below |
 | **to-prd** | `/to-prd` | Turn the conversation into a short PRD published as a GitHub issue |
 | **to-issues** | `/to-issues` | Break the PRD into vertical, tracer-bullet slices in the same issue |
-| **pr-breakdown** | `/pr-breakdown` | Split each slice into ~100-200 LOC PR rows in the same issue |
+| **pr-breakdown** | `/pr-breakdown` | Split each slice into ~35-counted-line PR rows in the same issue |
 | **course-correct** | `/course-correct` | After some PRs land, check merged work against the PRD goal and re-plan: refresh Status, add/remove/re-scope slices and PRs. Checkpoint-aware; run it in a fresh session every few PRs |
 | **explain** | `/explain` | Explain a slice, PR row, or GitHub PR in dead-simple, plain words — why we need it, what it is, what changes — for someone who doesn't code |
 

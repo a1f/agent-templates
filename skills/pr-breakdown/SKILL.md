@@ -43,16 +43,17 @@ artifact).
 
 Split each slice into PRs — one cohesive, reviewable, demoable change each, foundations
 before the PRs that use them. **Budget each PR at ~35 counted lines** — added lines
-excluding tests, lockfiles, and generated output, with prose (`.md`, docs) counted apart.
-A PR the size gate will not pass is a PR you must split now: **over 50 counted lines is
-unlandable once it touches 3+ files, over 100 on 1–2 files, over 150 of prose.** Estimate
-high: a row you guess at 40 lands at 60. More, smaller rows are always the right answer. **Rows only**: no coder
-prompts (module boundaries, acceptance criteria) — those come later, one PR at a time.
+excluding tests, lockfiles, and generated or vendored output, with prose (`.md` and
+friends) counted apart at its own 100-line target. A PR the size gate will not pass is a
+PR you must split now: **over 50 code lines is unlandable once it adds lines to 3+ code
+files, over 100 on 1–2, over 150 of prose.** Estimate high: a row you guess at 40 lands
+at 60. More, smaller rows are always the right answer. **Rows only**: no coder prompts
+(module boundaries, acceptance criteria) — those come later, one PR at a time.
 
 ```markdown
 ### Slice 1 — <name> (2 PRs)
-| PR | What | LOC | Blocked by | Status | Done when |
-|----|------|-----|-----------|--------|-----------|
+| PR | What | Counted lines | Blocked by | Status | Done when |
+|----|------|---------------|------------|--------|-----------|
 | 1.1 | ... | ~30 | — | Todo | <observable result> |
 | 1.2 | ... | ~35 | 1.1 | Todo | ... |
 ```
@@ -98,13 +99,13 @@ reinstall the `pr-breakdown` package to get it back.
 What you supply:
 
 - **Header** — `owner/repo · issue #N`, a title (`<goal>, one small PR at a time`), a
-  paragraph on the plan, and stats: PRs merged `x / y`, ~LOC per PR, wave count, and how
-  many slices need the human.
+  paragraph on the plan, and stats: PRs merged `x / y`, counted lines per PR, wave count,
+  and how many slices need the human.
 - **Lanes** — one per wave, left to right, named for what the wave unlocks ("The seed",
   "Fan out"). Every chip carries `data-deps` naming its blockers; the page's own script
   draws the edges from those, so never hand-author edge SVG.
 - **Cards** — one per PR, grouped into a section per wave: what it does in plain words,
-  why it's scoped that way if that isn't obvious, its blockers, its `Done when`, its LOC,
+  why it's scoped that way if that isn't obvious, its blockers, its `Done when`, its size,
   and a link to the PR once merged.
 - **Status → class** — on the chip, and on its card:
 

@@ -39,14 +39,14 @@ Read the source the user named:
   a plan the user just approved. Confirm the number with the user before proceeding.
 
 Find the PR rows (a `## PR breakdown` section from `/pr-breakdown` has them as
-`| PR | What | LOC | Done when |`). If the source has no PR-level breakdown, **stop**
-and point the user at `/pr-breakdown` — do not invent one.
+`| PR | What | Counted lines | Blocked by | Status | Done when |`). If the source has no
+PR-level breakdown, **stop** and point the user at `/pr-breakdown` — do not invent one.
 
 Then decide which rows are **ready to start**:
 
 | Signal | Where it comes from |
 |--------|---------------------|
-| Dependencies satisfied | the plan's own ordering and parallelism notes (`*n.1 ∥ n.2 (independent)*` = no dependency between them; otherwise later rows in a slice wait on earlier ones) |
+| Dependencies satisfied | the row's **Blocked by** column — `/pr-breakdown` writes it as the only dependency record, and the waves come from it |
 | Not already done | `gh pr list --state all --search "<PR#>"` — skip rows with a merged or open PR |
 | Not already started | `git branch -a` and `git worktree list` — skip rows that already have a branch or worktree |
 

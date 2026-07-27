@@ -50,7 +50,8 @@ PROSE_SUFFIXES: Final[frozenset[str]] = frozenset(
 )
 
 # Languages whose tests can live inside the source file they exercise. The attribute
-# matches `#[test]`, `#[cfg(test)]` and `#[cfg(all(test, …))]` — never `cfg(not(test))`.
+# matches `#[test]`, `#[cfg(test)]` and the `#[cfg(all(test, …))]` / `any(test, …)`
+# forms — never `cfg(not(test))`.
 INLINE_TEST_SUFFIXES: Final[frozenset[str]] = frozenset({".rs"})
 RUST_TEST_ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
     r"^#\[(test\]|cfg\((all\(|any\()?test[,)])"

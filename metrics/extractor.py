@@ -41,6 +41,14 @@ _CRITIC_VERDICTS: Final[frozenset[str]] = frozenset(
     {"achieved", "partial", "not_achieved"}
 )
 
+# How the size gate ends a run, keyed by the two returns that can carry it. Absent on
+# purpose: `acceptable` continues (its critic sets the outcome), and `unmeasured` is
+# re-dispatched once, then stops the run with no verdict of its own to match.
+_SIZE_STOPS: Final[dict[tuple[str, str], str]] = {
+    ("size-judge", "split"): "size_split",
+    ("size-report", "block"): "size_block",
+}
+
 # The coder return schemas in this pipeline; both carry status/blocked_reason with
 # identical semantics, so a blocked return from either records the run's friction.
 _CODER_ROLES: Final[frozenset[str]] = frozenset({"coder", "coder-lite"})
@@ -51,7 +59,7 @@ _CODER_ROLES: Final[frozenset[str]] = frozenset({"coder", "coder-lite"})
 _DISPATCH_TOOLS: Final[frozenset[str]] = frozenset({"Agent", "Task"})
 _FIX_MODE_RE: Final[re.Pattern[str]] = re.compile(r"^\s*mode:\s*fix\b", re.IGNORECASE)
 
-# A tracked run whose scan found neither a critic verdict nor a coder block degrades
+# A tracked run whose scan found no critic verdict, size stop, or coder block degrades
 # to this outcome rather than an empty string, so every tracked run carries a signal.
 _UNKNOWN_OUTCOME: Final[str] = "unknown"
 
@@ -417,6 +425,12 @@ def extract_run(
                     isinstance(verdict, str) and verdict in _CRITIC_VERDICTS
                 ):
                     outcome = verdict
+                elif (
+                    isinstance(role, str)
+                    and isinstance(verdict, str)
+                    and (stop := _SIZE_STOPS.get((role, verdict))) is not None
+                ):
+                    outcome = stop
                 elif role in _CODER_ROLES and parsed.get("status") == "blocked":
                     reason: object = parsed.get("blocked_reason")
                     blocked_reason = reason if isinstance(reason, str) else ""
@@ -449,8 +463,9 @@ def extract_run(
         usage_by_role=usage_by_role,
         seen_message_ids=seen_message_ids,
     )
-    # A critic verdict wins; absent one a coder block records "blocked", and a run
-    # with neither signal degrades to "unknown" rather than an empty outcome.
+    # A critic verdict or a size stop wins; absent both, a coder block records
+    # "blocked", and a run with none of the three degrades to "unknown" rather than
+    # an empty outcome.
     if outcome == "":
         outcome = "blocked" if blocked_reason is not None else _UNKNOWN_OUTCOME
     started_at: datetime | None = min(line_timestamps) if line_timestamps else None
