@@ -36,7 +36,9 @@ vocabulary and respect existing ADRs.
 ## Phase 2 — Clarify (gate)
 
 If a fact that changes the design is missing, ask with **AskUserQuestion** (≤4 at a
-time, concrete options) — otherwise skip when context is rich.
+time) — otherwise skip when context is rich. Every question offers concrete options,
+and the recommended option's description states **why it wins** — the trade-off that
+drives the pick. A bare "(Recommended)" with no reason is not an option.
 
 ## Phase 3 — Draft
 
@@ -45,9 +47,18 @@ time, concrete options) — otherwise skip when context is rich.
 - Very short. Cut anything that doesn't change a decision or teach the reader.
 - Plain English, no filler. Ban "robust", "seamless", "leverage", "comprehensive",
   "powerful" — and all hedging. Short declarative sentences. Concrete nouns.
+- **Full sentences, never fragment bullets.** A list of three-word bullets that
+  could caption anything ("improve UX", "add validation") is slop — if a point is
+  worth listing, it is worth one real sentence that a reader can act on.
 - Only what was discussed or confirmed — invent nothing.
 - High level: name modules and capabilities, not file paths or code; they rot. Rare
   exception: a tiny snippet that nails a decision — a type, a schema.
+
+**Explain with visuals.** Artifacts render mermaid natively — use a
+`<pre class="mermaid">` block for anything structural: a flow, a pipeline, a
+before/after architecture. When the subject is something on screen (a UI, a page, a
+CLI), capture a screenshot of the current state and embed it as a data URI. One good
+graphic per structural idea; no decoration for its own sake.
 
 **The sections** (these exact five; the template carries their anchors):
 
@@ -55,8 +66,8 @@ time, concrete options) — otherwise skip when context is rich.
 |---------|-----------------|
 | The problem | What's wrong today, in the reader's words. One short paragraph. |
 | User stories | A few: **what** the user does and **how** it plays out, each a two-or-three-sentence scene with a role label. |
-| How it works | The key mechanics — short paragraphs or a tight list. |
-| Code change plan | One row per module: `add` / `change` / `remove`, its name, and its one-line job. |
+| How it works | The key mechanics — short paragraphs, with a diagram where the shape matters. |
+| Code change plan | **Module level only**: one row per module — `add` / `change` / `remove`, its name, and its interface in one phrase ("new module `slices` — owns the slice table and its ordering rules"). No code, no signatures, no file paths. |
 | Decisions | Table: Area · Choice. |
 
 `Implementation plan` and `Tasks` are **not yours** — their placeholders stay in
@@ -88,6 +99,9 @@ across republishes), a one-sentence gallery description. With `--url`, pass it a
 (WebFetch) to carry its `Implementation plan` and `Tasks` sections forward verbatim;
 this skill owns every other section. No Artifact tool (headless) → **stop**: the doc
 *is* the artifact, so report that `/to-dd` needs an artifact-capable session.
+
+**The artifact is the only output.** No GitHub issue, no file in the target repo, no
+side summary — the chat report below is one line.
 
 ## Report
 
