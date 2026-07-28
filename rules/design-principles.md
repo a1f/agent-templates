@@ -34,6 +34,13 @@ module is its interface (what every caller must learn); the benefit is its imple
   nothing but together force the reader to chase the flow across files.
 - A method/function should have a clear, single abstraction. If you cannot state what it
   does in one short phrase without "and", it is doing too much.
+- The phrase test has a blind spot: a body that runs in **phases** — one block or loop per
+  sibling entity or step, separated by blank lines or section comments — still summarizes to
+  one phrase ("seed the catalog") while stacking several abstractions in one frame. Each phase
+  that has its own coherent job is a function waiting for its name: extract it, and let the
+  parent read as the list of phases. Treat any function past roughly a screen (~50 lines) as
+  this smell until proven otherwise. (This is not license for classitis — extract phases with
+  real jobs, not one-line fragments.)
 
 ```python
 # SHALLOW — interface as complex as the body; caller learns 3 knobs to save nothing
@@ -251,7 +258,10 @@ design, and sometimes a third that beats both.
 - **Temporal decomposition** — modules mirror execution order, not responsibilities.
 - **Overexposure** — using the common case forces the caller to learn rare options.
 - **Pass-through method / variable** — added layer carries no new abstraction.
-- **Repetition** — the same snippet appears more than twice.
+- **Repetition** — the same snippet appears more than twice — or a multi-line shape appears
+  even twice (two parallel per-entity loops already establish a pattern worth extracting).
+- **Phased function** — a long body in blank-line- or comment-separated phases; each phase
+  with a coherent job is an unextracted function.
 - **Special-general mixture** — special-purpose code embedded in a general-purpose mechanism.
 - **Multi-concern module** — one module owns two jobs that don't share information; the name needs an "and".
 - **Flag parameter** — a boolean argument selects between two behaviors; split the function instead.
