@@ -21,8 +21,9 @@ Three rules run through the whole page:
   roll-up line. A reader who finishes the walkthrough has seen the change — never two
   excerpts from a hundred-line diff.
 - **Nothing unrun.** Output on the page is output you captured. Proof is something that
-  actually executed. If no proof can be written for a behavior change, the page says so —
-  that is a finding about the PR, not a gap to pad over.
+  actually executed. A change a person looks at is proven by a picture of it running —
+  never by text output about it. If no proof can be written for a behavior change, the
+  page says so — that is a finding about the PR, not a gap to pad over.
 
 ## Arguments
 
@@ -124,6 +125,10 @@ may not be the one you were asked about. `--json files` gives every touched path
    (`git ls-tree -d --name-only HEAD`), byte-sorted, equal-width cells; light the ones that
    contain a touched file. Same strip, same order, every PR — it orients the reader in the
    whole repo without printing it.
+8. **Spot the visual surface.** Does the diff touch anything a person looks at — an HTML
+   page or template, frontend components, CSS, a TUI or formatted terminal output, a chart,
+   an email body? If yes, Chapter 4 owes a screenshot of it running on this branch; plan
+   now how Phase 3 will launch and capture it.
 
 ## Phase 3 — Run (capture real output)
 
@@ -133,6 +138,13 @@ head; capture output verbatim for Chapters 4 and 5.
 - **Rerun the PR's tests** with the narrowest selector that covers the diff's test files
   (`pytest tests/catalog/ -q`, `cargo test -p <crate>`, `vitest run <dir>`). A fresh green
   run is first-class proof: chip it as `run here — <n> passed`.
+- **Screenshot every visual change.** Phase 2 spotted a visual surface → launch it on this
+  branch (start the server, open the page — the `run` skill knows the launch patterns) and
+  capture what a person sees: a headless-browser screenshot for a web page, the rendered
+  terminal for a TUI. Seed enough real data first that the surface shows its job, not an
+  empty frame. Status codes, byte counts, and greps prove the server answered — only a
+  screenshot proves the page renders. Genuinely cannot launch it here → that is a proof
+  gap Chapter 4 must declare, never a step to skip.
 - **Run every Chapter 5 command yourself first.** Only ship a command you ran; paste its
   real output next to it. A command the reader needs but you cannot run here (missing
   credentials, no device) ships marked `not run here — needs <thing>`, never with imagined
@@ -214,6 +226,13 @@ this change works. A PR whose proof cannot be written had nothing to prove — t
 finding about the PR, not this page."* Carry a ⚠ into the teaser and the report. Never
 invent a chip to avoid the verdict.
 
+**A visual change needs visual proof.** Phase 2 spotted a visual surface → at least one
+Phase 3 screenshot of it running embeds here (`img.evidence`, `data:` URI), each with a
+one-line `.evidence-cap` caption naming what the reader is looking at. Chips about the
+surface — curl status, byte counts, grep hits — do not substitute. No screenshot → the
+chapter says which surface shipped unseen and why, and a ⚠ carries into the teaser and
+the report exactly like the no-proof verdict.
+
 ### Chapter 5 — See for yourself
 
 One or two command blocks the reader can paste to confirm *this* change, each followed by
@@ -227,7 +246,8 @@ The draft leaves Phase 4 only after both gates. Run them in order:
 - **Mechanical gate (always).**
   - *Coverage*: count hunks (`gh pr diff <N> | grep -c '^@@'`) and check every one is a
     walkthrough entry or inside a named roll-up line. Grep each test name from the inventory
-    against the draft; every one appears.
+    against the draft; every one appears. Phase 2 spotted a visual surface → grep the page
+    for `img.evidence`; zero hits fails the gate unless Chapter 4 carries the declared ⚠.
   - *Prose*: `wc -w` each budgeted unit and cut anything over. `grep` the draft for every
     banned word above and rewrite each hit. Then, **if `vale` is on PATH**, write the draft
     to a scratch `.md` and run `vale --config ~/.claude/at/templates/pr-explain.vale.ini
@@ -262,9 +282,13 @@ The draft leaves Phase 4 only after both gates. Run them in order:
   `.note` classes exactly as the SLOT comment shows; indent rows with `l1`/`l2`/`l3`. A callout
   is a `.note` row directly under its file.
 - **The walkthrough**: one `.hunk-head` + `.diff` + `.diff-note` group per decision hunk;
-  roll-ups are a `.diff-note` alone.
+  roll-ups are a `.diff-note` alone. Diff lines read like an editor: every token wears its
+  syntax color (`tok-kw`, `tok-fn`, `tok-str`, `tok-num`, `tok-type`, `tok-com`), added and
+  deleted lines open with a `.sign` `+`/`−`, and the red/green lives in the line background
+  and sign — never in the code text.
 - **The test list**: `.testlist` with a `.tfile` row per file and a `.trow` per test.
-- Screenshots and e2e output embed as `data:` URIs via `img.evidence`.
+- Screenshots and e2e output embed as `data:` URIs via `img.evidence`, each followed by
+  its one-line `.evidence-cap` caption.
 
 ## Phase 6 — Publish
 
@@ -308,7 +332,8 @@ link line.
 ## Report
 
 End with: the artifact URL; hunks shown / rolled up / total; tests enumerated; commands run
-vs marked not-run; the proof verdict (sources used, or the ⚠ no-proof flag); chapters
+vs marked not-run; the proof verdict (sources used, or the ⚠ no-proof flag); screenshots
+embedded, or the visual surface that shipped unseen and why (⚠); chapters
 emitted vs dropped (with the tiny-PR shrink reason if used); the PR whose teaser you
 updated; the mechanical gate result (coverage greps, Vale alerts fixed, or "vale
 unavailable — wc + grep only"); and the critic score — naming any dimension left under the

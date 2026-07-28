@@ -11,6 +11,7 @@
     --accent: #14695A; --accent-soft: #E3EEEB; --line: #E1E5E0; --line-strong: #C9CFC9;
     --red: #AE362E; --red-soft: #F7E9E7; --green: #2C7A44; --green-soft: #E6F1E8;
     --amber: #8F6400; --amber-soft: #F4ECD6; --code-bg: #EFF1ED;
+    --syn-kw: #A626A4; --syn-fn: #4078F2; --syn-str: #50A14F; --syn-num: #986801; --syn-type: #C18401;
     --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
     --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
     --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -21,6 +22,7 @@
       --accent: #45B29B; --accent-soft: #1E2E2A; --line: #272D29; --line-strong: #39413C;
       --red: #E06A60; --red-soft: #33211F; --green: #5CBB77; --green-soft: #1E2E22;
       --amber: #D9A853; --amber-soft: #322A1B; --code-bg: #202622;
+      --syn-kw: #C678DD; --syn-fn: #61AFEF; --syn-str: #98C379; --syn-num: #D19A66; --syn-type: #E5C07B;
     }
   }
   :root[data-theme="light"] {
@@ -28,12 +30,14 @@
     --accent: #14695A; --accent-soft: #E3EEEB; --line: #E1E5E0; --line-strong: #C9CFC9;
     --red: #AE362E; --red-soft: #F7E9E7; --green: #2C7A44; --green-soft: #E6F1E8;
     --amber: #8F6400; --amber-soft: #F4ECD6; --code-bg: #EFF1ED;
+    --syn-kw: #A626A4; --syn-fn: #4078F2; --syn-str: #50A14F; --syn-num: #986801; --syn-type: #C18401;
   }
   :root[data-theme="dark"] {
     --paper: #141816; --card: #1B201D; --ink: #E7EBE8; --ink-2: #A6AFA9; --ink-3: #6F7873;
     --accent: #45B29B; --accent-soft: #1E2E2A; --line: #272D29; --line-strong: #39413C;
     --red: #E06A60; --red-soft: #33211F; --green: #5CBB77; --green-soft: #1E2E22;
     --amber: #D9A853; --amber-soft: #322A1B; --code-bg: #202622;
+    --syn-kw: #C678DD; --syn-fn: #61AFEF; --syn-str: #98C379; --syn-num: #D19A66; --syn-type: #E5C07B;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--serif);
@@ -88,12 +92,23 @@
     margin: 22px 0 0; }
   .hunk-head .fname { font-weight: 700; color: var(--ink); }
   .hunk-head .scope { color: var(--accent); }
-  .diff { font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+  .diff { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; color: var(--ink);
     background: var(--code-bg); border-radius: 6px; padding: 10px 12px; margin: 8px 0 0;
     overflow-x: auto; white-space: pre; }
-  .diff .ctx { color: var(--ink-3); }
-  .diff .del { color: var(--red); background: var(--red-soft); display: inline-block; width: 100%; }
-  .diff .add { color: var(--green); background: var(--green-soft); display: inline-block; width: 100%; }
+  /* Editor-style diff: the change lives in the line background and the gutter sign;
+     the code itself keeps its syntax colors (tok-*) on every line. */
+  .diff .ctx { opacity: 0.72; }
+  .diff .del { background: var(--red-soft); display: inline-block; width: 100%; }
+  .diff .add { background: var(--green-soft); display: inline-block; width: 100%; }
+  .diff .sign { display: inline-block; width: 1.2em; font-weight: 700; }
+  .diff .del .sign { color: var(--red); }
+  .diff .add .sign { color: var(--green); }
+  .diff .tok-kw { color: var(--syn-kw); }
+  .diff .tok-fn { color: var(--syn-fn); }
+  .diff .tok-str { color: var(--syn-str); }
+  .diff .tok-num { color: var(--syn-num); }
+  .diff .tok-type { color: var(--syn-type); }
+  .diff .tok-com { color: var(--ink-3); font-style: italic; }
   .diff-note { font-size: 15px; color: var(--ink-2); margin: 6px 0 0; }
 
   /* Chapter 3 — the tests: every test enumerated, then RED → GREEN witnesses. */
@@ -118,6 +133,7 @@
   .no-proof .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700;
     color: var(--red); letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
   img.evidence { max-width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; margin-top: 12px; }
+  .evidence-cap { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin: 4px 0 0; }
 
   /* Chapter 5 — see for yourself: commands the reader can run, with output we captured. */
   .cmd { font-family: var(--mono); font-size: 12.5px; line-height: 1.65; background: var(--code-bg);
@@ -158,11 +174,14 @@
       -->
     </div>
     <!-- SLOT: the walkthrough — EVERY decision hunk in the diff, in call-path order.
-         One group per hunk:
+         One group per hunk. Syntax-highlight every line like an editor — wrap tokens in
+         tok-kw (keyword), tok-fn (function/call), tok-str (string), tok-num (number),
+         tok-type (type), tok-com (comment). Added/deleted lines open with a .sign +/−;
+         the red/green is the line background and sign, NEVER the code text:
       <div class="hunk-head"><span class="fname">api.py</span> · <span class="scope">PUT /api/exercises/{id}/rating</span></div>
-      <div class="diff"><span class="ctx">  context</span>
-      <span class="del">- removed</span>
-      <span class="add">+ added</span></div>
+      <div class="diff"><span class="ctx">  <span class="tok-kw">def</span> <span class="tok-fn">rate</span>(exercise_id: <span class="tok-type">int</span>):</span>
+      <span class="del"><span class="sign">−</span>    <span class="tok-kw">raise</span> <span class="tok-fn">HTTPError</span>(<span class="tok-num">405</span>)</span>
+      <span class="add"><span class="sign">+</span>    rating = <span class="tok-fn">parse_rating</span>(request, <span class="tok-str">"rating"</span>)  <span class="tok-com"># 1–5 or null</span></span></div>
       <p class="diff-note">What we do here, why it is needed, where it sits in the flow. ≤ 40 words.</p>
          Close each file with its mechanical roll-up as a bare note, so every hunk is shown or named:
       <p class="diff-note">Plus the import and route registration in <code>api.py</code>.</p>
@@ -187,7 +206,11 @@
     <!-- SLOT: 40-70 words + evidence — only what actually ran, strongest first:
          fresh runs from this session, then evidence-file gates, then CI. Chips carry real numbers:
          <div class="gate-row"><span class="gate-chip">run here — pytest 161 passed</span><span class="gate-chip">mypy strict</span></div>
-         Runtime evidence (screenshot, e2e run) as <img class="evidence" src="data:…">.
+         A visual surface in the diff (page, TUI, chart) REQUIRES a screenshot of it running,
+         embedded as <img class="evidence" src="data:…"> with a
+         <p class="evidence-cap">one-line caption of what the reader sees</p> — text output
+         about the surface never substitutes; no screenshot → declare the gap + ⚠.
+         Other runtime evidence (e2e output) embeds the same way.
          CI check results as chips (class "fail" for red ones);
          PR-body claims appear only attributed in prose ("PR body reports: …"), never as chips.
          A behavior PR with NOTHING run → this verdict, verbatim, instead (never drop, never pad):
