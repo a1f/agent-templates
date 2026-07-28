@@ -68,6 +68,10 @@ name = "pr-make-till-merge"
 
 [[units]]
 kind = "skill"
+name = "shipped"
+
+[[units]]
+kind = "skill"
 name = "to-issues"
 
 [[units]]
@@ -189,6 +193,7 @@ units = [
   "skill/pr-make",
   "skill/pr-make-till-merge",
   "skill/latest-rebase",
+  "skill/shipped",
 ]
 
 # pr-explain publishes a per-PR explainer page; its page skeleton ships as a package
