@@ -43,8 +43,9 @@ with every prompt file in the repo:
 ls skills/*/SKILL.md agents/*.md rules/*.md templates/CLAUDE.md.template
 ```
 
-No match on the default scope → report that the branch changes no prompt file and stop. That is
-a clean run, not a failure.
+No match on the default scope → emit the stamp with zeros (`prompt-review: PASS`, `files: 0
+reviewed, 0 fixed`, `delta: 0 → 0 words`) in chat, write it to the PR body when a PR exists
+(Phase 4), and stop. A clean branch is not a failure, but it still leaves a greppable stamp.
 
 Record `wc -lw` per file before reading it; Phase 4 reports the delta against it.
 
@@ -56,7 +57,7 @@ whole, not about a paragraph in isolation. Then take all eight in order:
 | # | Criterion | Fails when |
 |---|-----------|------------|
 | 1 | **Token cost** | a paragraph teaches Claude something it already knows, restates a line above it, or hedges. Ask of every paragraph: does Claude already know this, and does it justify its token cost? |
-| 2 | **Description** | the frontmatter `description` is vague, states what without when (or when without what), drops the key terms a match depends on, or is not third person. A skill's starts "Use when" |
+| 2 | **Description** | skills and agents only — the frontmatter `description` is vague, states what without when (or when without what), drops the key terms a match depends on, or is not third person. A skill's starts "Use when" |
 | 3 | **One default** | a menu of options stands where one default plus an escape hatch would do, or a flag hides two jobs behind one name |
 | 4 | **Consistent terms** | one concept goes by two names, or one word means two things in the same file |
 | 5 | **Concrete over vague** | output shape is described but never shown; a fragile operation is named but its exact command is not given; a fact that rots (a version, a count, a date) is stated as fixed |
@@ -66,7 +67,9 @@ whole, not about a paragraph in isolation. Then take all eight in order:
 
 A failure carries the line range and enough of the text to find it: `rules/python.md:112-119 —
 criterion 1: restates the type-hint rule from lines 40-51`. A criterion with no failing lines
-passes.
+passes. A criterion with no subject in the file is not applicable and passes without a findings
+row — `rules/*.md` frontmatter carries only `paths:`, the CLAUDE.md template has no frontmatter
+and no phases, so neither has a `description` or house anatomy to judge.
 
 ## Phase 3 — Fix
 
@@ -96,8 +99,15 @@ passes all eight collapses to a single row reading `all pass`:
 | `agents/critic.md` | 3 one default | 44-61 | fail | reported — dropping the mode flag changes behavior |
 | `skills/explain/SKILL.md` | — | — | all pass | — |
 
-Then the counts table — one row per file with lines and words before → after, and a total row
-carrying the word delta.
+Then the counts table, one row per file plus a `total` row — the stamp's `delta` line repeats
+that total:
+
+| File | Lines | Words |
+|------|-------|-------|
+| `rules/python.md` | 214 → 201 | 1806 → 1699 |
+| `agents/critic.md` | 88 → 88 | 742 → 742 |
+| `skills/explain/SKILL.md` | 96 → 91 | 803 → 771 |
+| **total** | 398 → 380 | 3351 → 3212 |
 
 Last, the verdict stamp, exactly this block:
 
@@ -121,9 +131,19 @@ markers are already there and appending it when they are not:
 <!-- prompt-review:end -->
 ```
 
-Re-read the body first (`gh pr view <N> --json body`) and write it back with `gh pr edit <N>
---body-file <file>`; never touch prose outside the markers. No PR, or `--report-only` → print
-the stamp in chat for the author to paste, and edit nothing.
+Round-trip the body through a scratch file in a session temp location (`"$TMPDIR"`), never a
+path inside the repo tree where it could be committed by accident:
+
+```bash
+gh pr view <N> --json body --jq .body > "$TMPDIR"/pr-body.md
+# splice the stamp between the markers in that file; append the marker block when absent
+gh pr edit <N> --body-file "$TMPDIR"/pr-body.md
+```
+
+`--jq .body` is what keeps step 1 raw markdown — `--json body` alone writes `{"body":"…"}` and
+would overwrite the author's whole body with escaped JSON. Never touch prose outside the
+markers. No PR, or `--report-only` → print the stamp in chat for the author to paste, and edit
+nothing.
 
 ## Eval tasks
 
