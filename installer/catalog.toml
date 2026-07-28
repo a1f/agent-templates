@@ -68,6 +68,10 @@ name = "pr-make-till-merge"
 
 [[units]]
 kind = "skill"
+name = "prompt-review"
+
+[[units]]
+kind = "skill"
 name = "shipped"
 
 [[units]]
