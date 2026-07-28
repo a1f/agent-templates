@@ -94,6 +94,13 @@ Prefer functions over classes unless state is needed. If a method doesn't use `s
 ## Data Modeling
 
 - Use `dataclasses` or Pydantic models for structured data
+- **Never use a dict as an ad-hoc record.** A `dict[str, object]` / `dict[str, Any]` whose
+  keys are a fixed field set known when the code is written is a dataclass wearing a disguise:
+  the annotation satisfies mypy while erasing every field type, and a typo'd key becomes a
+  runtime bug. This includes *local* value bags built just to feed `**kwargs` or an ORM
+  `values=` — define a frozen dataclass and convert with `dataclasses.asdict()` at the one
+  boundary that genuinely needs a mapping. Dicts are for homogeneous collections whose keys
+  arrive at runtime, never for records
 - Prefer frozen dataclasses (`frozen=True`) when mutability is not needed
 - Model closed sets of values with `enum.Enum` (`StrEnum`/`IntEnum` when serialized). This
   intentionally diverges from `typescript.md`'s enum ban — Python enums carry no runtime-emit cost
