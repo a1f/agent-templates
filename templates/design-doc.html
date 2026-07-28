@@ -1,0 +1,446 @@
+<!-- design-doc skeleton. One artifact per plan is the single source of truth; three
+     skills fill it at different times, each owning its SLOT comments and nothing else:
+       to-dd     — title, header, and the prose sections (#problem #stories #how
+                   #changes #decisions); leaves the two placeholders in place.
+       to-slices — replaces the placeholder inside #implementation-plan with the
+                   slice table.
+       to-tasks  — replaces the placeholder inside #tasks with the map lanes + task
+                   tables, fills the .waves detail cards, and sets the tracker-issue
+                   SLOT in the header meta line.
+     Tokens, class names, section ids, and the data-id/data-deps contract are what the
+     skills key on — keep them stable. Self-contained: no external requests.
+     Deliberately a fragment (no DOCTYPE/head/meta): the Artifact publisher wraps the
+     file in its own doctype + head skeleton (charset and viewport included), so the
+     template must not declare them — do not "fix" this.
+     Edges are NOT authored: the inline script reads data-deps and draws them, so no
+     skill ever computes coordinates — it only declares which task each chip is
+     blocked by. -->
+<title><!-- SLOT: <what we're building> --></title>
+<style>
+  :root {
+    --bg: #F4F7F3; --card: #FFFFFF; --ink: #17231D; --muted: #566A5E; --line: #D9E2D8;
+    --accent: #1E5B41; --accent-soft: #E2EEE7;
+    --blue: #3D6591; --blue-soft: #E6EEF6;
+    --red: #AF3A2D; --red-soft: #F7E8E5;
+    --amber: #8C6A0E; --amber-soft: #F4ECD6;
+    --chip: #FAFCF9;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0F1512; --card: #171F1A; --ink: #E6ECE7; --muted: #98A79C; --line: #28322B;
+      --accent: #5CBB8E; --accent-soft: #1B2F25;
+      --blue: #84A7D3; --blue-soft: #1B2836;
+      --red: #E08273; --red-soft: #34201A;
+      --amber: #D4AC52; --amber-soft: #2E2815;
+      --chip: #131A16;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #F4F7F3; --card: #FFFFFF; --ink: #17231D; --muted: #566A5E; --line: #D9E2D8;
+    --accent: #1E5B41; --accent-soft: #E2EEE7;
+    --blue: #3D6591; --blue-soft: #E6EEF6;
+    --red: #AF3A2D; --red-soft: #F7E8E5;
+    --amber: #8C6A0E; --amber-soft: #F4ECD6;
+    --chip: #FAFCF9;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0F1512; --card: #171F1A; --ink: #E6ECE7; --muted: #98A79C; --line: #28322B;
+    --accent: #5CBB8E; --accent-soft: #1B2F25;
+    --blue: #84A7D3; --blue-soft: #1B2836;
+    --red: #E08273; --red-soft: #34201A;
+    --amber: #D4AC52; --amber-soft: #2E2815;
+    --chip: #131A16;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 400 15px/1.6 var(--sans);
+    -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px; }
+  .narrow { max-width: 880px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- header ---------- */
+  header { padding: 44px 0 8px; }
+  .eyebrow { font: 600 .72rem/1 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  h1 { font-family: var(--serif); font-size: clamp(1.7rem, 3.4vw, 2.3rem); font-weight: 650;
+    letter-spacing: -.01em; margin: .45rem 0 .6rem; text-wrap: balance; }
+  .lede { color: var(--muted); max-width: 64ch; margin: 0; font-size: 1.02rem; }
+  .lede b { color: var(--ink); font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 14px 0 0; font: 500 .78rem/1.5 var(--mono); color: var(--muted); }
+  .meta a { color: var(--muted); border-bottom: 1px dotted var(--muted); }
+  .meta a:hover { color: var(--accent); border-color: var(--accent); text-decoration: none; }
+
+  /* ---------- doc prose ---------- */
+  .doc { margin-top: 34px; }
+  .doc section { margin: 0 0 34px; }
+  .doc h2 { font-family: var(--serif); font-size: 1.34rem; font-weight: 650; letter-spacing: -.005em; margin: 0 0 10px; }
+  .doc p, .doc li { font-family: var(--serif); font-size: 1.04rem; line-height: 1.65; max-width: 66ch; }
+  .doc p { margin: .55rem 0; }
+  .doc ul { margin: .55rem 0; padding-left: 1.3rem; }
+  .doc code { font: 500 .82em var(--mono); background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+
+  .stories { display: grid; gap: 12px; margin-top: 14px; }
+  .story { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 18px; }
+  .story .who { font: 600 .68rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+  .story p { margin: .45rem 0 0; }
+
+  .mods { display: grid; gap: 8px; margin-top: 14px; }
+  .mod { display: flex; align-items: baseline; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+  .mod .verb { font: 600 .64rem/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; border-radius: 4px; padding: 3px 7px; flex-shrink: 0; }
+  .mod .verb.add { background: var(--accent-soft); color: var(--accent); }
+  .mod .verb.change { background: var(--blue-soft); color: var(--blue); }
+  .mod .verb.remove { background: var(--red-soft); color: var(--red); }
+  .mod .name { font: 550 .84rem/1.4 var(--mono); }
+  .mod .what { color: var(--muted); font-size: .88rem; }
+
+  table.kv { border-collapse: collapse; margin-top: 10px; font-size: .92rem; }
+  table.kv td { border-bottom: 1px solid var(--line); padding: 7px 26px 7px 0; vertical-align: top; }
+  table.kv td:first-child { color: var(--muted); white-space: nowrap; }
+
+  /* ---------- slice + task tables ---------- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+  table.rows { width: 100%; border-collapse: collapse; font-size: .88rem; font-variant-numeric: tabular-nums; }
+  table.rows th { font: 600 .66rem/1.4 var(--mono); letter-spacing: .09em; text-transform: uppercase;
+    color: var(--muted); text-align: left; padding: 10px 14px 8px; border-bottom: 1px solid var(--line); }
+  table.rows td { padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.rows tr:last-child td { border-bottom: none; }
+  table.rows td.id, table.rows td.num { font: 550 .8rem/1.5 var(--mono); white-space: nowrap; }
+  .ttype { font: 600 .64rem/1 var(--mono); letter-spacing: .07em; text-transform: uppercase;
+    border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px; white-space: nowrap; color: var(--muted); }
+  .ttype.pr { color: var(--accent); border-color: var(--accent); }
+  .ttype.gate { color: var(--red); border-color: var(--red); }
+  .check { font-size: 1rem; line-height: 1; }
+  .check.todo { color: var(--muted); }
+  .check.done { color: var(--accent); }
+
+  .placeholder { border: 1px dashed var(--line); border-radius: 12px; padding: 16px 20px;
+    color: var(--muted); font-size: .9rem; background: transparent; }
+  .placeholder code { font: 500 .82em var(--mono); background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; }
+
+  /* ---------- map ---------- */
+  .map-section { margin-top: 6px; }
+  h2.plain { font-size: 1.26rem; font-weight: 700; letter-spacing: -.01em; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; max-width: 72ch; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 0 0 14px; font-size: .78rem; color: var(--muted); align-items: center; }
+  .lg { display: inline-flex; align-items: center; gap: 7px; }
+  .keydemo { font: 600 .66rem/1 var(--mono); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; padding: 3px 7px; background: var(--card); }
+  .keydemo.gate { border-color: var(--red); }
+  .keydemo.done { border-color: var(--accent); color: var(--accent); }
+  .keydemo.closed { opacity: .55; text-decoration: line-through; }
+  .keydemo.active { border-color: var(--blue); color: var(--blue); }
+  .lg .adot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+  .sw { width: 22px; height: 0; border-top: 2px solid var(--line); border-radius: 2px; }
+  .sw.dep { border-top-width: 2.5px; border-color: var(--accent); }
+
+  .map-wrap { border: 1px solid var(--line); border-radius: 14px; background: var(--card); overflow-x: auto; padding: 4px; }
+  .map-inner { position: relative; min-width: 1000px; padding: 18px 22px 26px; }
+  .lanes { position: relative; z-index: 2; display: grid; gap: 0 34px; }
+  .lane { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .lane-h { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 6px; }
+  .lane-h .wv { display: block; font: 600 .64rem/1 var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); }
+  .lane-h .wt { display: block; font-weight: 650; font-size: .86rem; margin-top: 4px; }
+
+  .chip { position: relative; z-index: 2; display: block; background: var(--chip);
+    border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px 8px;
+    color: var(--ink); line-height: 1.25; transition: opacity .15s, box-shadow .15s; }
+  .chip:hover { text-decoration: none; box-shadow: 0 1px 6px rgba(0,0,0,.08); }
+  .chip .k { display: inline-block; font: 650 .64rem/1 var(--mono); letter-spacing: .03em; color: var(--muted); margin-bottom: 3px; }
+  .chip .n { display: block; font-size: .8rem; font-weight: 550; }
+  .chip.gate { border-color: var(--red); background: var(--red-soft); }
+  .chip.gate .k { color: var(--red); }
+  .chip .adot { position: absolute; top: 8px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--amber); }
+  .chip.done { border-color: var(--accent); }
+  .chip.done::after { content: "\2713"; position: absolute; top: 6px; right: 8px; font: 800 .72rem/1 var(--sans); color: var(--accent); }
+  .chip.active { border-color: var(--blue); }
+  .chip.blocked { opacity: .55; }
+  .chip.closed { opacity: .5; }
+  .chip.closed .n { text-decoration: line-through; }
+
+  svg.edges { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; pointer-events: none; }
+  .edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+  .edge.gate { stroke: var(--red); stroke-width: 2; }
+  .edot { fill: var(--line); }
+  .edot.gate { fill: var(--red); }
+  .map-inner.focus .edge:not(.on) { opacity: .1; }
+  .map-inner.focus .edot:not(.on) { opacity: .1; }
+  .map-inner.focus .chip:not(.lit) { opacity: .3; }
+  .map-hint { font-size: .78rem; color: var(--muted); margin: 10px 2px 0; }
+
+  /* ---------- detail waves ---------- */
+  .waves { margin-top: 52px; }
+  .wave { margin: 0 0 46px; }
+  .wave-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 2px; }
+  .wave-head .eyebrow { color: var(--accent); }
+  .wave-head h2 { font-size: 1.26rem; font-weight: 700; letter-spacing: -.01em; margin: 0; }
+  .cards { display: grid; gap: 14px; margin-top: 16px; }
+
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 13px;
+    padding: 18px 20px 16px; scroll-margin-top: 24px; }
+  .card.gatecard { border-color: var(--red); }
+  .card.donecard { border-left: 3px solid var(--accent); }
+  .card-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .keycap { font: 650 .74rem/1 var(--mono); letter-spacing: .03em;
+    border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 7px;
+    padding: 4px 9px 5px; background: var(--chip); flex-shrink: 0; }
+  .gatecard .keycap { border-color: var(--red); color: var(--red); }
+  .card-top h3 { font-size: 1rem; font-weight: 650; margin: 0; letter-spacing: -.005em; }
+  .card-top .spacer { flex: 1; }
+  .tag { font: 600 .64rem/1 var(--sans); letter-spacing: .05em; text-transform: uppercase;
+    border-radius: 99px; padding: 4px 9px; white-space: nowrap; }
+  .tag.gate { background: var(--red-soft); color: var(--red); }
+  .tag.done { background: var(--accent-soft); color: var(--accent); }
+  .tag.active { background: var(--blue-soft); color: var(--blue); }
+  .tag.closed { background: var(--chip); color: var(--muted); border: 1px solid var(--line); }
+  .tag.you { background: var(--amber-soft); color: var(--amber); }
+  .tag.size { background: var(--chip); color: var(--muted); border: 1px solid var(--line);
+    text-transform: none; letter-spacing: .02em; font-family: var(--mono); }
+
+  .after { font-size: .76rem; color: var(--muted); margin: 0 0 10px; font-family: var(--mono); }
+  .after a { color: var(--muted); border-bottom: 1px dotted var(--muted); }
+  .after a:hover { color: var(--accent); text-decoration: none; border-color: var(--accent); }
+  .card p { margin: .5rem 0; max-width: 72ch; }
+  .card p.why { color: var(--muted); font-size: .88rem; }
+
+  /* .donewhen, not .done — a bare .done would out-cascade .chip/.tag/.keydemo status classes. */
+  .donewhen { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); padding: 10px 14px; }
+  .donewhen .dh { font: 600 .66rem/1 var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .donewhen ul { list-style: none; margin: 0; padding: 0; }
+  .donewhen li { position: relative; padding: 3px 0 3px 22px; font-size: .85rem; line-height: 1.5; }
+  .donewhen li::before { content: "\2713"; position: absolute; left: 2px; top: 3px; color: var(--accent); font-weight: 700; }
+  .donewhen code, .card code { font: 500 .82em var(--mono); background: var(--chip); border: 1px solid var(--line); border-radius: 5px; padding: 1px 5px; white-space: nowrap; }
+  .ev { margin-top: 9px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: .82rem; line-height: 1.5; color: var(--muted); }
+  .ev a { color: var(--accent); border-bottom: 1px dotted var(--accent); }
+  .ev a:hover { text-decoration: none; }
+
+  @media (max-width: 640px) {
+    .wrap, .narrow { padding: 0 16px; }
+    header { padding-top: 30px; }
+  }
+</style>
+
+<div class="narrow">
+  <header>
+    <span class="eyebrow"><!-- SLOT: owner/repo · design doc --></span>
+    <h1><!-- SLOT: what we're building, as a title --></h1>
+    <p class="lede"><!-- SLOT: the dek — two sentences: the idea and the stakes; <b> the load-bearing phrase --></p>
+    <div class="meta">
+      <!-- SLOT(to-tasks): tracker link, e.g. <a href="...">tracker: issue #N</a> — absent until tasks exist -->
+    </div>
+  </header>
+
+  <div class="doc">
+    <section id="problem">
+      <h2>The problem</h2>
+      <!-- SLOT: one short paragraph, in the reader's words -->
+    </section>
+
+    <section id="stories">
+      <h2>User stories</h2>
+      <div class="stories">
+        <!-- SLOT: a few .story blocks — what the user does and how it plays out:
+          <div class="story"><span class="who">planning a feature</span>
+            <p>When Alex finishes a design discussion, one command turns it into a page
+            they can read end to end — and send to a teammate.</p></div>
+        -->
+      </div>
+    </section>
+
+    <section id="how">
+      <h2>How it works</h2>
+      <!-- SLOT: the key mechanics as short paragraphs or a tight <ul> -->
+    </section>
+
+    <section id="changes">
+      <h2>Code change plan</h2>
+      <div class="mods">
+        <!-- SLOT: one .mod row per module, high level — no file paths that rot:
+          <div class="mod"><span class="verb add">add</span>
+            <span class="name">slices</span>
+            <span class="what">owns the slice table and its ordering rules</span></div>
+          verbs: add | change | remove
+        -->
+      </div>
+    </section>
+
+    <section id="decisions">
+      <h2>Decisions</h2>
+      <table class="kv">
+        <!-- SLOT: one row per decision: <tr><td>Area</td><td>Choice</td></tr> -->
+      </table>
+    </section>
+
+    <section id="implementation-plan">
+      <h2>Implementation plan</h2>
+      <!-- SLOT(to-slices): replace the placeholder with the slice table:
+        <div class="tablewrap"><table class="rows">
+          <tr><th>#</th><th>What</th><th>Demoable as</th><th>Mode</th><th>Blocked by</th></tr>
+          <tr><td class="num">1</td><td>...</td><td>...</td><td>AFK</td><td class="num">—</td></tr>
+        </table></div>
+        Mode: AFK (an agent runs it alone) | HITL (needs the human). -->
+      <div class="placeholder">Not sliced yet — run <code>/to-slices</code> to plan the
+      vertical slices into this section.</div>
+    </section>
+  </div>
+</div>
+
+<div class="wrap">
+  <section class="map-section" id="tasks">
+    <h2 class="plain">Tasks</h2>
+    <p class="sub">Waves run left to right. Anything in the same column can be built at the
+    same time. Hover a card to see what blocks it and what it unblocks; click to jump to its
+    full description below.</p>
+
+    <!-- SLOT(to-tasks): replace this placeholder with the legend + map + task tables.
+         Everything below the placeholder shows the required markup; the placeholder and
+         this comment are removed when the tasks land. -->
+    <div class="placeholder">No tasks yet — run <code>/to-tasks</code> to break the slices
+    into PRs, gates, and checks, drawn here as a map.</div>
+
+    <!-- to-tasks fills, in order:
+      1. The legend (chip states):
+        <div class="legend">
+          <span class="lg"><span class="keydemo">1.2</span> PR</span>
+          <span class="lg"><span class="keydemo gate">1.4</span> gate — blocks merging</span>
+          <span class="lg"><span class="keydemo active">2.2</span> in review</span>
+          <span class="lg"><span class="keydemo done">&#10003;</span> merged / passed</span>
+          <span class="lg"><span class="keydemo closed">1.9</span> closed, unmerged</span>
+          <span class="lg"><span class="adot"></span> needs you once</span>
+          <span class="lg"><span class="sw dep"></span> blocked-by edge</span>
+        </div>
+      2. The map. Set grid-template-columns to repeat(<wave count>, 1fr) — one column per
+         wave; the script does NOT size the columns, the fill must:
+        <div class="map-wrap">
+          <div class="map-inner" id="mapInner">
+            <svg class="edges" id="edgeSvg" aria-hidden="true"></svg>
+            <div class="lanes" style="grid-template-columns: repeat(1, 1fr);">
+              One .lane per wave, left to right. Each chip:
+                - id="m-<id>" data-id="<id>"  (task id, slug-safe: "1.2" -> "1-2")
+                - data-deps="<id> <id>"       (space-separated blocker ids; omit if none)
+                - the status class the skill's Status->class map assigns
+                - href="#<id>" jumps to the detail card
+                - <span class="adot"></span> where the skill's HITL rule directs
+              <div class="lane">
+                <div class="lane-h"><span class="wv">Wave 0</span><span class="wt">The seed</span></div>
+                <a class="chip" id="m-1-1" data-id="1-1" href="#1-1"><span class="k">PR 1.1</span><span class="n">Walking skeleton</span></a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="map-hint">optional critical-path note</p>
+      3. One task table per slice (Type: PR | Gate | Check; Check rows use
+         <span class="check todo">&#9744;</span> / <span class="check done">&#9745;</span>
+         in Status instead of a GitHub state):
+        <h2 class="plain">Slice 1 — <name></h2>
+        <div class="tablewrap"><table class="rows">
+          <tr><th>Task</th><th>Type</th><th>What</th><th>~LOC</th><th>Blocked by</th><th>Status</th><th>Done when</th></tr>
+          <tr><td class="id">1.1</td><td><span class="ttype pr">PR</span></td><td>...</td><td class="id">~30</td><td class="id">—</td><td>Todo</td><td>...</td></tr>
+        </table></div>
+    -->
+  </section>
+</div>
+
+<div class="narrow waves">
+  <!-- SLOT(to-tasks): one <section class="wave"> per wave, in the same order as the lanes.
+       Card classes mirror the chip's status classes (per the skill's Status->class map).
+    <section class="wave">
+      <div class="wave-head"><span class="eyebrow">Wave 1</span><h2>Fan out</h2></div>
+      <p class="sub">One-line summary of what this wave opens up.</p>
+      <div class="cards">
+        <article class="card gatecard" id="1-2">
+          <div class="card-top">
+            <span class="keycap">PR 1.2</span><h3>The PR gate</h3>
+            <span class="spacer"></span>
+            <span class="tag gate">gate</span><span class="tag size">~40 lines</span>
+          </div>
+          <p class="after">after: <a href="#1-1">PR 1.1</a></p>
+          <p>What the task does, in a sentence or two of plain words.</p>
+          <p class="why">Why it exists / why it is scoped this way (optional).</p>
+          <div class="donewhen"><div class="dh">Done when</div><ul>
+            <li>An observable, checkable outcome.</li>
+          </ul>
+          <div class="ev">Landed: <a href="https://github.com/&lt;owner&gt;/&lt;repo&gt;/pull/NN">PR #NN</a> — one line of evidence (only on merged PRs).</div>
+          </div>
+        </article>
+      </div>
+    </section>
+  -->
+</div>
+
+<script>
+  (function () {
+    var inner = document.getElementById("mapInner");
+    var svg = document.getElementById("edgeSvg");
+    if (!inner || !svg) return;
+    var NS = "http://www.w3.org/2000/svg";
+    var chips = Array.prototype.slice.call(inner.querySelectorAll(".chip[data-id]"));
+    var byId = {};
+    chips.forEach(function (chip) { byId[chip.dataset.id] = chip; });
+    var deps = function (chip) { return (chip.dataset.deps || "").split(/\s+/).filter(Boolean); };
+
+    function draw() {
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      var base = inner.getBoundingClientRect();
+      if (!base.width) return;
+      svg.setAttribute("viewBox", "0 0 " + base.width + " " + base.height);
+      chips.forEach(function (chip) {
+        var to = chip.getBoundingClientRect();
+        var x2 = to.left - base.left, y2 = to.top - base.top + to.height / 2;
+        var gate = chip.classList.contains("gate");
+        deps(chip).forEach(function (id) {
+          var src = byId[id];
+          if (!src) return;
+          var from = src.getBoundingClientRect();
+          var x1 = from.right - base.left, y1 = from.top - base.top + from.height / 2;
+          var mx = (x1 + x2) / 2;
+          var path = document.createElementNS(NS, "path");
+          path.setAttribute("d", "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2);
+          path.setAttribute("class", gate ? "edge gate" : "edge");
+          path.dataset.a = id; path.dataset.b = chip.dataset.id;
+          svg.appendChild(path);
+          var dot = document.createElementNS(NS, "circle");
+          dot.setAttribute("cx", x2); dot.setAttribute("cy", y2); dot.setAttribute("r", "2.5");
+          dot.setAttribute("class", gate ? "edot gate" : "edot");
+          dot.dataset.a = id; dot.dataset.b = chip.dataset.id;
+          svg.appendChild(dot);
+        });
+      });
+    }
+
+    function focus(id) {
+      inner.classList.add("focus");
+      var lit = {}; lit[id] = true;
+      deps(byId[id]).forEach(function (d) { lit[d] = true; });
+      chips.forEach(function (c) { if (deps(c).indexOf(id) !== -1) lit[c.dataset.id] = true; });
+      chips.forEach(function (c) { c.classList.toggle("lit", !!lit[c.dataset.id]); });
+      Array.prototype.forEach.call(svg.childNodes, function (e) {
+        if (e.classList) e.classList.toggle("on", e.dataset.a === id || e.dataset.b === id);
+      });
+    }
+    function clear() {
+      inner.classList.remove("focus");
+      chips.forEach(function (c) { c.classList.remove("lit"); });
+      Array.prototype.forEach.call(svg.childNodes, function (e) { if (e.classList) e.classList.remove("on"); });
+    }
+    chips.forEach(function (c) {
+      c.addEventListener("mouseenter", function () { focus(c.dataset.id); });
+      c.addEventListener("focus", function () { focus(c.dataset.id); });
+      c.addEventListener("mouseleave", clear);
+      c.addEventListener("blur", clear);
+    });
+
+    draw();
+    if (window.ResizeObserver) new ResizeObserver(draw).observe(inner);
+    window.addEventListener("resize", draw);
+    window.addEventListener("load", draw);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(draw);
+  })();
+</script>
