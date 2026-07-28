@@ -44,8 +44,8 @@ ls skills/*/SKILL.md agents/*.md rules/*.md templates/CLAUDE.md.template
 ```
 
 No match on the default scope → emit the stamp with zeros (`prompt-review: PASS`, `files: 0
-reviewed, 0 fixed`, `delta: 0 → 0 words`) in chat, write it to the PR body when a PR exists
-(Phase 4), and stop. A clean branch is not a failure, but it still leaves a greppable stamp.
+reviewed, 0 fixed`, `delta: 0 → 0 words`) in chat, write it to the PR body when a PR exists and
+`--report-only` is not set (Phase 4), and stop.
 
 Record `wc -lw` per file before reading it; Phase 4 reports the delta against it.
 
@@ -106,8 +106,8 @@ that total:
 |------|-------|-------|
 | `rules/python.md` | 214 → 201 | 1806 → 1699 |
 | `agents/critic.md` | 88 → 88 | 742 → 742 |
-| `skills/explain/SKILL.md` | 96 → 91 | 803 → 771 |
-| **total** | 398 → 380 | 3351 → 3212 |
+| `skills/explain/SKILL.md` | 96 → 96 | 803 → 803 |
+| **total** | 398 → 385 | 3351 → 3244 |
 
 Last, the verdict stamp, exactly this block:
 
@@ -131,19 +131,23 @@ markers are already there and appending it when they are not:
 <!-- prompt-review:end -->
 ```
 
-Round-trip the body through a scratch file in a session temp location (`"$TMPDIR"`), never a
-path inside the repo tree where it could be committed by accident:
+Round-trip the body through a `mktemp` file, never a path inside the repo tree where it could be
+committed by accident:
 
 ```bash
-gh pr view <N> --json body --jq .body > "$TMPDIR"/pr-body.md
-# splice the stamp between the markers in that file; append the marker block when absent
-gh pr edit <N> --body-file "$TMPDIR"/pr-body.md
+BODY=$(mktemp)
+gh pr view <N> --json body --jq .body | tr -d '\r' > "$BODY"
+[ -s "$BODY" ] || { echo "abort: empty PR body read" >&2; exit 1; }
+# splice the stamp between the begin/end markers in "$BODY"; append the marker block when absent
+gh pr edit <N> --body-file "$BODY"
+rm -f "$BODY"
 ```
 
-`--jq .body` is what keeps step 1 raw markdown — `--json body` alone writes `{"body":"…"}` and
-would overwrite the author's whole body with escaped JSON. Never touch prose outside the
-markers. No PR, or `--report-only` → print the stamp in chat for the author to paste, and edit
-nothing.
+`--jq .body` keeps the read raw markdown — bare `--json body` writes `{"body":"…"}` and would
+overwrite the author's whole body with escaped JSON. The guard is there because `>` truncates
+before `gh pr view` runs: a failed read must abort, not write an empty body back. Never touch
+prose outside the markers. No PR, or `--report-only` → print the stamp in chat for the author to
+paste, and edit nothing.
 
 ## Eval tasks
 
