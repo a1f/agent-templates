@@ -105,6 +105,23 @@ OFFENDING_AGENTS: Final[dict[str, str]] = {
 }
 
 
+# One rule per way the sole rule convention can break, so each rule carries exactly one
+# violation: no frontmatter at all, and frontmatter that opens without declaring the
+# 'paths' it governs. A rule answers to nothing else — no 'name', no 'description'.
+OFFENDING_RULES: Final[dict[str, str]] = {
+    "rules/no-frontmatter.md": "# no-frontmatter\n\nA rule that never opens.\n",
+    "rules/unscoped.md": (
+        "---\n"
+        "applies_to: everything\n"
+        "---\n"
+        "\n"
+        "# unscoped\n"
+        "\n"
+        "A rule that never says which files it governs.\n"
+    ),
+}
+
+
 def _write_prompts(*, root: Path, prompts: Mapping[str, str]) -> None:
     for relative_path, content in prompts.items():
         prompt: Path = root / relative_path
@@ -181,6 +198,31 @@ def test_offending_agent_frontmatter_is_reported_with_path_and_line(
     for offending_path in OFFENDING_AGENTS:
         assert any(offending_path in line for line in reported_lines), (
             f"{offending_path} broke an agent rule unreported: {result.stdout!r}"
+        )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_rule_without_paths_frontmatter_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=OFFENDING_RULES)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    for offending_path in OFFENDING_RULES:
+        assert any(offending_path in line for line in reported_lines), (
+            f"{offending_path} declares no paths unreported: {result.stdout!r}"
         )
     for conforming_path in CONFORMING_TREE:
         assert conforming_path not in result.stdout, (

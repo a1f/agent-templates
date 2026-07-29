@@ -13,4 +13,5 @@ SKILL_FILE: Final[str] = "SKILL.md"
 REQUIRED_KEYS: Final[dict[str, tuple[str, ...]]] = {
     f"skills/*/{SKILL_FILE}": ("name", "description"),
     "agents/*.md": ("name", "description", "tools", "model"),
+    "rules/*.md": ("paths",),
 }
