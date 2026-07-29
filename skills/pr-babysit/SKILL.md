@@ -167,8 +167,6 @@ Skip on subsequent iterations — the existing gate run in step 1f (after commen
 Kick off all data fetches in parallel at the start of each iteration:
 
 ```bash
-# All four in parallel:
-
 # 1. Review comments (inline code comments on specific lines)
 COMMENTS=$(gh api "repos/$OWNER/$REPO/pulls/$PR_NUMBER/comments" \
   --paginate \
