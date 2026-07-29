@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from .constants import DESCRIPTION_PREFIX, FENCE, REQUIRED_KEYS
+from .constants import DESCRIPTION_PREFIX, FENCE, REQUIRED_KEYS, SKILL_FILE
 
 
 def _frontmatter(*, text: str) -> dict[str, str]:
@@ -30,10 +30,11 @@ def lint_tree(*, root: Path) -> Iterator[str]:
             for key in required:
                 if key not in fields:
                     yield f"{where}:1: frontmatter is missing {key!r}"
-            # An absent key is reported above, so it defaults to a conforming value.
-            name: str = fields.get("name", prompt.parent.name)
+            # A skill is named for its directory; only it needs the trigger prefix.
+            is_skill: bool = prompt.name == SKILL_FILE
+            expected: str = prompt.parent.name if is_skill else prompt.stem
             blurb: str = fields.get("description", DESCRIPTION_PREFIX)
-            if name != prompt.parent.name:
-                yield f"{where}:1: name must be {prompt.parent.name!r}"
-            if not blurb.startswith(DESCRIPTION_PREFIX):
+            if fields.get("name", expected) != expected:
+                yield f"{where}:1: name must be {expected!r}"
+            if is_skill and not blurb.startswith(DESCRIPTION_PREFIX):
                 yield f"{where}:1: description must open with {DESCRIPTION_PREFIX!r}"

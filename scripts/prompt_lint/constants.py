@@ -6,9 +6,11 @@ from typing import Final
 
 FENCE: Final[str] = "---"
 DESCRIPTION_PREFIX: Final[str] = "Use when"
+SKILL_FILE: Final[str] = "SKILL.md"
 
 # Which prompt files carry frontmatter, and the keys each declares — one row per kind,
 # so a new convention is a row here rather than another function.
 REQUIRED_KEYS: Final[dict[str, tuple[str, ...]]] = {
-    "skills/*/SKILL.md": ("name", "description"),
+    f"skills/*/{SKILL_FILE}": ("name", "description"),
+    "agents/*.md": ("name", "description", "tools", "model"),
 }

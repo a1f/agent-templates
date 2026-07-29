@@ -80,6 +80,31 @@ OFFENDING_SKILLS: Final[dict[str, str]] = {
 }
 
 
+# One agent per way the agent frontmatter rules can break, so each agent carries exactly
+# one violation: a missing 'tools'/'model' pair, and a name that disagrees with the file
+# stem — an agent is named after its file, not after the directory it sits in.
+OFFENDING_AGENTS: Final[dict[str, str]] = {
+    "agents/missing-keys.md": (
+        "---\n"
+        "name: missing-keys\n"
+        "description: Runs without declaring its tools or its model.\n"
+        "---\n"
+        "\n"
+        "# missing-keys\n"
+    ),
+    "agents/mismatched-stem.md": (
+        "---\n"
+        "name: renamed\n"
+        "description: Answers to a name its own file does not carry.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# mismatched-stem\n"
+    ),
+}
+
+
 def _write_prompts(*, root: Path, prompts: Mapping[str, str]) -> None:
     for relative_path, content in prompts.items():
         prompt: Path = root / relative_path
@@ -131,6 +156,31 @@ def test_offending_skill_frontmatter_is_reported_with_path_and_line(
     for offending_path in OFFENDING_SKILLS:
         assert any(offending_path in line for line in reported_lines), (
             f"{offending_path} broke a skill rule unreported: {result.stdout!r}"
+        )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_offending_agent_frontmatter_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=OFFENDING_AGENTS)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    for offending_path in OFFENDING_AGENTS:
+        assert any(offending_path in line for line in reported_lines), (
+            f"{offending_path} broke an agent rule unreported: {result.stdout!r}"
         )
     for conforming_path in CONFORMING_TREE:
         assert conforming_path not in result.stdout, (
