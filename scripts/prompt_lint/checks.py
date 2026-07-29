@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from pathlib import Path
 
-from .constants import DESCRIPTION_PREFIX, FENCE, REQUIRED_KEYS, SKILL_FILE
+from .constants import DESCRIPTION_PREFIX, FENCE, REQUIRED_KEYS, SKILL_CAP, SKILL_FILE
 
 
 def _frontmatter(*, text: str) -> dict[str, str]:
@@ -38,3 +38,5 @@ def lint_tree(*, root: Path) -> Iterator[str]:
                 yield f"{where}:1: name must be {expected!r}"
             if is_skill and not blurb.startswith(DESCRIPTION_PREFIX):
                 yield f"{where}:1: description must open with {DESCRIPTION_PREFIX!r}"
+            if is_skill and (count := len(prompt.read_text().splitlines())) > SKILL_CAP:
+                yield f"{where}:{count}: {count} lines (cap {SKILL_CAP})"
