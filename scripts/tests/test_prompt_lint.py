@@ -8,12 +8,18 @@ invokes it — rather than reaching for an internal entry point.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Final
 
 SCRIPTS_DIR: Final[Path] = Path(__file__).resolve().parent.parent
+
+# A diagnostic names the offending file and the line it was found on, so an editor or a
+# CI annotation can jump straight there: `path:line: message`.
+DIAGNOSTIC_LINE: Final[re.Pattern[str]] = re.compile(r"^\S+?:\d+: .+$")
 
 # A tree that satisfies every convention the checker knows: the skill's name matches its
 # directory and its description opens with "Use when", the agent carries all four keys
@@ -47,11 +53,42 @@ CONFORMING_TREE: Final[dict[str, str]] = {
 }
 
 
-def _write_conforming_tree(*, root: Path) -> None:
-    for relative_path, content in CONFORMING_TREE.items():
+# One skill per way the skill frontmatter rules can break, so each skill carries exactly
+# one violation: no frontmatter at all (and so no name), no description, a name that
+# disagrees with its directory, and a description that does not open with "Use when".
+OFFENDING_SKILLS: Final[dict[str, str]] = {
+    "skills/no-frontmatter/SKILL.md": "# no-frontmatter\n\nA skill that never opens.\n",
+    "skills/no-description/SKILL.md": (
+        "---\nname: no-description\n---\n\n# no-description\n\nA skill with no blurb.\n"
+    ),
+    "skills/wrong-name/SKILL.md": (
+        "---\n"
+        "name: mismatched\n"
+        "description: Use when the name disagrees with the directory.\n"
+        "---\n"
+        "\n"
+        "# wrong-name\n"
+    ),
+    "skills/vague-description/SKILL.md": (
+        "---\n"
+        "name: vague-description\n"
+        "description: Lints prompt files, sometimes.\n"
+        "---\n"
+        "\n"
+        "# vague-description\n"
+    ),
+}
+
+
+def _write_prompts(*, root: Path, prompts: Mapping[str, str]) -> None:
+    for relative_path, content in prompts.items():
         prompt: Path = root / relative_path
         prompt.parent.mkdir(parents=True, exist_ok=True)
         prompt.write_text(content)
+
+
+def _write_conforming_tree(*, root: Path) -> None:
+    _write_prompts(root=root, prompts=CONFORMING_TREE)
 
 
 def _run_prompt_lint(*, root: Path) -> subprocess.CompletedProcess[str]:
@@ -74,3 +111,28 @@ def test_conforming_tree_exits_zero_with_no_output(tmp_path: Path) -> None:
 
     assert result.returncode == 0, f"prompt_lint failed: {result.stderr}"
     assert result.stdout == ""
+
+
+def test_offending_skill_frontmatter_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=OFFENDING_SKILLS)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    for offending_path in OFFENDING_SKILLS:
+        assert any(offending_path in line for line in reported_lines), (
+            f"{offending_path} broke a skill rule unreported: {result.stdout!r}"
+        )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )

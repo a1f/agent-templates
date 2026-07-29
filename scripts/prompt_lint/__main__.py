@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
+from .checks import lint_tree
+
 
 def main() -> int:
     """Reports how the prompt tree at the current directory breaks its conventions."""
-    # No convention is checked yet; later slices add them one behaviour at a time.
-    return 0
+    violations: list[str] = list(lint_tree(root=Path.cwd()))
+    for violation in violations:
+        print(violation)
+    return 1 if violations else 0
 
 
 if __name__ == "__main__":
