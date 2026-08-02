@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -153,9 +154,27 @@ LINE_COUNT: Final[re.Pattern[str]] = re.compile(rf"\b{OVERSIZED_SKILL_LINES}\b")
 # here.
 CONFORMING_EXTRAS_SKILL: Final[str] = "skills/staged-reader/SKILL.md"
 
+# Once a tree carries a catalog, every prompt in it needs a [[units]] row or the catalog
+# cross-check reports the ones it has none for. These are the rows the conforming tree's
+# own prompts answer to, so a fixture built on it can pin one convention at a time.
+CONFORMING_TREE_ROWS: Final[str] = (
+    "[[units]]\n"
+    'kind = "skill"\n'
+    'name = "demo"\n'
+    "\n"
+    "[[units]]\n"
+    'kind = "agent"\n'
+    'name = "helper"\n'
+    "\n"
+    "[[units]]\n"
+    'kind = "rule"\n'
+    'name = "python"\n'
+    "\n"
+)
+
 EXTRAS_PACKAGE_TREE: Final[dict[str, str]] = {
     "installer/catalog.toml": (
-        "[[units]]\n"
+        CONFORMING_TREE_ROWS + "[[units]]\n"
         'kind = "skill"\n'
         'name = "staged-reader"\n'
         "\n"
@@ -166,10 +185,6 @@ EXTRAS_PACKAGE_TREE: Final[dict[str, str]] = {
         "[[units]]\n"
         'kind = "skill"\n'
         'name = "silent-reader"\n'
-        "\n"
-        "[[units]]\n"
-        'kind = "rule"\n'
-        'name = "python"\n'
         "\n"
         "[[packages]]\n"
         'name = "extras-package"\n'
@@ -234,7 +249,7 @@ STALE_ROOT_EXTRAS_SKILL: Final[str] = "skills/stale-root-reader/SKILL.md"
 
 STALE_ROOT_EXTRAS_TREE: Final[dict[str, str]] = {
     "installer/catalog.toml": (
-        "[[units]]\n"
+        CONFORMING_TREE_ROWS + "[[units]]\n"
         'kind = "skill"\n'
         'name = "staged-reader"\n'
         "\n"
@@ -311,6 +326,14 @@ MALFORMED_EXAMPLE_AGENT_PATH: Final[str] = "agents/malformed-example.md"
 
 UNREADABLE_INPUT_TREE: Final[dict[str, str]] = {
     "installer/catalog.toml": (
+        CONFORMING_TREE_ROWS + "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "vague-description"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "agent"\n'
+        'name = "malformed-example"\n'
+        "\n"
         "[[units]]\n"
         'kind = "skill"\n'
         'name = "staged-reader"\n'
@@ -610,14 +633,20 @@ def test_unreadable_input_is_reported_and_the_rest_of_the_tree_still_is(
     assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
     reported_lines: list[str] = result.stdout.splitlines()
     assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
-    for reported_line in reported_lines:
-        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
-            f"not a `path:line: message` diagnostic: {reported_line!r}"
-        )
+    # A row naming a skill the tree does not carry is also a stale catalog row, and a
+    # catalog finding sits on no line, so the `path:line:` shape is asserted of the
+    # diagnostics about the files themselves rather than of every line printed.
     for unreadable_path in (MISSING_SKILL_PATH, MALFORMED_EXAMPLE_AGENT_PATH):
-        assert any(unreadable_path in line for line in reported_lines), (
+        about_the_file: list[str] = [
+            line for line in reported_lines if line.startswith(unreadable_path)
+        ]
+        assert about_the_file, (
             f"{unreadable_path} could not be read unreported: {result.stdout!r}"
         )
+        for reported_line in about_the_file:
+            assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+                f"not a `path:line: message` diagnostic: {reported_line!r}"
+            )
     assert any(ORDINARY_VIOLATION_PATH in line for line in reported_lines), (
         f"the run stopped at what it could not read, losing "
         f"{ORDINARY_VIOLATION_PATH}: {result.stdout!r}"
@@ -629,4 +658,222 @@ def test_unreadable_input_is_reported_and_the_rest_of_the_tree_still_is(
     for conforming_path in CONFORMING_TREE:
         assert conforming_path not in result.stdout, (
             f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+# Where the installer keeps the inventory of units it can place; a catalog diagnostic
+# names it, since that is the file the reader has to edit to fix the finding.
+CATALOG: Final[str] = "installer/catalog.toml"
+
+# A skill is registered under the directory that names it, so the path a catalog row
+# stands for is the directory rather than the SKILL.md inside it.
+SKILL_FILE: Final[str] = "SKILL.md"
+
+# One prompt per kind that the catalog below does carry a row for. Every fixture in
+# this pair conforms to the frontmatter conventions, so the only finding either can
+# provoke is a catalog one.
+REGISTERED_PROMPTS: Final[dict[str, str]] = {
+    "skills/registered/SKILL.md": (
+        "---\n"
+        "name: registered\n"
+        "description: Use when the catalog already carries a row for a skill.\n"
+        "---\n"
+        "\n"
+        "# registered\n"
+        "\n"
+        "A skill the installer can place.\n"
+    ),
+    "agents/registered.md": (
+        "---\n"
+        "name: registered\n"
+        "description: Runs errands for a test fixture the catalog knows about.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# registered\n"
+        "\n"
+        "```json\n"
+        '{"role": "fixture", "status": "done"}\n'
+        "```\n"
+    ),
+    "rules/registered.md": (
+        '---\npaths: "**/*.py"\n---\n\n# registered\n\nA rule with a row.\n'
+    ),
+}
+
+
+# The same three kinds with no row in the catalog — a skill directory, an agent file
+# and a rule file. All three reach the catalog by the same path, so one fixture spanning
+# the kinds pins the behaviour without a test per kind.
+UNREGISTERED_PROMPTS: Final[dict[str, str]] = {
+    "skills/orphan/SKILL.md": (
+        "---\n"
+        "name: orphan\n"
+        "description: Use when a skill exists on disk but nowhere in the catalog.\n"
+        "---\n"
+        "\n"
+        "# orphan\n"
+        "\n"
+        "A skill the installer cannot place.\n"
+    ),
+    "agents/orphan.md": (
+        "---\n"
+        "name: orphan\n"
+        "description: Answers to a name the installer's inventory never lists.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# orphan\n"
+        "\n"
+        "```json\n"
+        '{"role": "fixture", "status": "done"}\n'
+        "```\n"
+    ),
+    "rules/orphan.md": (
+        '---\npaths: "**/*.md"\n---\n\n# orphan\n\nA rule the installer cannot place.\n'
+    ),
+}
+
+
+# The schema the agent fixtures above answer to. Both close with the same example, so
+# one schema keeps them in step with the drift check and leaves the catalog the only
+# thing either can break. It sits apart from the prompt fixtures because it registers
+# no unit — only prompts carry [[units]] rows.
+AGENT_EXAMPLE_SCHEMA: Final[dict[str, str]] = {
+    "schemas/fixture.schema.json": (
+        "{\n"
+        '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
+        '  "type": "object",\n'
+        '  "required": ["role", "status"],\n'
+        '  "properties": {\n'
+        '    "role": {"const": "fixture"},\n'
+        '    "status": {"type": "string"}\n'
+        "  }\n"
+        "}\n"
+    ),
+}
+
+
+# A catalog whose [[units]] rows cover REGISTERED_PROMPTS and stop there, so the tree
+# holds both halves of the cross-check: three prompts with a row, three without.
+PARTIAL_CATALOG: Final[dict[str, str]] = {
+    CATALOG: (
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "registered"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "agent"\n'
+        'name = "registered"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "rule"\n'
+        'name = "registered"\n'
+    ),
+}
+
+
+def _unit_paths(*, prompts: Mapping[str, str]) -> list[str]:
+    """The path each prompt is registered under, which for a skill is its directory."""
+    return [
+        str(Path(prompt_path).parent)
+        if Path(prompt_path).name == SKILL_FILE
+        else prompt_path
+        for prompt_path in prompts
+    ]
+
+
+def test_prompt_without_a_units_row_is_reported_with_the_catalog(
+    tmp_path: Path,
+) -> None:
+    _write_prompts(root=tmp_path, prompts=REGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=UNREGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=AGENT_EXAMPLE_SCHEMA)
+    _write_prompts(root=tmp_path, prompts=PARTIAL_CATALOG)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, (
+        f"expected a failing lint for the uncatalogued prompts: {result.stdout!r}"
+    )
+    reported_lines: list[str] = result.stdout.splitlines()
+    for unit_path in _unit_paths(prompts=UNREGISTERED_PROMPTS):
+        assert any(unit_path in line and CATALOG in line for line in reported_lines), (
+            f"{unit_path} has no [[units]] row unreported: {result.stdout!r}"
+        )
+    for unit_path in _unit_paths(prompts=REGISTERED_PROMPTS):
+        assert unit_path not in result.stdout, (
+            f"{unit_path} has a [[units]] row but was reported: {result.stdout!r}"
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class _StaleRow:
+    """A [[units]] row and the path the installer would need on disk to place it."""
+
+    kind: str
+    name: str
+    missing_path: str
+
+
+# One row per prompt kind the tree holds no files for. The names share no prefix with
+# the registered ones, so a diagnostic naming a stale row cannot be read as naming a
+# row whose files are present.
+STALE_ROWS: Final[tuple[_StaleRow, ...]] = (
+    _StaleRow(kind="skill", name="vanished", missing_path="skills/vanished"),
+    _StaleRow(kind="agent", name="departed", missing_path="agents/departed.md"),
+    _StaleRow(kind="rule", name="retired", missing_path="rules/retired.md"),
+)
+
+# The installer also places hooks, and `hooks/` is no part of the prompt tree. A row of
+# that kind stands for no prompt path, so it can never go stale.
+HOOK_KIND: Final[str] = "hook"
+HOOK_NAME: Final[str] = "ruff-format"
+
+
+def _units_row(*, kind: str, name: str) -> str:
+    """The shape the catalog registers one unit in."""
+    return f'[[units]]\nkind = "{kind}"\nname = "{name}"\n'
+
+
+def _catalog_with_stale_rows() -> dict[str, str]:
+    """The rows for REGISTERED_PROMPTS, plus stale ones and one of a non-prompt kind."""
+    rows: list[str] = [
+        PARTIAL_CATALOG[CATALOG],
+        *(
+            _units_row(kind=stale_row.kind, name=stale_row.name)
+            for stale_row in STALE_ROWS
+        ),
+        _units_row(kind=HOOK_KIND, name=HOOK_NAME),
+    ]
+    return {CATALOG: "\n".join(rows)}
+
+
+def test_units_row_with_no_files_on_disk_is_reported_with_the_missing_path(
+    tmp_path: Path,
+) -> None:
+    _write_prompts(root=tmp_path, prompts=REGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=AGENT_EXAMPLE_SCHEMA)
+    _write_prompts(root=tmp_path, prompts=_catalog_with_stale_rows())
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, (
+        f"expected a failing lint for the stale [[units]] rows: {result.stdout!r}"
+    )
+    reported_lines: list[str] = result.stdout.splitlines()
+    for stale_row in STALE_ROWS:
+        unit: str = f"{stale_row.kind}/{stale_row.name}"
+        assert any(
+            CATALOG in line and unit in line and stale_row.missing_path in line
+            for line in reported_lines
+        ), f"the row for {unit} has no files unreported: {result.stdout!r}"
+    assert HOOK_NAME not in result.stdout, (
+        f"the {HOOK_KIND} row registers no prompt but was reported: {result.stdout!r}"
+    )
+    for unit_path in _unit_paths(prompts=REGISTERED_PROMPTS):
+        assert unit_path not in result.stdout, (
+            f"{unit_path} is on disk with a row but was reported: {result.stdout!r}"
         )

@@ -289,6 +289,17 @@ The draft leaves Phase 4 only after both gates. Run them in order:
 - **The test list**: `.testlist` with a `.tfile` row per file and a `.trow` per test.
 - Screenshots and e2e output embed as `data:` URIs via `img.evidence`, each followed by
   its one-line `.evidence-cap` caption.
+- **Colour check, on the built file, before Phase 6.** An installed template that lags the
+  repo drops the syntax tokens silently, and every hunk renders as flat red and green — the
+  page still validates, so only these greps catch it:
+  - `grep -c -- --syn-kw <page>` → `0` means the template is stale. Rebuild from the repo's
+    `templates/pr-explain-page.html`; never hand-patch the built page.
+  - `grep -c tok- <page>` → every `.diff` block holding code carries at least one token span.
+    A block quoting prose (a Markdown file, a plain-text log) is the only allowed zero.
+  - `grep -n '\.diff \.\(add\|del\) {' <page>` → neither rule sets `color:`. Red and green
+    live in the line background and the `.sign` gutter, never on the code text.
+
+  Any one failing → fix it here. Publishing a flat diff is a failed run.
 
 ## Phase 6 — Publish
 
@@ -336,5 +347,6 @@ vs marked not-run; the proof verdict (sources used, or the ⚠ no-proof flag); s
 embedded, or the visual surface that shipped unseen and why (⚠); chapters
 emitted vs dropped (with the tiny-PR shrink reason if used); the PR whose teaser you
 updated; the mechanical gate result (coverage greps, Vale alerts fixed, or "vale
-unavailable — wc + grep only"); and the critic score — naming any dimension left under the
-bar when the page shipped flagged.
+unavailable — wc + grep only"); the colour check (tokens present, or the stale template you
+rebuilt from); and the critic score — naming any dimension left under the bar when the page
+shipped flagged.
