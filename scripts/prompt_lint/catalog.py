@@ -4,26 +4,17 @@ from __future__ import annotations
 
 import tomllib
 from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
 
 from .constants import CATALOG_PATH, MISSING_ROW, STALE_ROW, UNIT_PATHS, UNITS_TABLE
+from .types import RegisteredUnit
 
 
-@dataclass(frozen=True, kw_only=True)
-class _RegisteredUnit:
-    """A [[units]] row, carrying the path in the prompt tree that it stands for."""
-
-    kind: str
-    name: str
-    path: str
-
-
-def _registered_units(*, catalog: Path) -> tuple[_RegisteredUnit, ...]:
+def _registered_units(*, catalog: Path) -> tuple[RegisteredUnit, ...]:
     """Every [[units]] row that stands for a prompt, so parsed rows go no further."""
     rows: list[dict[str, str]] = tomllib.loads(catalog.read_text()).get(UNITS_TABLE, [])
     return tuple(
-        _RegisteredUnit(
+        RegisteredUnit(
             kind=row["kind"], name=row["name"], path=template.format(name=row["name"])
         )
         for row in rows
@@ -41,7 +32,7 @@ def cross_check_catalog(*, root: Path) -> Iterator[str]:
     catalog: Path = root / CATALOG_PATH
     if not catalog.is_file():
         return
-    registered: tuple[_RegisteredUnit, ...] = _registered_units(catalog=catalog)
+    registered: tuple[RegisteredUnit, ...] = _registered_units(catalog=catalog)
     known: frozenset[str] = frozenset(unit.path for unit in registered)
     for path_template in UNIT_PATHS.values():
         for prompt in sorted(root.glob(path_template.format(name="*"))):
