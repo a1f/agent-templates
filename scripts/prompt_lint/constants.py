@@ -9,6 +9,8 @@ DESCRIPTION_PREFIX: Final[str] = "Use when"
 SKILL_FILE: Final[str] = "SKILL.md"
 SKILL_CAP: Final[int] = 500  # lines; past this a skill is too long to hold in one read
 SKILLS_DIR: Final[str] = "skills"
+AGENTS_GLOB: Final[str] = "agents/*.md"
+SCHEMAS_DIR: Final[str] = "schemas"  # holds the <role>.schema.json an agent returns
 STAGED_ROOT: Final[str] = "~/.claude/at"  # where the installer puts a package's extras
 CATALOG_PATH: Final[str] = "installer/catalog.toml"
 SKILL_ID_PREFIX: Final[str] = "skill/"  # unit ids are "<kind>/<name>"
@@ -20,6 +22,6 @@ EXTRAS_KEY: Final[str] = "extras"
 # so a new convention is a row here rather than another function.
 REQUIRED_KEYS: Final[dict[str, tuple[str, ...]]] = {
     f"skills/*/{SKILL_FILE}": ("name", "description"),
-    "agents/*.md": ("name", "description", "tools", "model"),
+    AGENTS_GLOB: ("name", "description", "tools", "model"),
     "rules/*.md": ("paths",),
 }

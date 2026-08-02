@@ -23,7 +23,8 @@ DIAGNOSTIC_LINE: Final[re.Pattern[str]] = re.compile(r"^\S+?:\d+: .+$")
 
 # A tree that satisfies every convention the checker knows: the skill's name matches its
 # directory and its description opens with "Use when", the agent carries all four keys
-# with a name matching its file stem, and the rule declares the paths it governs.
+# with a name matching its file stem and closes with an example return still in step
+# with the schema its role names, and the rule declares the paths it governs.
 CONFORMING_TREE: Final[dict[str, str]] = {
     "skills/demo/SKILL.md": (
         "---\n"
@@ -45,7 +46,22 @@ CONFORMING_TREE: Final[dict[str, str]] = {
         "\n"
         "# helper\n"
         "\n"
-        "A conforming agent.\n"
+        "A conforming agent. It returns:\n"
+        "\n"
+        "```json\n"
+        '{"role": "helper", "status": "done"}\n'
+        "```\n"
+    ),
+    "schemas/helper.schema.json": (
+        "{\n"
+        '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
+        '  "type": "object",\n'
+        '  "required": ["role", "status"],\n'
+        '  "properties": {\n'
+        '    "role": {"const": "helper"},\n'
+        '    "status": {"type": "string"}\n'
+        "  }\n"
+        "}\n"
     ),
     "rules/python.md": (
         '---\npaths: "**/*.py"\n---\n\n# Python Rules\n\nA conforming rule.\n'
@@ -204,6 +220,43 @@ OFFENDING_EXTRAS_SKILLS: Final[dict[str, str]] = {
         "# silent-reader\n"
         "\n"
         "Validate the return, then hold the code to `~/.claude/at/rules/python.md`.\n"
+    ),
+}
+
+
+# An agent whose closing example return no longer carries every field the schema for
+# its role declares — the drift a prompt edit introduces silently. Its frontmatter is
+# clean, so the stale example is the only thing left to report. The schema requires
+# 'role' alone, so the dropped 'notes' is drift the schema itself would not reject.
+DRIFTED_AGENT_PATH: Final[str] = "agents/drifted.md"
+
+DRIFTED_AGENT_TREE: Final[dict[str, str]] = {
+    DRIFTED_AGENT_PATH: (
+        "---\n"
+        "name: drifted\n"
+        "description: Returns less than the schema it answers to declares.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# drifted\n"
+        "\n"
+        "An agent whose example return fell behind its schema:\n"
+        "\n"
+        "```json\n"
+        '{"role": "drifted"}\n'
+        "```\n"
+    ),
+    "schemas/drifted.schema.json": (
+        "{\n"
+        '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
+        '  "type": "object",\n'
+        '  "required": ["role"],\n'
+        '  "properties": {\n'
+        '    "role": {"const": "drifted"},\n'
+        '    "notes": {"type": "string"}\n'
+        "  }\n"
+        "}\n"
     ),
 }
 
@@ -388,6 +441,30 @@ def test_skill_not_reading_extras_from_state_root_is_reported_with_path_and_line
     assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
         f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
         f"{result.stdout!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_agent_example_drifting_from_its_schema_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=DRIFTED_AGENT_TREE)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    assert any(DRIFTED_AGENT_PATH in line for line in reported_lines), (
+        f"{DRIFTED_AGENT_PATH} dropped a schema field unreported: {result.stdout!r}"
     )
     for conforming_path in CONFORMING_TREE:
         assert conforming_path not in result.stdout, (

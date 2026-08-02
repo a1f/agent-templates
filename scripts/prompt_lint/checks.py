@@ -7,13 +7,17 @@ from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from check_prompt_schemas import drift
+
 from .constants import (
+    AGENTS_GLOB,
     CATALOG_PATH,
     DESCRIPTION_PREFIX,
     EXTRAS_KEY,
     FENCE,
     PACKAGES_KEY,
     REQUIRED_KEYS,
+    SCHEMAS_DIR,
     SKILL_CAP,
     SKILL_FILE,
     SKILL_ID_PREFIX,
@@ -56,6 +60,7 @@ def lint_tree(*, root: Path) -> Iterator[str]:
             if is_skill and (count := len(prompt.read_text().splitlines())) > SKILL_CAP:
                 yield f"{where}:{count}: {count} lines (cap {SKILL_CAP})"
     yield from _lint_staged_extras(root=root)
+    yield from _lint_schema_drift(root=root)
 
 
 @dataclass(frozen=True)
@@ -91,3 +96,12 @@ def _lint_staged_extras(*, root: Path) -> Iterator[str]:
         staged: str = f"{STAGED_ROOT}/{extra.segment}"
         if staged not in body or in_dir in body:
             yield f"{where}:1: must read its extras from {staged}"
+
+
+def _lint_schema_drift(*, root: Path) -> Iterator[str]:
+    """An agent's example return is the shape callers rely on, so it has to keep
+    answering to the schema the architect validates the real return against."""
+    for prompt in sorted(root.glob(AGENTS_GLOB)):
+        where: Path = prompt.relative_to(root)
+        for message in drift(prompt=prompt, schemas=root / SCHEMAS_DIR):
+            yield f"{where}:1: {message}"
