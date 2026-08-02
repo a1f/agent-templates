@@ -284,3 +284,123 @@ def test_overlong_skill_is_reported_with_its_line_count(tmp_path: Path) -> None:
         assert conforming_path not in result.stdout, (
             f"{conforming_path} conforms but was reported: {result.stdout!r}"
         )
+
+
+# Where the installer keeps the inventory of units it can place; a catalog diagnostic
+# names it, since that is the file the reader has to edit to fix the finding.
+CATALOG: Final[str] = "installer/catalog.toml"
+
+# A skill is registered under the directory that names it, so the path a catalog row
+# stands for is the directory rather than the SKILL.md inside it.
+SKILL_FILE: Final[str] = "SKILL.md"
+
+# One prompt per kind that the catalog below does carry a row for. Every fixture in
+# this pair conforms to the frontmatter conventions, so the only finding either can
+# provoke is a catalog one.
+REGISTERED_PROMPTS: Final[dict[str, str]] = {
+    "skills/registered/SKILL.md": (
+        "---\n"
+        "name: registered\n"
+        "description: Use when the catalog already carries a row for a skill.\n"
+        "---\n"
+        "\n"
+        "# registered\n"
+        "\n"
+        "A skill the installer can place.\n"
+    ),
+    "agents/registered.md": (
+        "---\n"
+        "name: registered\n"
+        "description: Runs errands for a test fixture the catalog knows about.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# registered\n"
+    ),
+    "rules/registered.md": (
+        '---\npaths: "**/*.py"\n---\n\n# registered\n\nA rule with a row.\n'
+    ),
+}
+
+
+# The same three kinds with no row in the catalog — a skill directory, an agent file
+# and a rule file. All three reach the catalog by the same path, so one fixture spanning
+# the kinds pins the behaviour without a test per kind.
+UNREGISTERED_PROMPTS: Final[dict[str, str]] = {
+    "skills/orphan/SKILL.md": (
+        "---\n"
+        "name: orphan\n"
+        "description: Use when a skill exists on disk but nowhere in the catalog.\n"
+        "---\n"
+        "\n"
+        "# orphan\n"
+        "\n"
+        "A skill the installer cannot place.\n"
+    ),
+    "agents/orphan.md": (
+        "---\n"
+        "name: orphan\n"
+        "description: Answers to a name the installer's inventory never lists.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# orphan\n"
+    ),
+    "rules/orphan.md": (
+        '---\npaths: "**/*.md"\n---\n\n# orphan\n\nA rule the installer cannot place.\n'
+    ),
+}
+
+
+# A catalog whose [[units]] rows cover REGISTERED_PROMPTS and stop there, so the tree
+# holds both halves of the cross-check: three prompts with a row, three without.
+PARTIAL_CATALOG: Final[dict[str, str]] = {
+    CATALOG: (
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "registered"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "agent"\n'
+        'name = "registered"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "rule"\n'
+        'name = "registered"\n'
+    ),
+}
+
+
+def _unit_paths(*, prompts: Mapping[str, str]) -> list[str]:
+    """The path each prompt is registered under, which for a skill is its directory."""
+    return [
+        str(Path(prompt_path).parent)
+        if Path(prompt_path).name == SKILL_FILE
+        else prompt_path
+        for prompt_path in prompts
+    ]
+
+
+def test_prompt_without_a_units_row_is_reported_with_the_catalog(
+    tmp_path: Path,
+) -> None:
+    _write_prompts(root=tmp_path, prompts=REGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=UNREGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=PARTIAL_CATALOG)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, (
+        f"expected a failing lint for the uncatalogued prompts: {result.stdout!r}"
+    )
+    reported_lines: list[str] = result.stdout.splitlines()
+    for unit_path in _unit_paths(prompts=UNREGISTERED_PROMPTS):
+        assert any(unit_path in line and CATALOG in line for line in reported_lines), (
+            f"{unit_path} has no [[units]] row unreported: {result.stdout!r}"
+        )
+    for unit_path in _unit_paths(prompts=REGISTERED_PROMPTS):
+        assert unit_path not in result.stdout, (
+            f"{unit_path} has a [[units]] row but was reported: {result.stdout!r}"
+        )
