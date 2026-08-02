@@ -2,10 +2,25 @@
 
 from __future__ import annotations
 
+import tomllib
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 
-from .constants import DESCRIPTION_PREFIX, FENCE, REQUIRED_KEYS, SKILL_CAP, SKILL_FILE
+from .constants import (
+    CATALOG_PATH,
+    DESCRIPTION_PREFIX,
+    EXTRAS_KEY,
+    FENCE,
+    PACKAGES_KEY,
+    REQUIRED_KEYS,
+    SKILL_CAP,
+    SKILL_FILE,
+    SKILL_ID_PREFIX,
+    SKILLS_DIR,
+    STAGED_ROOT,
+    UNITS_KEY,
+)
 
 
 def _frontmatter(*, text: str) -> dict[str, str]:
@@ -40,3 +55,39 @@ def lint_tree(*, root: Path) -> Iterator[str]:
                 yield f"{where}:1: description must open with {DESCRIPTION_PREFIX!r}"
             if is_skill and (count := len(prompt.read_text().splitlines())) > SKILL_CAP:
                 yield f"{where}:{count}: {count} lines (cap {SKILL_CAP})"
+    yield from _lint_staged_extras(root=root)
+
+
+@dataclass(frozen=True)
+class _StagedExtra:
+    """One skill and the staged directory it must read one package extra from."""
+
+    skill: str
+    segment: str
+
+
+def _staged_extras(*, root: Path) -> Iterator[_StagedExtra]:
+    """A tree with no catalog stages nothing, so its skills answer to no extras."""
+    catalog: Path = root / CATALOG_PATH
+    if not catalog.is_file():
+        return
+    for row in tomllib.loads(catalog.read_text()).get(PACKAGES_KEY, ()):
+        for relpath in row.get(EXTRAS_KEY, ()):
+            for unit in row[UNITS_KEY]:
+                if unit.startswith(SKILL_ID_PREFIX):
+                    yield _StagedExtra(
+                        skill=unit.removeprefix(SKILL_ID_PREFIX),
+                        segment=relpath.split("/")[0],
+                    )
+
+
+def _lint_staged_extras(*, root: Path) -> Iterator[str]:
+    """An installed skill no longer sits beside its package's extras, so naming one in
+    its own directory reads nothing once installed."""
+    for extra in _staged_extras(root=root):
+        where: str = f"{SKILLS_DIR}/{extra.skill}/{SKILL_FILE}"
+        body: str = (root / where).read_text()
+        in_dir: str = f"{SKILLS_DIR}/{extra.skill}/{extra.segment}"
+        staged: str = f"{STAGED_ROOT}/{extra.segment}"
+        if staged not in body or in_dir in body:
+            yield f"{where}:1: must read its extras from {staged}"

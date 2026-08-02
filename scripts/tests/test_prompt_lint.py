@@ -130,6 +130,84 @@ OVERSIZED_SKILL_LINES: Final[int] = 617
 LINE_COUNT: Final[re.Pattern[str]] = re.compile(rf"\b{OVERSIZED_SKILL_LINES}\b")
 
 
+# A package whose extras the installer stages into ~/.claude/at, plus the one skill of
+# that package that reads both of them from there. The two extras cover both shapes an
+# extra path takes — a file nested under a directory, and a bare directory — and the
+# package also carries a non-skill unit, which reads no extra and so answers to nothing
+# here.
+CONFORMING_EXTRAS_SKILL: Final[str] = "skills/staged-reader/SKILL.md"
+
+EXTRAS_PACKAGE_TREE: Final[dict[str, str]] = {
+    "installer/catalog.toml": (
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "staged-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "bundled-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "silent-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "rule"\n'
+        'name = "python"\n'
+        "\n"
+        "[[packages]]\n"
+        'name = "extras-package"\n'
+        "units = [\n"
+        '  "skill/staged-reader",\n'
+        '  "skill/bundled-reader",\n'
+        '  "skill/silent-reader",\n'
+        '  "rule/python",\n'
+        "]\n"
+        'extras = ["scripts/validate_return.py", "rules"]\n'
+    ),
+    CONFORMING_EXTRAS_SKILL: (
+        "---\n"
+        "name: staged-reader\n"
+        "description: Use when a skill reads its extras where they are staged.\n"
+        "---\n"
+        "\n"
+        "# staged-reader\n"
+        "\n"
+        "Validate the return with `~/.claude/at/scripts/validate_return.py`, then\n"
+        "hold the code to `~/.claude/at/rules/python.md`.\n"
+    ),
+}
+
+
+# One skill per way the staged-extras convention breaks, so each skill carries exactly
+# one violation: one still points at the copy bundled beside it in its own directory,
+# and one never names the staged root for the 'scripts' extra at all.
+OFFENDING_EXTRAS_SKILLS: Final[dict[str, str]] = {
+    "skills/bundled-reader/SKILL.md": (
+        "---\n"
+        "name: bundled-reader\n"
+        "description: Use when a skill still reads the copy bundled beside it.\n"
+        "---\n"
+        "\n"
+        "# bundled-reader\n"
+        "\n"
+        "Validate the return with `~/.claude/at/scripts/validate_return.py`, or\n"
+        "with `skills/bundled-reader/scripts/validate_return.py` when that is\n"
+        "missing, then hold the code to `~/.claude/at/rules/python.md`.\n"
+    ),
+    "skills/silent-reader/SKILL.md": (
+        "---\n"
+        "name: silent-reader\n"
+        "description: Use when a skill never says where its extras are staged.\n"
+        "---\n"
+        "\n"
+        "# silent-reader\n"
+        "\n"
+        "Validate the return, then hold the code to `~/.claude/at/rules/python.md`.\n"
+    ),
+}
+
+
 def _write_prompts(*, root: Path, prompts: Mapping[str, str]) -> None:
     for relative_path, content in prompts.items():
         prompt: Path = root / relative_path
@@ -279,6 +357,37 @@ def test_overlong_skill_is_reported_with_its_line_count(tmp_path: Path) -> None:
     )
     assert any(LINE_COUNT.search(line) is not None for line in about_the_skill), (
         f"no diagnostic gives its {OVERSIZED_SKILL_LINES} lines: {about_the_skill!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_skill_not_reading_extras_from_state_root_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=EXTRAS_PACKAGE_TREE)
+    _write_prompts(root=tmp_path, prompts=OFFENDING_EXTRAS_SKILLS)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    for offending_path in OFFENDING_EXTRAS_SKILLS:
+        assert any(offending_path in line for line in reported_lines), (
+            f"{offending_path} reads an extra off the staged root unreported: "
+            f"{result.stdout!r}"
+        )
+    assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
+        f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
+        f"{result.stdout!r}"
     )
     for conforming_path in CONFORMING_TREE:
         assert conforming_path not in result.stdout, (
