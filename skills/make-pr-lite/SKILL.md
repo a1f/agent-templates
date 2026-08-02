@@ -1,6 +1,6 @@
 ---
 name: make-pr-lite
-description: Use when explicitly asked to run /make-pr-lite on an already-scoped, low-risk single-module PR. A cheaper alternative to /make-pr — one self-TDD coder, the language gates, then a parallel 3-reviewer panel and a critic, squashed to one commit. Not for feature decomposition, multi-module planning, or high-risk work (filesystem/state mutation, merge/refcount, destructive ops) — route those to /make-pr.
+description: Use when explicitly asked to run /make-pr-lite on an already-scoped, low-risk single-module PR. A cheaper alternative to /make-pr — one self-TDD coder, the language and size gates, then a parallel 3-reviewer panel and a critic, squashed to one commit. Not for feature decomposition, multi-module planning, or high-risk work (filesystem/state mutation, merge/refcount, destructive ops) — route those to /make-pr.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
 allowed-tools: Read, Write, Bash, Agent, TodoWrite, Skill
@@ -24,11 +24,12 @@ guarantees that.)
 
 ## Runtime resolution
 
-- **skill_root** — the directory this `SKILL.md` lives in; it holds only the SKILL.md itself. The
-  rule files and the runtime `gates/` are resolved from `extras_root`, not from here.
+- **skill_root** — the directory this `SKILL.md` lives in; it holds only the SKILL.md itself. All
+  extras are resolved from `extras_root`, not from here.
 - **extras_root** — the installer's state root `~/.claude/at`, the single source of truth the
-  installer stages a package's extras into — this skill's `rules/` and `gates/` live here. Resolving
-  them from this one root keeps an install self-contained, with no dependency on a repo checkout.
+  installer stages a package's extras into — this skill's `rules/`, `schemas/`, `gates/` and
+  `scripts/` live here. Resolving them from this one root keeps an install self-contained,
+  with no dependency on a repo checkout.
 - **rules_root** — `~/.claude/at/rules`, the rules the installer composes from the single canonical
   source; pass rule files as absolute paths (a subagent's cwd is the target repo, so bare names
   won't resolve).
@@ -37,18 +38,25 @@ guarantees that.)
   for the `evidence/<branch-slug>/` handoff at Done (`branch-slug` = the pushed branch with `/`
   and whitespace → `_` — the key `/pr-explain` joins on).
 - **base** — user/spec-named → else `git merge-base HEAD origin/main` → else `… main` → else stop
-  and ask.
+  and ask. Every gate diffs `base...HEAD`, so at intake cherry-pick onto the target ref and
+  re-resolve `base` if the branch still carries commits already squash-merged to main.
 - **gates** — preflight: pick `~/.claude/at/gates/<lang>.json` by the task's language(s) /
   `allowed_paths`. After the coder runs, re-check against `git diff --name-only <base>...HEAD`. A
   changed language with no profile → stop and report.
 - **rules to pass** — always `design-principles.md`; `tdd.md` for behavioral work; the language
   rule (`python.md`/`typescript.md`/`rust.md`) per changed file type.
+- **size budget** — the PR may add **35 counted lines of code**; past that it must argue, and
+  past the caps in step 4's `block` row it cannot land; past 75 on 1–2 files it must name the
+  piece a split would break. Counted lines exclude tests, lockfiles, and generated or vendored
+  output; prose (`.md` and friends) has its own 100-line target. The tool at
+  `~/.claude/at/scripts/pr_size` — not your own count — decides.
 
 ## Agents
 
 | Agent | Count | Job |
 |---|---|---|
 | `coder-lite` | 1 (+ fix) | plan behaviors, self-TDD the whole PR, one commit |
+| `size-judge` | 1 per gate run on `review` (+1 on `unmeasured`) | did this PR have to be this big, or does it split? |
 | `reviewer` | 3, parallel | the panel — each a focused lens-group |
 | `critic` | 1 (+1 on `partial`) | goal-fit: did the PR achieve the task? |
 
@@ -61,10 +69,11 @@ lenses:
 2. **rules-conformance + test-form** — lenses `readability`, `test`.
 3. **quality** — lens `quality` (covers simplicity/reuse).
 
-The critic gets the task spec, task type (`behavioral` if any slice has a test, else
-`non_behavioral`), base, diff, changed test files, the coder's per-behavior RED evidence, the green
-gate output, and the reviewers' findings. Each reviewer finding carries a 1–100 `score` and a
-`location` (per the reviewer's return); the panel rules below gate on those.
+The `size-judge` gets the base ref, task spec, `target_cwd` and the size report the gate just
+printed — no rule paths. The critic gets the task spec, task type (`behavioral` if any slice has
+a test, else `non_behavioral`), base, diff, changed test files, the coder's per-behavior RED
+evidence, the green gate output, and the reviewers' findings. Each reviewer finding carries a
+1–100 `score` and a `location` (per the reviewer's return); the panel rules below gate on those.
 
 ## The loop
 
@@ -76,7 +85,7 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    final pass). A pre-existing, unrelated red → stop and report.
 3. **Build.** Dispatch `coder-lite` `mode: build` with full context (goal, boundary,
    allowed_paths, interface, acceptance criteria, base, `dependencies_allowed`, absolute rule
-   paths). Require `status: done`, then verify its return:
+   paths, **and the size budget**). Require `status: done`, then verify its return:
    - each behavioral slice shows a **right-reason RED**: `behaviors[].red` has a nonzero exit and a
      `key_output` that is an assertion failure or a missing-symbol error naming the interface being
      added (coder-lite's RED rubric defines it). A behavioral slice with `red: null` → route back.
@@ -89,10 +98,11 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    - `new_dependencies` empty unless allowed/named → else route back.
    - `blocked` → decide (re-scope, re-dispatch, or stop).
    Max 2 build re-dispatches, then stop and report to the human.
-4. **Reproduce + gate (objective — before any judgment).** First re-run the full suite yourself on
-   HEAD and route on its outcome; once the suite is green, run the gate profile (`setup` once, then
-   each `gates[].run` in order) and route on each gate's outcome. **All gates must pass before the
-   panel.** Max 2 fix rounds here, then stop. The table is total — every outcome has a row:
+4. **Reproduce + gate (objective — language, then size; before any judgment).** First re-run the
+   full suite yourself on HEAD and route on its outcome; once the suite is green, run the gate
+   profile (`setup` once, then each `gates[].run` in order) and route on each gate's outcome. **All
+   gates must pass before the panel.** Max 2 fix rounds here, then stop. The table is total — every
+   outcome has a row:
 
    | Outcome | Action |
    |---|---|
@@ -104,6 +114,24 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    | the `test` gate red | `mode: fix` — behavioral regression |
    | any other gate red | `mode: fix` — mechanical; name the gate |
    | gate `setup` itself fails | stop and report (environment, not a coder bug) |
+
+   **Size gate**:
+   `PYTHONPATH=~/.claude/at/scripts uv run --no-project --with click python -m pr_size --base <base> --repo <target_cwd>`
+
+   Route on the **top-level** `verdict` in the JSON it prints (the report also carries one per
+   budget class) — never on the exit code, which a launch or usage failure shares with `review`
+   or `block`. The table is total:
+
+   | Verdict | Action |
+   |---|---|
+   | `pass` | continue to the panel |
+   | `review` | dispatch `size-judge`. `acceptable` → continue; `split` → stop and report its `split_plan` |
+   | `block` | stop and report — over a hard cap (>50 code lines across 3+ code files that add lines, >100 across 1–2, >150 prose). Report the tool's `files` breakdown and the smallest first PR you can name |
+   | no JSON printed | stop and report the tool's stderr — an unmergeable base, a diff block it could not read, else an environment gap |
+
+   A judge `unmeasured` names its cause: re-dispatch once if that cause is an input you can
+   supply, otherwise stop and report. Never route a size fix to the coder and never edit counted
+   files to duck a band.
 5. **Panel + critic (judgment — once, on the green diff).** Dispatch the 3 reviewers (one message),
    then the critic; read the returns directly. Each finding's `score` is severity (1–100, higher =
    worse). **Deduplicate by `(file:line)`** (fall back to `(file:issue)` when a finding has no line),
@@ -116,18 +144,20 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    | critic verdict `not_achieved` | block |
    | critic verdict `partial` | dispatch one second critic; block only if it also returns `partial`/`not_achieved` |
 
-   CRITICAL, a red gate, and a black-letter language-rule violation are **never waivable**. No
-   blockers → **Done**.
+   CRITICAL, a red gate, a size-gate `block` or judge `split`, and a black-letter
+   language-rule violation are **never waivable**. No blockers → **Done**.
 6. **Fix once, re-verify in proportion.** Capture `git rev-parse HEAD` as `<pre_fix>`, then route
    all blockers back as one batched `coder-lite` `mode: fix` (findings verbatim). After it lands:
-   **always** re-run the gates; re-review the fix with the reviewer(s) whose lens-group covers each
-   routed blocker, passing `<pre_fix>` as the diff base so they see only the fix's hunks
-   (`git diff <pre_fix>...HEAD`); re-run the critic **only if** the fix changed behavior or
-   coverage. One fix round (separate from step 4's budget); a second only if round 1 introduced a
-   new blocker.
-   Then Done, or escalate the remainder to the human as waive-or-rescope.
-7. **Done.** When all behaviors and gates are green, no CRITICAL / `>=70` / aggregate blocker, and
-   critic `achieved`. **Squash to one commit:**
+   **always** re-run the gates, **including the size gate**, run with the run's `base` and routed
+   through step 4's table — an earlier `acceptable` does not carry to a changed diff; re-review
+   the fix with the reviewer(s) whose lens-group covers each routed blocker, passing `<pre_fix>`
+   as the diff base so they see only the fix's hunks (`git diff <pre_fix>...HEAD`); re-run the
+   critic **only if** the fix changed behavior or coverage. One fix round (separate from step 4's
+   budget); a second only if round 1 introduced a new blocker. Then Done, or escalate the
+   remainder to the human as waive-or-rescope.
+7. **Done.** When all behaviors and gates are green, the size gate `pass` or its judge
+   `acceptable`, no CRITICAL / `>=70` / aggregate blocker, and critic `achieved`.
+   **Squash to one commit:**
    `git reset --soft <base> && git commit -m "<conventional subject>"` (no AI attribution).
    Confirm only boundary files changed (`git diff --name-only <base>...HEAD`). Write the evidence
    handoff `<run_root>/evidence/<branch-slug>/evidence.json` (schema
@@ -137,9 +167,10 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    `key_output`) with `lines_added` summed from `git diff --numstat <base>...HEAD -- <the
    slice's non-test files>`, or `null` for every slice sharing a production file with another
    slice (a shared file makes per-slice counts non-derivable; never double-count) — plus one
-   `gates[]` entry per gate in the final green pass with its
-   real `key_output` numbers, and `runtime: []` unless you copied artifacts into `.../runtime/`.
-   Validate it:
+   `gates[]` entry per gate in the final green pass with its real `key_output` numbers —
+   including the size gate as `name: "size"` with its `cmd`, the tool's own `exit_code` (0, or
+   1 when the judge returned `acceptable`), and the report's `summary` line — and `runtime: []`
+   unless you copied artifacts into `.../runtime/`. Validate it:
    `uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/evidence.schema.json <that file>`
    — a failing file blocks the push. Then ship it
    without asking: branch first if still on the default branch, `git push -u origin <branch>`
