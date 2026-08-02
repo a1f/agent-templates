@@ -224,6 +224,47 @@ OFFENDING_EXTRAS_SKILLS: Final[dict[str, str]] = {
 }
 
 
+# A skill of the same package that names the staged root for every extra the package
+# declares AND keeps a `<skill_root>/` path to one of them beside it — the half-done
+# cutover `installer/tests/test_skill_extras_paths.py` bans as `stale_root`, since an
+# installed skill has no `<skill_root>` left to read. Its frontmatter is clean and its
+# catalog re-cuts the package around only the skills this needs, so the stale path is
+# the one violation left in the tree.
+STALE_ROOT_EXTRAS_SKILL: Final[str] = "skills/stale-root-reader/SKILL.md"
+
+STALE_ROOT_EXTRAS_TREE: Final[dict[str, str]] = {
+    "installer/catalog.toml": (
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "staged-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "stale-root-reader"\n'
+        "\n"
+        "[[packages]]\n"
+        'name = "extras-package"\n'
+        "units = [\n"
+        '  "skill/staged-reader",\n'
+        '  "skill/stale-root-reader",\n'
+        "]\n"
+        'extras = ["scripts/validate_return.py", "rules"]\n'
+    ),
+    STALE_ROOT_EXTRAS_SKILL: (
+        "---\n"
+        "name: stale-root-reader\n"
+        "description: Use when a skill keeps a bundled path beside the staged one.\n"
+        "---\n"
+        "\n"
+        "# stale-root-reader\n"
+        "\n"
+        "Validate the return with `~/.claude/at/scripts/validate_return.py`, then\n"
+        "hold the code to `~/.claude/at/rules/python.md`, falling back to\n"
+        "`<skill_root>/rules/python.md` when the package ships its own copy.\n"
+    ),
+}
+
+
 # An agent whose closing example return no longer carries every field the schema for
 # its role declares — the drift a prompt edit introduces silently. Its frontmatter is
 # clean, so the stale example is the only thing left to report. The schema requires
@@ -438,6 +479,35 @@ def test_skill_not_reading_extras_from_state_root_is_reported_with_path_and_line
             f"{offending_path} reads an extra off the staged root unreported: "
             f"{result.stdout!r}"
         )
+    assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
+        f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
+        f"{result.stdout!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_skill_keeping_a_skill_root_extra_path_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=EXTRAS_PACKAGE_TREE | STALE_ROOT_EXTRAS_TREE)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    assert any(STALE_ROOT_EXTRAS_SKILL in line for line in reported_lines), (
+        f"{STALE_ROOT_EXTRAS_SKILL} kept a <skill_root> extra path unreported: "
+        f"{result.stdout!r}"
+    )
     assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
         f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
         f"{result.stdout!r}"

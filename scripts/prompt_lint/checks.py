@@ -21,6 +21,7 @@ from .constants import (
     SKILL_CAP,
     SKILL_FILE,
     SKILL_ID_PREFIX,
+    SKILL_ROOT,
     SKILLS_DIR,
     STAGED_ROOT,
     UNITS_KEY,
@@ -94,7 +95,8 @@ def _lint_staged_extras(*, root: Path) -> Iterator[str]:
         body: str = (root / where).read_text()
         in_dir: str = f"{SKILLS_DIR}/{extra.skill}/{extra.segment}"
         staged: str = f"{STAGED_ROOT}/{extra.segment}"
-        if staged not in body or in_dir in body:
+        stale_root: str = f"{SKILL_ROOT}/{extra.segment}"
+        if staged not in body or in_dir in body or stale_root in body:
             yield f"{where}:1: must read its extras from {staged}"
 
 

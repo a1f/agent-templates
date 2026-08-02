@@ -12,6 +12,7 @@ SKILLS_DIR: Final[str] = "skills"
 AGENTS_GLOB: Final[str] = "agents/*.md"
 SCHEMAS_DIR: Final[str] = "schemas"  # holds the <role>.schema.json an agent returns
 STAGED_ROOT: Final[str] = "~/.claude/at"  # where the installer puts a package's extras
+SKILL_ROOT: Final[str] = "<skill_root>"  # the skill's own dir, gone once installed
 CATALOG_PATH: Final[str] = "installer/catalog.toml"
 SKILL_ID_PREFIX: Final[str] = "skill/"  # unit ids are "<kind>/<name>"
 PACKAGES_KEY: Final[str] = "packages"
