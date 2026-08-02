@@ -72,7 +72,7 @@ class Verdict(StrEnum):
 class Band(StrEnum):
     """Where a count sits against its budget — the judge's dispatch key.
 
-    `target` needs no judgment and `over-limit` admits none; the rest are the grey
+    `target` needs no judgment and `over-cap` admits none; the rest are the grey
     zone, and `cohesion-strict` is the one that must argue integrity to survive.
     """
 
@@ -81,7 +81,7 @@ class Band(StrEnum):
     COHESION = "cohesion"
     COHESION_STRICT = "cohesion-strict"
     OVER_TARGET = "over-target"
-    OVER_LIMIT = "over-limit"
+    OVER_CAP = "over-cap"
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ class Budget:
     files: int
     lines: int
     target: int
-    limit: int
+    cap: int
     band: Band
     verdict: Verdict
 

@@ -62,8 +62,8 @@ def summarize(*, report: SizeReport) -> str:
     return (
         f"{report.verdict}: code {report.code.lines} added lines across "
         f"{report.code.files} file(s) (target {report.code.target}, cap "
-        f"{report.code.limit}, band {report.code.band}); prose {report.prose.lines} "
-        f"(target {report.prose.target}, cap {report.prose.limit}); "
+        f"{report.code.cap}, band {report.code.band}); prose {report.prose.lines} "
+        f"(target {report.prose.target}, cap {report.prose.cap}); "
         f"{report.tests.lines} test and {report.generated.lines} generated lines "
         f"excluded"
     )

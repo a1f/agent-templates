@@ -32,13 +32,13 @@
     "budget": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["files", "lines", "target", "limit", "band", "verdict"],
+      "required": ["files", "lines", "target", "cap", "band", "verdict"],
       "properties": {
         "files": { "$ref": "#/$defs/count" },
         "lines": { "$ref": "#/$defs/count" },
         "target": { "$ref": "#/$defs/count" },
-        "limit": { "$ref": "#/$defs/count" },
-        "band": { "enum": ["target", "many-files", "cohesion", "cohesion-strict", "over-target", "over-limit"] },
+        "cap": { "$ref": "#/$defs/count" },
+        "band": { "enum": ["target", "many-files", "cohesion", "cohesion-strict", "over-target", "over-cap"] },
         "verdict": { "$ref": "#/$defs/verdict" }
       }
     },

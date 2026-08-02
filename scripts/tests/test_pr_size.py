@@ -177,13 +177,13 @@ def test_a_declared_test_module_does_not_swallow_the_code_below_it() -> None:
         (5, 35, "pass", "target"),
         (3, 36, "review", "many-files"),
         (3, 50, "review", "many-files"),
-        (3, 51, "block", "over-limit"),
-        (9, 400, "block", "over-limit"),
+        (3, 51, "block", "over-cap"),
+        (9, 400, "block", "over-cap"),
         (1, 36, "review", "cohesion"),
         (2, 75, "review", "cohesion"),
         (2, 76, "review", "cohesion-strict"),
         (2, 100, "review", "cohesion-strict"),
-        (2, 101, "block", "over-limit"),
+        (2, 101, "block", "over-cap"),
     ],
 )
 def test_three_or_more_code_files_lose_the_larger_cap(
@@ -287,8 +287,8 @@ def test_the_report_is_printed_as_json_and_the_verdict_is_the_exit_code(
         "files": 4,
         "lines": 60,
         "target": 35,
-        "limit": 50,
-        "band": "over-limit",
+        "cap": 50,
+        "band": "over-cap",
         "verdict": "block",
     }
     assert str(payload["summary"]).startswith(

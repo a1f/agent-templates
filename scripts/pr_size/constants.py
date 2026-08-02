@@ -69,15 +69,15 @@ RUST_LITERAL_OR_COMMENT: Final[re.Pattern[str]] = re.compile(
 # single unit a split would break — many files never are. Past the cohesion line, a
 # few-file PR has to name the piece a split would break, not just argue cohesion.
 CODE_TARGET_LINES: Final[int] = 35
-CODE_LIMIT_FEW_FILES: Final[int] = 100
-CODE_LIMIT_MANY_FILES: Final[int] = 50
+CODE_CAP_FEW_FILES: Final[int] = 100
+CODE_CAP_MANY_FILES: Final[int] = 50
 CODE_COHESION_LINES: Final[int] = 75
 FEW_FILES: Final[int] = 2
 
 # Prose gets one budget and no file-count relief: a document splits where a module
 # cannot, so the case that earns code its larger cap does not arise.
 PROSE_TARGET_LINES: Final[int] = 100
-PROSE_LIMIT_LINES: Final[int] = 150
+PROSE_CAP_LINES: Final[int] = 150
 
 # How the shell talks to git. `--unified=0` keeps the parse honest (no context line can
 # be mistaken for an addition); `core.quotePath=false` keeps non-ASCII paths readable

@@ -9,12 +9,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from .constants import (
+    CODE_CAP_FEW_FILES,
+    CODE_CAP_MANY_FILES,
     CODE_COHESION_LINES,
-    CODE_LIMIT_FEW_FILES,
-    CODE_LIMIT_MANY_FILES,
     CODE_TARGET_LINES,
     FEW_FILES,
-    PROSE_LIMIT_LINES,
+    PROSE_CAP_LINES,
     PROSE_TARGET_LINES,
 )
 from .sizing import changed_files
@@ -40,24 +40,24 @@ def measure(*, diff_text: str, sources: Mapping[str, str] | None = None) -> Size
 
 def code_budget(*, files: int, lines: int) -> Budget:
     """Judge the code lines: one or two files earn the larger cap, three never do."""
-    limit: int = CODE_LIMIT_FEW_FILES if files <= FEW_FILES else CODE_LIMIT_MANY_FILES
-    band: Band = _code_band(files=files, lines=lines, limit=limit)
+    cap: int = CODE_CAP_FEW_FILES if files <= FEW_FILES else CODE_CAP_MANY_FILES
+    band: Band = _code_band(files=files, lines=lines, cap=cap)
     return Budget(
         files=files,
         lines=lines,
         target=CODE_TARGET_LINES,
-        limit=limit,
+        cap=cap,
         band=band,
         verdict=verdict_of(band=band),
     )
 
 
-def _code_band(*, files: int, lines: int, limit: int) -> Band:
+def _code_band(*, files: int, lines: int, cap: int) -> Band:
     """Name what a code count is, so the judge is told which bar to hold it to."""
     if lines <= CODE_TARGET_LINES:
         return Band.TARGET
-    if lines > limit:
-        return Band.OVER_LIMIT
+    if lines > cap:
+        return Band.OVER_CAP
     if files > FEW_FILES:
         return Band.MANY_FILES
     if lines > CODE_COHESION_LINES:
@@ -68,15 +68,15 @@ def _code_band(*, files: int, lines: int, limit: int) -> Band:
 def prose_budget(*, files: int, lines: int) -> Budget:
     """Judge the prose lines: one budget, no file-count relief."""
     band: Band = Band.TARGET
-    if lines > PROSE_LIMIT_LINES:
-        band = Band.OVER_LIMIT
+    if lines > PROSE_CAP_LINES:
+        band = Band.OVER_CAP
     elif lines > PROSE_TARGET_LINES:
         band = Band.OVER_TARGET
     return Budget(
         files=files,
         lines=lines,
         target=PROSE_TARGET_LINES,
-        limit=PROSE_LIMIT_LINES,
+        cap=PROSE_CAP_LINES,
         band=band,
         verdict=verdict_of(band=band),
     )
@@ -108,6 +108,6 @@ def verdict_of(*, band: Band) -> Verdict:
     """A band is only ever a pass, a question for the judge, or a refusal."""
     if band is Band.TARGET:
         return Verdict.PASS
-    if band is Band.OVER_LIMIT:
+    if band is Band.OVER_CAP:
         return Verdict.BLOCK
     return Verdict.REVIEW
