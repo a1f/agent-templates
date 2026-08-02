@@ -302,6 +302,60 @@ DRIFTED_AGENT_TREE: Final[dict[str, str]] = {
 }
 
 
+# Two inputs the checker cannot read at all: a package unit naming a skill that never
+# made it onto disk, and an agent whose closing ```json block never closes its object.
+# Both are defects of the tree, so the catalog re-cuts the package around the one skill
+# that is there plus the missing one, leaving nothing else here to report.
+MISSING_SKILL_PATH: Final[str] = "skills/absent-reader/SKILL.md"
+MALFORMED_EXAMPLE_AGENT_PATH: Final[str] = "agents/malformed-example.md"
+
+UNREADABLE_INPUT_TREE: Final[dict[str, str]] = {
+    "installer/catalog.toml": (
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "staged-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "absent-reader"\n'
+        "\n"
+        "[[packages]]\n"
+        'name = "extras-package"\n'
+        "units = [\n"
+        '  "skill/staged-reader",\n'
+        '  "skill/absent-reader",\n'
+        "]\n"
+        'extras = ["scripts/validate_return.py", "rules"]\n'
+    ),
+    MALFORMED_EXAMPLE_AGENT_PATH: (
+        "---\n"
+        "name: malformed-example\n"
+        "description: Closes with an example that is not JSON at all.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# malformed-example\n"
+        "\n"
+        "An agent whose example return never closes its object:\n"
+        "\n"
+        "```json\n"
+        '{"role": "malformed-example",\n'
+        "```\n"
+    ),
+}
+
+
+# The everyday convention breach that rides along with the unreadable inputs: a skill
+# whose description does not open with the trigger prefix. Reporting it is what says the
+# run carried on past what it could not read rather than dying on it.
+ORDINARY_VIOLATION_PATH: Final[str] = "skills/vague-description/SKILL.md"
+
+ORDINARY_VIOLATION: Final[dict[str, str]] = {
+    ORDINARY_VIOLATION_PATH: OFFENDING_SKILLS[ORDINARY_VIOLATION_PATH]
+}
+
+
 def _write_prompts(*, root: Path, prompts: Mapping[str, str]) -> None:
     for relative_path, content in prompts.items():
         prompt: Path = root / relative_path
@@ -535,6 +589,42 @@ def test_agent_example_drifting_from_its_schema_is_reported_with_path_and_line(
         )
     assert any(DRIFTED_AGENT_PATH in line for line in reported_lines), (
         f"{DRIFTED_AGENT_PATH} dropped a schema field unreported: {result.stdout!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_unreadable_input_is_reported_and_the_rest_of_the_tree_still_is(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(
+        root=tmp_path,
+        prompts=EXTRAS_PACKAGE_TREE | UNREADABLE_INPUT_TREE | ORDINARY_VIOLATION,
+    )
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    for unreadable_path in (MISSING_SKILL_PATH, MALFORMED_EXAMPLE_AGENT_PATH):
+        assert any(unreadable_path in line for line in reported_lines), (
+            f"{unreadable_path} could not be read unreported: {result.stdout!r}"
+        )
+    assert any(ORDINARY_VIOLATION_PATH in line for line in reported_lines), (
+        f"the run stopped at what it could not read, losing "
+        f"{ORDINARY_VIOLATION_PATH}: {result.stdout!r}"
+    )
+    assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
+        f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
+        f"{result.stdout!r}"
     )
     for conforming_path in CONFORMING_TREE:
         assert conforming_path not in result.stdout, (

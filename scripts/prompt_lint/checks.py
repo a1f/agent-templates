@@ -25,6 +25,8 @@ from .constants import (
     SKILLS_DIR,
     STAGED_ROOT,
     UNITS_KEY,
+    UNREADABLE,
+    UNREADABLE_MESSAGE,
 )
 
 
@@ -92,7 +94,11 @@ def _lint_staged_extras(*, root: Path) -> Iterator[str]:
     its own directory reads nothing once installed."""
     for extra in _staged_extras(root=root):
         where: str = f"{SKILLS_DIR}/{extra.skill}/{SKILL_FILE}"
-        body: str = (root / where).read_text()
+        try:
+            body: str = (root / where).read_text()
+        except UNREADABLE as exc:
+            yield f"{where}:1: {UNREADABLE_MESSAGE}: {exc}"
+            continue
         in_dir: str = f"{SKILLS_DIR}/{extra.skill}/{extra.segment}"
         staged: str = f"{STAGED_ROOT}/{extra.segment}"
         stale_root: str = f"{SKILL_ROOT}/{extra.segment}"
@@ -105,5 +111,10 @@ def _lint_schema_drift(*, root: Path) -> Iterator[str]:
     answering to the schema the architect validates the real return against."""
     for prompt in sorted(root.glob(AGENTS_GLOB)):
         where: Path = prompt.relative_to(root)
-        for message in drift(prompt=prompt, schemas=root / SCHEMAS_DIR):
+        try:
+            messages: list[str] = drift(prompt=prompt, schemas=root / SCHEMAS_DIR)
+        except UNREADABLE as exc:
+            yield f"{where}:1: {UNREADABLE_MESSAGE}: {exc}"
+            continue
+        for message in messages:
             yield f"{where}:1: {message}"

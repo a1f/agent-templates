@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Final
 
 FENCE: Final[str] = "---"
@@ -18,6 +19,13 @@ SKILL_ID_PREFIX: Final[str] = "skill/"  # unit ids are "<kind>/<name>"
 PACKAGES_KEY: Final[str] = "packages"
 UNITS_KEY: Final[str] = "units"
 EXTRAS_KEY: Final[str] = "extras"
+
+# What a read site raises when the tree hands it something it cannot read at all: a
+# SKILL.md a catalog unit names but the tree does not carry, or a ```json example that
+# never closes. Reported like any other breach, so one such file costs no other
+# diagnostic (`check_prompt_schemas._report` catches the same pair).
+UNREADABLE: Final[tuple[type[Exception], ...]] = (OSError, json.JSONDecodeError)
+UNREADABLE_MESSAGE: Final[str] = "could not be read"
 
 # Which prompt files carry frontmatter, and the keys each declares — one row per kind,
 # so a new convention is a row here rather than another function.
