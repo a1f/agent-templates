@@ -12,3 +12,11 @@ class RegisteredUnit:
     kind: str
     name: str
     path: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class StagedExtra:
+    """One skill, and the staged directory it must read one package extra from."""
+
+    skill: str
+    segment: str

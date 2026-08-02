@@ -24,7 +24,7 @@ _SCHEMAS: Final[Path] = _ROOT / "schemas"
 _JSON_BLOCK: Final[re.Pattern[str]] = re.compile(r"```json\n(.*?)\n```", re.DOTALL)
 
 
-def drift(*, prompt: Path) -> list[str]:
+def drift(*, prompt: Path, schemas: Path = _SCHEMAS) -> list[str]:
     """How a prompt's example diverges from its role's schema (empty = in sync)."""
     blocks: list[str] = _JSON_BLOCK.findall(prompt.read_text())
     if not blocks:
@@ -33,9 +33,9 @@ def drift(*, prompt: Path) -> list[str]:
     if not isinstance(example, dict):
         return ["last ```json block is not a JSON object"]
     role: object = example.get("role")
-    schema_path: Path = _SCHEMAS / f"{role}.schema.json"
+    schema_path: Path = schemas / f"{role}.schema.json"
     if not schema_path.exists():
-        return [f"role {role!r} has no schema in {_SCHEMAS.name}/"]
+        return [f"role {role!r} has no schema in {schemas.name}/"]
     errors: list[str] = errors_against(instance=example, schema_path=schema_path)
     schema: dict[str, Any] = json.loads(schema_path.read_text())
     properties: dict[str, Any] = schema.get("properties", {})

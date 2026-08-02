@@ -24,7 +24,8 @@ DIAGNOSTIC_LINE: Final[re.Pattern[str]] = re.compile(r"^\S+?:\d+: .+$")
 
 # A tree that satisfies every convention the checker knows: the skill's name matches its
 # directory and its description opens with "Use when", the agent carries all four keys
-# with a name matching its file stem, and the rule declares the paths it governs.
+# with a name matching its file stem and closes with an example return still in step
+# with the schema its role names, and the rule declares the paths it governs.
 CONFORMING_TREE: Final[dict[str, str]] = {
     "skills/demo/SKILL.md": (
         "---\n"
@@ -46,7 +47,22 @@ CONFORMING_TREE: Final[dict[str, str]] = {
         "\n"
         "# helper\n"
         "\n"
-        "A conforming agent.\n"
+        "A conforming agent. It returns:\n"
+        "\n"
+        "```json\n"
+        '{"role": "helper", "status": "done"}\n'
+        "```\n"
+    ),
+    "schemas/helper.schema.json": (
+        "{\n"
+        '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
+        '  "type": "object",\n'
+        '  "required": ["role", "status"],\n'
+        '  "properties": {\n'
+        '    "role": {"const": "helper"},\n'
+        '    "status": {"type": "string"}\n'
+        "  }\n"
+        "}\n"
     ),
     "rules/python.md": (
         '---\npaths: "**/*.py"\n---\n\n# Python Rules\n\nA conforming rule.\n'
@@ -129,6 +145,238 @@ OFFENDING_RULES: Final[dict[str, str]] = {
 OVERSIZED_SKILL_PATH: Final[str] = "skills/sprawling/SKILL.md"
 OVERSIZED_SKILL_LINES: Final[int] = 617
 LINE_COUNT: Final[re.Pattern[str]] = re.compile(rf"\b{OVERSIZED_SKILL_LINES}\b")
+
+
+# A package whose extras the installer stages into ~/.claude/at, plus the one skill of
+# that package that reads both of them from there. The two extras cover both shapes an
+# extra path takes — a file nested under a directory, and a bare directory — and the
+# package also carries a non-skill unit, which reads no extra and so answers to nothing
+# here.
+CONFORMING_EXTRAS_SKILL: Final[str] = "skills/staged-reader/SKILL.md"
+
+# Once a tree carries a catalog, every prompt in it needs a [[units]] row or the catalog
+# cross-check reports the ones it has none for. These are the rows the conforming tree's
+# own prompts answer to, so a fixture built on it can pin one convention at a time.
+CONFORMING_TREE_ROWS: Final[str] = (
+    "[[units]]\n"
+    'kind = "skill"\n'
+    'name = "demo"\n'
+    "\n"
+    "[[units]]\n"
+    'kind = "agent"\n'
+    'name = "helper"\n'
+    "\n"
+    "[[units]]\n"
+    'kind = "rule"\n'
+    'name = "python"\n'
+    "\n"
+)
+
+EXTRAS_PACKAGE_TREE: Final[dict[str, str]] = {
+    "installer/catalog.toml": (
+        CONFORMING_TREE_ROWS + "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "staged-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "bundled-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "silent-reader"\n'
+        "\n"
+        "[[packages]]\n"
+        'name = "extras-package"\n'
+        "units = [\n"
+        '  "skill/staged-reader",\n'
+        '  "skill/bundled-reader",\n'
+        '  "skill/silent-reader",\n'
+        '  "rule/python",\n'
+        "]\n"
+        'extras = ["scripts/validate_return.py", "rules"]\n'
+    ),
+    CONFORMING_EXTRAS_SKILL: (
+        "---\n"
+        "name: staged-reader\n"
+        "description: Use when a skill reads its extras where they are staged.\n"
+        "---\n"
+        "\n"
+        "# staged-reader\n"
+        "\n"
+        "Validate the return with `~/.claude/at/scripts/validate_return.py`, then\n"
+        "hold the code to `~/.claude/at/rules/python.md`.\n"
+    ),
+}
+
+
+# One skill per way the staged-extras convention breaks, so each skill carries exactly
+# one violation: one still points at the copy bundled beside it in its own directory,
+# and one never names the staged root for the 'scripts' extra at all.
+OFFENDING_EXTRAS_SKILLS: Final[dict[str, str]] = {
+    "skills/bundled-reader/SKILL.md": (
+        "---\n"
+        "name: bundled-reader\n"
+        "description: Use when a skill still reads the copy bundled beside it.\n"
+        "---\n"
+        "\n"
+        "# bundled-reader\n"
+        "\n"
+        "Validate the return with `~/.claude/at/scripts/validate_return.py`, or\n"
+        "with `skills/bundled-reader/scripts/validate_return.py` when that is\n"
+        "missing, then hold the code to `~/.claude/at/rules/python.md`.\n"
+    ),
+    "skills/silent-reader/SKILL.md": (
+        "---\n"
+        "name: silent-reader\n"
+        "description: Use when a skill never says where its extras are staged.\n"
+        "---\n"
+        "\n"
+        "# silent-reader\n"
+        "\n"
+        "Validate the return, then hold the code to `~/.claude/at/rules/python.md`.\n"
+    ),
+}
+
+
+# A skill of the same package that names the staged root for every extra the package
+# declares AND keeps a `<skill_root>/` path to one of them beside it — the half-done
+# cutover `installer/tests/test_skill_extras_paths.py` bans as `stale_root`, since an
+# installed skill has no `<skill_root>` left to read. Its frontmatter is clean and its
+# catalog re-cuts the package around only the skills this needs, so the stale path is
+# the one violation left in the tree.
+STALE_ROOT_EXTRAS_SKILL: Final[str] = "skills/stale-root-reader/SKILL.md"
+
+STALE_ROOT_EXTRAS_TREE: Final[dict[str, str]] = {
+    "installer/catalog.toml": (
+        CONFORMING_TREE_ROWS + "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "staged-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "stale-root-reader"\n'
+        "\n"
+        "[[packages]]\n"
+        'name = "extras-package"\n'
+        "units = [\n"
+        '  "skill/staged-reader",\n'
+        '  "skill/stale-root-reader",\n'
+        "]\n"
+        'extras = ["scripts/validate_return.py", "rules"]\n'
+    ),
+    STALE_ROOT_EXTRAS_SKILL: (
+        "---\n"
+        "name: stale-root-reader\n"
+        "description: Use when a skill keeps a bundled path beside the staged one.\n"
+        "---\n"
+        "\n"
+        "# stale-root-reader\n"
+        "\n"
+        "Validate the return with `~/.claude/at/scripts/validate_return.py`, then\n"
+        "hold the code to `~/.claude/at/rules/python.md`, falling back to\n"
+        "`<skill_root>/rules/python.md` when the package ships its own copy.\n"
+    ),
+}
+
+
+# An agent whose closing example return no longer carries every field the schema for
+# its role declares — the drift a prompt edit introduces silently. Its frontmatter is
+# clean, so the stale example is the only thing left to report. The schema requires
+# 'role' alone, so the dropped 'notes' is drift the schema itself would not reject.
+DRIFTED_AGENT_PATH: Final[str] = "agents/drifted.md"
+
+DRIFTED_AGENT_TREE: Final[dict[str, str]] = {
+    DRIFTED_AGENT_PATH: (
+        "---\n"
+        "name: drifted\n"
+        "description: Returns less than the schema it answers to declares.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# drifted\n"
+        "\n"
+        "An agent whose example return fell behind its schema:\n"
+        "\n"
+        "```json\n"
+        '{"role": "drifted"}\n'
+        "```\n"
+    ),
+    "schemas/drifted.schema.json": (
+        "{\n"
+        '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
+        '  "type": "object",\n'
+        '  "required": ["role"],\n'
+        '  "properties": {\n'
+        '    "role": {"const": "drifted"},\n'
+        '    "notes": {"type": "string"}\n'
+        "  }\n"
+        "}\n"
+    ),
+}
+
+
+# Two inputs the checker cannot read at all: a package unit naming a skill that never
+# made it onto disk, and an agent whose closing ```json block never closes its object.
+# Both are defects of the tree, so the catalog re-cuts the package around the one skill
+# that is there plus the missing one, leaving nothing else here to report.
+MISSING_SKILL_PATH: Final[str] = "skills/absent-reader/SKILL.md"
+MALFORMED_EXAMPLE_AGENT_PATH: Final[str] = "agents/malformed-example.md"
+
+UNREADABLE_INPUT_TREE: Final[dict[str, str]] = {
+    "installer/catalog.toml": (
+        CONFORMING_TREE_ROWS + "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "vague-description"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "agent"\n'
+        'name = "malformed-example"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "staged-reader"\n'
+        "\n"
+        "[[units]]\n"
+        'kind = "skill"\n'
+        'name = "absent-reader"\n'
+        "\n"
+        "[[packages]]\n"
+        'name = "extras-package"\n'
+        "units = [\n"
+        '  "skill/staged-reader",\n'
+        '  "skill/absent-reader",\n'
+        "]\n"
+        'extras = ["scripts/validate_return.py", "rules"]\n'
+    ),
+    MALFORMED_EXAMPLE_AGENT_PATH: (
+        "---\n"
+        "name: malformed-example\n"
+        "description: Closes with an example that is not JSON at all.\n"
+        "tools: Read\n"
+        "model: opus\n"
+        "---\n"
+        "\n"
+        "# malformed-example\n"
+        "\n"
+        "An agent whose example return never closes its object:\n"
+        "\n"
+        "```json\n"
+        '{"role": "malformed-example",\n'
+        "```\n"
+    ),
+}
+
+
+# The everyday convention breach that rides along with the unreadable inputs: a skill
+# whose description does not open with the trigger prefix. Reporting it is what says the
+# run carried on past what it could not read rather than dying on it.
+ORDINARY_VIOLATION_PATH: Final[str] = "skills/vague-description/SKILL.md"
+
+ORDINARY_VIOLATION: Final[dict[str, str]] = {
+    ORDINARY_VIOLATION_PATH: OFFENDING_SKILLS[ORDINARY_VIOLATION_PATH]
+}
 
 
 def _write_prompts(*, root: Path, prompts: Mapping[str, str]) -> None:
@@ -287,6 +535,132 @@ def test_overlong_skill_is_reported_with_its_line_count(tmp_path: Path) -> None:
         )
 
 
+def test_skill_not_reading_extras_from_state_root_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=EXTRAS_PACKAGE_TREE)
+    _write_prompts(root=tmp_path, prompts=OFFENDING_EXTRAS_SKILLS)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    for offending_path in OFFENDING_EXTRAS_SKILLS:
+        assert any(offending_path in line for line in reported_lines), (
+            f"{offending_path} reads an extra off the staged root unreported: "
+            f"{result.stdout!r}"
+        )
+    assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
+        f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
+        f"{result.stdout!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_skill_keeping_a_skill_root_extra_path_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=EXTRAS_PACKAGE_TREE | STALE_ROOT_EXTRAS_TREE)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    assert any(STALE_ROOT_EXTRAS_SKILL in line for line in reported_lines), (
+        f"{STALE_ROOT_EXTRAS_SKILL} kept a <skill_root> extra path unreported: "
+        f"{result.stdout!r}"
+    )
+    assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
+        f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
+        f"{result.stdout!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_agent_example_drifting_from_its_schema_is_reported_with_path_and_line(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(root=tmp_path, prompts=DRIFTED_AGENT_TREE)
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    for reported_line in reported_lines:
+        assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+            f"not a `path:line: message` diagnostic: {reported_line!r}"
+        )
+    assert any(DRIFTED_AGENT_PATH in line for line in reported_lines), (
+        f"{DRIFTED_AGENT_PATH} dropped a schema field unreported: {result.stdout!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
+def test_unreadable_input_is_reported_and_the_rest_of_the_tree_still_is(
+    tmp_path: Path,
+) -> None:
+    _write_conforming_tree(root=tmp_path)
+    _write_prompts(
+        root=tmp_path,
+        prompts=EXTRAS_PACKAGE_TREE | UNREADABLE_INPUT_TREE | ORDINARY_VIOLATION,
+    )
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, f"expected a failing lint, got: {result.stderr}"
+    reported_lines: list[str] = result.stdout.splitlines()
+    assert reported_lines, f"expected a diagnostic per violation: {result.stderr}"
+    # A row naming a skill the tree does not carry is also a stale catalog row, and a
+    # catalog finding sits on no line, so the `path:line:` shape is asserted of the
+    # diagnostics about the files themselves rather than of every line printed.
+    for unreadable_path in (MISSING_SKILL_PATH, MALFORMED_EXAMPLE_AGENT_PATH):
+        about_the_file: list[str] = [
+            line for line in reported_lines if line.startswith(unreadable_path)
+        ]
+        assert about_the_file, (
+            f"{unreadable_path} could not be read unreported: {result.stdout!r}"
+        )
+        for reported_line in about_the_file:
+            assert DIAGNOSTIC_LINE.match(reported_line) is not None, (
+                f"not a `path:line: message` diagnostic: {reported_line!r}"
+            )
+    assert any(ORDINARY_VIOLATION_PATH in line for line in reported_lines), (
+        f"the run stopped at what it could not read, losing "
+        f"{ORDINARY_VIOLATION_PATH}: {result.stdout!r}"
+    )
+    assert CONFORMING_EXTRAS_SKILL not in result.stdout, (
+        f"{CONFORMING_EXTRAS_SKILL} names every staged extra but was reported: "
+        f"{result.stdout!r}"
+    )
+    for conforming_path in CONFORMING_TREE:
+        assert conforming_path not in result.stdout, (
+            f"{conforming_path} conforms but was reported: {result.stdout!r}"
+        )
+
+
 # Where the installer keeps the inventory of units it can place; a catalog diagnostic
 # names it, since that is the file the reader has to edit to fix the finding.
 CATALOG: Final[str] = "installer/catalog.toml"
@@ -318,6 +692,10 @@ REGISTERED_PROMPTS: Final[dict[str, str]] = {
         "---\n"
         "\n"
         "# registered\n"
+        "\n"
+        "```json\n"
+        '{"role": "fixture", "status": "done"}\n'
+        "```\n"
     ),
     "rules/registered.md": (
         '---\npaths: "**/*.py"\n---\n\n# registered\n\nA rule with a row.\n'
@@ -348,9 +726,32 @@ UNREGISTERED_PROMPTS: Final[dict[str, str]] = {
         "---\n"
         "\n"
         "# orphan\n"
+        "\n"
+        "```json\n"
+        '{"role": "fixture", "status": "done"}\n'
+        "```\n"
     ),
     "rules/orphan.md": (
         '---\npaths: "**/*.md"\n---\n\n# orphan\n\nA rule the installer cannot place.\n'
+    ),
+}
+
+
+# The schema the agent fixtures above answer to. Both close with the same example, so
+# one schema keeps them in step with the drift check and leaves the catalog the only
+# thing either can break. It sits apart from the prompt fixtures because it registers
+# no unit — only prompts carry [[units]] rows.
+AGENT_EXAMPLE_SCHEMA: Final[dict[str, str]] = {
+    "schemas/fixture.schema.json": (
+        "{\n"
+        '  "$schema": "https://json-schema.org/draft/2020-12/schema",\n'
+        '  "type": "object",\n'
+        '  "required": ["role", "status"],\n'
+        '  "properties": {\n'
+        '    "role": {"const": "fixture"},\n'
+        '    "status": {"type": "string"}\n'
+        "  }\n"
+        "}\n"
     ),
 }
 
@@ -389,6 +790,7 @@ def test_prompt_without_a_units_row_is_reported_with_the_catalog(
 ) -> None:
     _write_prompts(root=tmp_path, prompts=REGISTERED_PROMPTS)
     _write_prompts(root=tmp_path, prompts=UNREGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=AGENT_EXAMPLE_SCHEMA)
     _write_prompts(root=tmp_path, prompts=PARTIAL_CATALOG)
 
     result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
@@ -453,6 +855,7 @@ def test_units_row_with_no_files_on_disk_is_reported_with_the_missing_path(
     tmp_path: Path,
 ) -> None:
     _write_prompts(root=tmp_path, prompts=REGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=AGENT_EXAMPLE_SCHEMA)
     _write_prompts(root=tmp_path, prompts=_catalog_with_stale_rows())
 
     result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
