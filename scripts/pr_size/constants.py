@@ -98,10 +98,15 @@ PROSE_TARGET_LINES: Final[int] = 100
 PROSE_CAP_LINES: Final[int] = 150
 
 # How the shell talks to git. `--unified=0` keeps the parse honest (no context line can
-# be mistaken for an addition); `core.quotePath=false` keeps non-ASCII paths readable
+# be mistaken for an addition); the `diff.external`/`--no-ext-diff`/`--no-textconv`
+# settings refuse a user's diff driver, which would otherwise hand us its output — or
+# nothing — in place of the diff (a `.gitattributes` `-diff` path is the one dodge left:
+# git renders it as binary and the gate counts nothing, which review has to catch);
+# `core.quotePath=false` keeps non-ASCII paths readable
 # rather than octal-escaped, though a path holding a quote, a backslash or a control
 # character is C-quoted whatever it says; the two prefix settings override a user config
-# that would drop or rename the `a/`+`b/` prefixes the header parse keys on.
+# that would drop or rename the `a/`+`b/` prefixes the header parse keys on, including
+# the `diff.srcPrefix`/`diff.dstPrefix` pair git 2.45 added.
 GIT_DIFF_FLAGS: Final[tuple[str, ...]] = (
     "-c",
     "core.quotePath=false",
@@ -109,9 +114,17 @@ GIT_DIFF_FLAGS: Final[tuple[str, ...]] = (
     "diff.noprefix=false",
     "-c",
     "diff.mnemonicPrefix=false",
+    "-c",
+    "diff.srcPrefix=a/",
+    "-c",
+    "diff.dstPrefix=b/",
+    "-c",
+    "diff.external=",
     "diff",
     "--unified=0",
     "--no-color",
+    "--no-textconv",
+    "--no-ext-diff",
     "--find-renames",
 )
 

@@ -26,6 +26,7 @@ from pr_size import (
     measure,
 )
 from pr_size.cli import cli, report_for, run_cli
+from pr_size.constants import GIT_DIFF_FLAGS
 from pr_size.policy import code_budget
 from pr_size.sizing import classify
 from validate_return import errors_against
@@ -631,3 +632,17 @@ def test_a_quoted_path_keeps_characters_latin_1_cannot_hold() -> None:
     files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text)
 
     assert [file.path for file in files] == ['中"文.py']
+
+
+def test_the_gate_asks_git_for_a_diff_no_local_config_can_reshape() -> None:
+    """Each pin closed a silent under-count; a dropped one reopens it, not a test."""
+    assert set(GIT_DIFF_FLAGS) >= {
+        "core.quotePath=false",
+        "diff.noprefix=false",
+        "diff.mnemonicPrefix=false",
+        "diff.srcPrefix=a/",
+        "diff.dstPrefix=b/",
+        "diff.external=",
+        "--no-textconv",
+        "--no-ext-diff",
+    }
