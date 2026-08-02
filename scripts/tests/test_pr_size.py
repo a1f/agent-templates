@@ -2,7 +2,8 @@
 
 The tool is a functional core (parse the diff, classify each path, apply the bands)
 behind a thin imperative shell (git subprocess). We test the core on literal diff text
-and the shell through an injected fake runner — never a real git.
+and the shell through an injected fake runner; only what git's own encoding decides —
+which bytes reach us, in which spelling — is worth a real repository.
 """
 
 from __future__ import annotations
@@ -26,12 +27,22 @@ from pr_size import (
     measure,
 )
 from pr_size.cli import cli, report_for, run_cli
-from pr_size.constants import GIT_DIFF_FLAGS
 from pr_size.policy import code_budget
 from pr_size.sizing import classify
 from validate_return import errors_against
 
 SCHEMAS: Final[Path] = Path(__file__).resolve().parents[2] / "schemas"
+
+# The -c flags keep a test commit independent of any global git config.
+_COMMIT: Final[list[str]] = [
+    "git",
+    "-c",
+    "user.email=t@t",
+    "-c",
+    "user.name=t",
+    "commit",
+    "-q",
+]
 
 
 def _diff(*, path: str, added: int, start: int = 1) -> str:
@@ -537,12 +548,10 @@ def test_a_line_git_cannot_decode_still_counts(
     repo: Path = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
-    subprocess.run(
-        ["git", "commit", "-q", "--allow-empty", "-m", "base"], cwd=repo, check=True
-    )
+    subprocess.run([*_COMMIT, "--allow-empty", "-m", "base"], cwd=repo, check=True)
     (repo / "latin1.txt").write_bytes(b"caf\xe9 not utf-8\n")
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
-    subprocess.run(["git", "commit", "-q", "-m", "add latin-1"], cwd=repo, check=True)
+    subprocess.run([*_COMMIT, "-m", "add latin-1"], cwd=repo, check=True)
 
     code: int = run_cli(base="HEAD~1", head="HEAD", repo=str(repo))
 
@@ -634,15 +643,60 @@ def test_a_quoted_path_keeps_characters_latin_1_cannot_hold() -> None:
     assert [file.path for file in files] == ['中"文.py']
 
 
-def test_the_gate_asks_git_for_a_diff_no_local_config_can_reshape() -> None:
-    """Each pin closed a silent under-count; a dropped one reopens it, not a test."""
-    assert set(GIT_DIFF_FLAGS) >= {
-        "core.quotePath=false",
-        "diff.noprefix=false",
-        "diff.mnemonicPrefix=false",
-        "diff.srcPrefix=a/",
-        "diff.dstPrefix=b/",
-        "diff.external=",
-        "--no-textconv",
-        "--no-ext-diff",
-    }
+def test_a_block_whose_header_never_parsed_is_not_a_pass() -> None:
+    """A gate that cannot read a block must say so, not report the diff as empty."""
+    diff_text: str = (
+        "diff --git a/real.py w/real.py\n"
+        "--- /dev/null\n"
+        "+++ w/real.py\n"
+        "@@ -0,0 +1 @@\n"
+        "+x = 1\n"
+    )
+
+    with pytest.raises(SizeError):
+        changed_files(diff_text=diff_text)
+
+
+def test_a_block_git_writes_without_a_header_is_not_an_error() -> None:
+    """A rename, a mode change and a binary each have no `+++` and no lines to read."""
+    diff_text: str = (
+        "diff --git a/x.py b/y.py\n"
+        "similarity index 100%\n"
+        "rename from x.py\n"
+        "rename to y.py\n"
+        "diff --git a/blob.bin b/blob.bin\n"
+        "old mode 100644\n"
+        "new mode 100755\n"
+        "diff --git a/seed.bin b/seed.bin\n"
+        "index 1234567..89abcde 100644\n"
+        "Binary files a/seed.bin and b/seed.bin differ\n"
+        "diff --git a/new.py b/new.py\n"
+        "--- /dev/null\n"
+        "+++ b/new.py\n"
+        "@@ -0,0 +1 @@\n"
+        "+new = 1\n"
+    )
+
+    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text)
+
+    assert files == (
+        ChangedFile(path="new.py", kind=FileKind.CODE, lines=1, test_lines=0),
+    )
+
+
+def test_an_added_line_imitating_a_quoted_header_is_still_counted() -> None:
+    """`++ "b/z\\z"` renders as `+++ "b/z\\z"`; a malformed escape is not a header."""
+    diff_text: str = (
+        "diff --git a/notes.py b/notes.py\n"
+        "--- a/notes.py\n"
+        "+++ b/notes.py\n"
+        "@@ -0,0 +1,2 @@\n"
+        '+++ "b/z\\z"\n'
+        "+real = 1\n"
+    )
+
+    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text)
+
+    assert files == (
+        ChangedFile(path="notes.py", kind=FileKind.CODE, lines=2, test_lines=0),
+    )

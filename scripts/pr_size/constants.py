@@ -26,6 +26,12 @@ C_ESCAPES: Final[Mapping[str, str]] = MappingProxyType(
         "\\": "\\",
     }
 )
+OCTAL_ESCAPE_DIGITS: Final[int] = 3
+OCTAL_DIGITS: Final[frozenset[str]] = frozenset("01234567")
+UNREAD_BLOCK: Final[str] = (
+    "no post-image header in the diff block starting {block!r} — the gate would "
+    "otherwise report a size the diff never yielded"
+)
 PRE_IMAGE_MARKER: Final[str] = "--- "
 FILE_BLOCK_MARKER: Final[str] = "diff --git "
 DELETED_POST_IMAGE: Final[str] = "+++ /dev/null"

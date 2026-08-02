@@ -19,6 +19,8 @@ from .constants import (
     HUNK_HEADER,
     INLINE_TEST_SUFFIXES,
     NEW_PATH_PREFIX,
+    OCTAL_DIGITS,
+    OCTAL_ESCAPE_DIGITS,
     POST_IMAGE_MARKER,
     PRE_IMAGE_MARKER,
     PROSE_SUFFIXES,
@@ -28,8 +30,9 @@ from .constants import (
     RUST_TEST_ATTRIBUTE,
     TEST_BASENAME,
     TEST_DIR_SEGMENTS,
+    UNREAD_BLOCK,
 )
-from .types import ChangedFile, FileKind
+from .types import ChangedFile, FileKind, SizeError
 
 
 def changed_files(
@@ -43,6 +46,9 @@ def changed_files(
     `sources` carries the post-image content of files whose tests live inside them
     (Rust); a file absent from it is charged entirely by its path, which can only
     over-count code, never under-count it.
+
+    Raises `SizeError` on a diff block the parse could not read — never a size the
+    diff did not yield.
     """
     return tuple(
         _charge(path=path, added=added, sources=sources or {})
@@ -142,6 +148,11 @@ def classify(*, path: str) -> FileKind:
     return FileKind.CODE
 
 
+def _is_octal_byte(*, digits: str) -> bool:
+    """Whether these are a `\\NNN` byte escape and not a stray backslash."""
+    return len(digits) == OCTAL_ESCAPE_DIGITS and set(digits) <= OCTAL_DIGITS
+
+
 def _unquote(*, quoted: str) -> str:
     """A C-quoted path's real characters — its escapes stand for bytes, not text.
 
@@ -158,10 +169,15 @@ def _unquote(*, quoted: str) -> str:
         elif quoted[index + 1 : index + 2] in C_ESCAPES:
             raw += C_ESCAPES[quoted[index + 1]].encode("utf-8")
             index += 2
-        else:
+        elif _is_octal_byte(digits=quoted[index + 1 : index + 4]):
             raw.append(int(quoted[index + 1 : index + 4], 8))
             index += 4
-    return raw.decode("utf-8", "replace")
+        else:
+            # Not an escape git writes, so this is content imitating a header. Keep the
+            # backslash; the caller's `b/` test then rejects the line, as it should.
+            raw += quoted[index].encode("utf-8")
+            index += 1
+    return raw.decode("utf-8", errors="replace")
 
 
 def _post_image_path(*, line: str) -> str | None:
@@ -186,12 +202,16 @@ def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
 
     Line numbers, not a count, because a language can hide tests inside a source file:
     excluding those needs to know which lines an addition landed on.
+
+    Raises `SizeError` on a block that carried hunks but no readable post-image header.
     """
     added: dict[str, list[int]] = {}
     path: str | None = None
     line_number: int = 0
     previous: str = ""
+    block: str = ""
     awaiting_header: bool = False
+    unread: bool = False
     for line in diff_text.splitlines():
         header: re.Match[str] | None = HUNK_HEADER.match(line)
         # A post-image header is the `+++` half of the `---`/`+++` pair that opens a
@@ -200,14 +220,18 @@ def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
         # starting `--` renders as `--- …` — but only once per block can they follow a
         # `diff --git` line with no header seen since.
         if line.startswith(FILE_BLOCK_MARKER):
+            if unread:
+                raise SizeError(UNREAD_BLOCK.format(block=block))
             awaiting_header = True
+            block = line
+        at_header: bool = awaiting_header and previous.startswith(PRE_IMAGE_MARKER)
         named: str | None = (
-            _post_image_path(line=line) if line.startswith(POST_IMAGE_MARKER) else None
+            _post_image_path(line=line)
+            if at_header and line.startswith(POST_IMAGE_MARKER)
+            else None
         )
-        is_header: bool = (
-            awaiting_header
-            and previous.startswith(PRE_IMAGE_MARKER)
-            and (named is not None or line == DELETED_POST_IMAGE)
+        is_header: bool = at_header and (
+            named is not None or line == DELETED_POST_IMAGE
         )
         awaiting_header = awaiting_header and not is_header
         previous = line
@@ -219,6 +243,10 @@ def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
             # nothing until the next real file starts.
             path = None
         elif header is not None:
+            # A hunk without a header before it means we could not read this block's
+            # path; git's header-less blocks — rename, mode change, binary — carry no
+            # hunk at all, so they are absent from the report rather than an error.
+            unread = unread or awaiting_header
             line_number = int(header.group(1))
         elif path is None:
             continue
@@ -227,4 +255,6 @@ def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
             line_number += 1
         elif line.startswith(CONTEXT_LINE_MARKER):
             line_number += 1
+    if unread:
+        raise SizeError(UNREAD_BLOCK.format(block=block))
     return {path: tuple(numbers) for path, numbers in added.items()}

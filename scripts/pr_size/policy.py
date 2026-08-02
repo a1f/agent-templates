@@ -22,7 +22,10 @@ from .types import Band, Budget, ChangedFile, FileKind, SizeReport, Tally, Verdi
 
 
 def measure(*, diff_text: str, sources: Mapping[str, str] | None = None) -> SizeReport:
-    """Charge a diff's added lines to their budget classes and judge the total."""
+    """Charge a diff's added lines to their budget classes and judge the total.
+
+    Raises `SizeError` on a diff it cannot read; see `changed_files`.
+    """
     files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text, sources=sources)
     code_counts: Tally = _counts(files=files, kind=FileKind.CODE)
     code: Budget = code_budget(files=code_counts.files, lines=code_counts.lines)
