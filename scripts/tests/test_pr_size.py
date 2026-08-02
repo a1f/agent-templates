@@ -555,3 +555,79 @@ def test_a_line_git_cannot_decode_still_counts(
         "band": "target",
         "verdict": "pass",
     }
+
+
+def test_a_path_with_a_space_keeps_its_own_suffix() -> None:
+    """git pads such a post-image with a TAB; the suffix decides the budget class."""
+    diff_text: str = (
+        "diff --git a/my docs/read me.md b/my docs/read me.md\n"
+        "--- /dev/null\n"
+        "+++ b/my docs/read me.md\t\n"
+        "@@ -0,0 +1 @@\n"
+        "+one\n"
+    )
+
+    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text)
+
+    assert files == (
+        ChangedFile(
+            path="my docs/read me.md", kind=FileKind.PROSE, lines=1, test_lines=0
+        ),
+    )
+
+
+def test_a_quoted_path_is_its_own_file() -> None:
+    """git C-quotes a path holding `"`; unread, its lines fall to the file before it."""
+    diff_text: str = (
+        "diff --git a/plain.py b/plain.py\n"
+        "--- /dev/null\n"
+        "+++ b/plain.py\n"
+        "@@ -0,0 +1 @@\n"
+        "+a = 1\n"
+        'diff --git "a/has\\"quote.py" "b/has\\"quote.py"\n'
+        "--- /dev/null\n"
+        '+++ "b/has\\"quote.py"\n'
+        "@@ -0,0 +1 @@\n"
+        "+b = 2\n"
+    )
+
+    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text)
+
+    assert [(file.path, file.lines) for file in files] == [
+        ("plain.py", 1),
+        ('has"quote.py', 1),
+    ]
+
+
+def test_a_quoted_path_can_also_be_tab_padded() -> None:
+    """git quotes AND pads when a path holds both a quote and a space."""
+    diff_text: str = (
+        'diff --git "a/guide for \\"v2\\".md" "b/guide for \\"v2\\".md"\n'
+        "--- /dev/null\n"
+        '+++ "b/guide for \\"v2\\".md"\t\n'
+        "@@ -0,0 +1 @@\n"
+        "+one\n"
+    )
+
+    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text)
+
+    assert files == (
+        ChangedFile(
+            path='guide for "v2".md', kind=FileKind.PROSE, lines=1, test_lines=0
+        ),
+    )
+
+
+def test_a_quoted_path_keeps_characters_latin_1_cannot_hold() -> None:
+    """The escapes are ASCII; the bytes around them are UTF-8 and must survive."""
+    diff_text: str = (
+        'diff --git "a/中\\"文.py" "b/中\\"文.py"\n'
+        "--- /dev/null\n"
+        '+++ "b/中\\"文.py"\n'
+        "@@ -0,0 +1 @@\n"
+        "+x = 1\n"
+    )
+
+    files: tuple[ChangedFile, ...] = changed_files(diff_text=diff_text)
+
+    assert [file.path for file in files] == ['中"文.py']

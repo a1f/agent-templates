@@ -3,11 +3,29 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Final
 
 # The unified diff we ask git for: the post-image path marker, and the hunk header we
 # read new-file line numbers from.
-NEW_PATH_MARKER: Final[str] = "+++ b/"
+POST_IMAGE_MARKER: Final[str] = "+++ "
+NEW_PATH_PREFIX: Final[str] = "b/"
+QUOTED_PATH_MARKER: Final[str] = '"'
+ESCAPE_MARKER: Final[str] = "\\"
+C_ESCAPES: Final[Mapping[str, str]] = MappingProxyType(
+    {
+        "a": "\a",
+        "b": "\b",
+        "f": "\f",
+        "n": "\n",
+        "r": "\r",
+        "t": "\t",
+        "v": "\v",
+        '"': '"',
+        "\\": "\\",
+    }
+)
 PRE_IMAGE_MARKER: Final[str] = "--- "
 FILE_BLOCK_MARKER: Final[str] = "diff --git "
 DELETED_POST_IMAGE: Final[str] = "+++ /dev/null"
@@ -81,8 +99,9 @@ PROSE_CAP_LINES: Final[int] = 150
 
 # How the shell talks to git. `--unified=0` keeps the parse honest (no context line can
 # be mistaken for an addition); `core.quotePath=false` keeps non-ASCII paths readable
-# rather than octal-escaped; the two prefix settings override a user config that would
-# drop or rename the `a/`+`b/` prefixes the header parse keys on.
+# rather than octal-escaped, though a path holding a quote, a backslash or a control
+# character is C-quoted whatever it says; the two prefix settings override a user config
+# that would drop or rename the `a/`+`b/` prefixes the header parse keys on.
 GIT_DIFF_FLAGS: Final[tuple[str, ...]] = (
     "-c",
     "core.quotePath=false",

@@ -9,16 +9,20 @@ from pathlib import PurePosixPath
 
 from .constants import (
     ADDED_LINE_MARKER,
+    C_ESCAPES,
     CONTEXT_LINE_MARKER,
     DELETED_POST_IMAGE,
+    ESCAPE_MARKER,
     FILE_BLOCK_MARKER,
     GENERATED_BASENAME,
     GENERATED_DIR_SEGMENTS,
     HUNK_HEADER,
     INLINE_TEST_SUFFIXES,
-    NEW_PATH_MARKER,
+    NEW_PATH_PREFIX,
+    POST_IMAGE_MARKER,
     PRE_IMAGE_MARKER,
     PROSE_SUFFIXES,
+    QUOTED_PATH_MARKER,
     RUST_ITEM_START,
     RUST_LITERAL_OR_COMMENT,
     RUST_TEST_ATTRIBUTE,
@@ -33,8 +37,8 @@ def changed_files(
 ) -> tuple[ChangedFile, ...]:
     """Every path the diff adds to, classified, with the lines it gained.
 
-    A modified file that only lost lines is here with zero; a deletion, a pure rename
-    and a binary are absent — none of them is anything to read.
+    A modified file that only lost lines is here with zero; a deletion, a pure rename,
+    a mode-only change and a binary are absent — none of them is anything to read.
 
     `sources` carries the post-image content of files whose tests live inside them
     (Rust); a file absent from it is charged entirely by its path, which can only
@@ -138,6 +142,45 @@ def classify(*, path: str) -> FileKind:
     return FileKind.CODE
 
 
+def _unquote(*, quoted: str) -> str:
+    """A C-quoted path's real characters — its escapes stand for bytes, not text.
+
+    git escapes `"`, `\\` and the control characters by name, and any other byte it
+    chooses to hide as three octal digits. Both denote bytes of a UTF-8 sequence, so
+    they are rebuilt as bytes and decoded once, not mapped character by character.
+    """
+    raw: bytearray = bytearray()
+    index: int = 0
+    while index < len(quoted):
+        if quoted[index] != ESCAPE_MARKER:
+            raw += quoted[index].encode("utf-8")
+            index += 1
+        elif quoted[index + 1 : index + 2] in C_ESCAPES:
+            raw += C_ESCAPES[quoted[index + 1]].encode("utf-8")
+            index += 2
+        else:
+            raw.append(int(quoted[index + 1 : index + 4], 8))
+            index += 4
+    return raw.decode("utf-8", "replace")
+
+
+def _post_image_path(*, line: str) -> str | None:
+    """The path a `+++` header names, however git spelled it, or None.
+
+    Two spellings compose: git pads a path holding a space with a trailing TAB, and
+    C-quotes the whole `b/<path>` when it holds a quote, a backslash or a control
+    character — neither of which `core.quotePath=false` turns off. Read as-is, the pad
+    misfiles the path by its suffix and the quotes stop the line being read as a header
+    at all, so the block's lines are charged to the file before it.
+    """
+    rest: str = line.removeprefix(POST_IMAGE_MARKER).removesuffix("\t")
+    if rest.startswith(QUOTED_PATH_MARKER) and rest.endswith(QUOTED_PATH_MARKER):
+        rest = _unquote(quoted=rest[1:-1])
+    return (
+        rest.removeprefix(NEW_PATH_PREFIX) if rest.startswith(NEW_PATH_PREFIX) else None
+    )
+
+
 def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
     """Which post-image line numbers each changed path gained, keyed by that path.
 
@@ -158,15 +201,18 @@ def added_line_numbers(*, diff_text: str) -> dict[str, tuple[int, ...]]:
         # `diff --git` line with no header seen since.
         if line.startswith(FILE_BLOCK_MARKER):
             awaiting_header = True
+        named: str | None = (
+            _post_image_path(line=line) if line.startswith(POST_IMAGE_MARKER) else None
+        )
         is_header: bool = (
             awaiting_header
             and previous.startswith(PRE_IMAGE_MARKER)
-            and (line.startswith(NEW_PATH_MARKER) or line == DELETED_POST_IMAGE)
+            and (named is not None or line == DELETED_POST_IMAGE)
         )
         awaiting_header = awaiting_header and not is_header
         previous = line
-        if is_header and line.startswith(NEW_PATH_MARKER):
-            path = line.removeprefix(NEW_PATH_MARKER)
+        if is_header and named is not None:
+            path = named
             added.setdefault(path, [])
         elif is_header:
             # A post-image we cannot attribute — `+++ /dev/null`, a deletion. Charge
