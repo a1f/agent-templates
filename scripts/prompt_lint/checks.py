@@ -75,7 +75,8 @@ class _StagedExtra:
 
 
 def _staged_extras(*, root: Path) -> Iterator[_StagedExtra]:
-    """A tree with no catalog stages nothing, so its skills answer to no extras."""
+    """Which staged directory each skill must read its package's extras from; a tree
+    with no catalog stages nothing, so its skills answer to no extras."""
     catalog: Path = root / CATALOG_PATH
     if not catalog.is_file():
         return
@@ -92,7 +93,7 @@ def _staged_extras(*, root: Path) -> Iterator[_StagedExtra]:
 def _lint_staged_extras(*, root: Path) -> Iterator[str]:
     """An installed skill no longer sits beside its package's extras, so naming one in
     its own directory reads nothing once installed."""
-    for extra in _staged_extras(root=root):
+    for extra in dict.fromkeys(_staged_extras(root=root)):  # extras can share a segment
         where: str = f"{SKILLS_DIR}/{extra.skill}/{SKILL_FILE}"
         try:
             body: str = (root / where).read_text()

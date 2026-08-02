@@ -30,7 +30,7 @@ UNREADABLE_MESSAGE: Final[str] = "could not be read"
 # Which prompt files carry frontmatter, and the keys each declares — one row per kind,
 # so a new convention is a row here rather than another function.
 REQUIRED_KEYS: Final[dict[str, tuple[str, ...]]] = {
-    f"skills/*/{SKILL_FILE}": ("name", "description"),
+    f"{SKILLS_DIR}/*/{SKILL_FILE}": ("name", "description"),
     AGENTS_GLOB: ("name", "description", "tools", "model"),
     "rules/*.md": ("paths",),
 }
