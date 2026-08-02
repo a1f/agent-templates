@@ -20,19 +20,22 @@ architect (the /make-pr skill, the driver)
   │                    reason)
   │
   ├─ gates      — uv run ruff/mypy/pytest · pnpm exec biome/tsc/vitest · cargo fmt/clippy/check/test  (hard fail, run first)
+  ├─ size gate  — python -m pr_size, counted lines        (hard fail over the cap)
+  ├─ size-judge — only in the grey zone                   (did it have to be this big?)
   ├─ reviewer   — quality + bugs + security on the diff   (is the code good?)
   └─ critic     — goal-fit on the task spec               (did it achieve the task?)
 
   → objective gates run before the judges; one batched fix round, then re-verify in proportion
     to the change (gates always; scoped re-review; critic only on behavioral change)
-  → done only when: all behaviors green, gates green, no CRITICAL, no unwaived review finding ≥70, critic=achieved
+  → done only when: all behaviors green, gates green, size gate pass (or judge acceptable),
+    no CRITICAL, no unwaived review finding ≥70, critic=achieved
 ```
 
 `architect` is a **skill** (now invoked as `/make-pr`) called explicitly in the main loop
 (`disable-model-invocation: true`, so it never auto-triggers), which lets it orchestrate,
 collect results, and loop.
-`worker-coder` (the GREEN/REFACTOR/non-behavioral coder), `tdd-runner`, `reviewer`, `critic`
-are **agents** (isolated, scope-locked workers it dispatches via the Agent tool).
+`worker-coder` (the GREEN/REFACTOR/non-behavioral coder), `tdd-runner`, `reviewer`, `critic`,
+`size-judge` are **agents** (isolated, scope-locked workers it dispatches via the Agent tool).
 
 ## Task contract
 
@@ -74,19 +77,22 @@ dependencies_allowed: false
 The workflow's pieces now live at the repo root (no longer under a `v1/` directory):
 
 - `skills/make-pr/SKILL.md` — the driver (this skill): orchestration loop, JSONL logging contract, decision rules
-- `agents/` — `worker-coder.md` (GREEN/REFACTOR/non-behavioral), `tdd-runner.md` (RED), `reviewer.md`, `critic.md`
-- `schemas/` — authoritative return-shape contracts the architect validates against (`_defs` + one per role)
-- `scripts/` — `validate_return.py`, `check_prompt_schemas.py`, plus pyproject/tests; run via `uv`
+- `agents/` — `worker-coder.md` (GREEN/REFACTOR/non-behavioral), `tdd-runner.md` (RED), `reviewer.md`, `critic.md`, `size-judge.md`
+- `schemas/` — authoritative shape contracts the architect validates against (`_defs` + one per role, plus the tool-output `size-report`)
+- `scripts/` — `validate_return.py`, `check_prompt_schemas.py`, `pr_size/` (the size gate), plus pyproject/tests; run via `uv`
 - `gates/` — declarative hard gates: `python.json`, `typescript.json`, `rust.json`
 - `rules/` — `design-principles.md`, `tdd.md`, `python.md`, `typescript.md`, `rust.md`; resolved by the architect via `rules_root` and shipped into each project's `.claude/rules/` by the installer
 - `runs/` — gitignored placeholder; real run logs go to `<target_cwd>/.v1-runs` (`run_root`)
 
-## How quality is enforced (two layers)
+## How quality is enforced (three layers)
 
 1. **Hard tooling gates** (`gates/*.json`) — objective, non-negotiable: format, lint,
    typecheck, tests. The architect runs these and will not declare done on a red gate.
-2. **Rules the agents read** (repo-root `rules/*.md`) — judgment the tools can't enforce: design
-   (deep modules, information hiding), readability (naming, comments), and test quality
+2. **The size gate** — the one hard gate that is not a `gates/*.json` profile:
+   `python -m pr_size` counts a change the way the policy counts it and answers
+   `pass` / `review` / `block`. Only `review` reaches the `size-judge` agent.
+3. **Rules the agents read** (repo-root `rules/*.md`) — judgment the tools can't enforce:
+   design (deep modules, information hiding), readability (naming, comments), and test quality
    (behavior through public interfaces). The reviewer holds the line on these.
 
 ## Return contracts
@@ -99,6 +105,9 @@ treats a failure as a malformed return. The ` ```json ` block shown in each agen
 same shape for the model to read; `scripts/check_prompt_schemas.py` (run via `uv run --no-project
 --with jsonschema python scripts/check_prompt_schemas.py`) validates each example against its
 schema and flags any omitted field, so a prompt edit can't silently add, rename, or drop a field.
+The size gate's own output has no prompt behind it, like `evidence.schema.json`:
+`schemas/size-report.schema.json` is guarded instead by a pytest that validates a real
+printed report against it.
 
 ## Gate contract
 

@@ -23,7 +23,10 @@ The skill's dispatch gives you:
 - in `fix` mode, the **specific blockers** to resolve (reviewer findings and/or critic gaps),
   verbatim;
 - the **base** ref, **target_cwd**, whether **dependencies are allowed** (and any named
-  dependency/version), and the absolute paths of the **rule files** to read.
+  dependency/version), and the absolute paths of the **rule files** to read;
+- the **size budget** — the counted-line target and caps this PR must land inside. Plan
+  slices to fit it; if the work genuinely cannot, return `blocked` rather than trim a
+  counted file to duck the gate.
 
 Run every repository command in `target_cwd`. Read **every** rule path the dispatch passed, in
 full, before writing code. If a rule path you need is missing from the dispatch, return `blocked`

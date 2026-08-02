@@ -79,7 +79,9 @@ Resolve before the first dispatch:
   handoff (always under `<target_cwd>/.v1-runs/` — the path `/pr-explain` reads — even if
   run_root is overridden). Never write runtime state into `skill_root`.
 - **Base** — named by the user or task spec; else `git merge-base HEAD origin/main`; else
-  `git merge-base HEAD main`; else stop and ask.
+  `git merge-base HEAD main`; else stop and ask. Every gate diffs `base...HEAD`, so a
+  branch still carrying commits already squash-merged to main measures them again: at
+  intake, cherry-pick onto the target ref and re-resolve `base` against it.
 - **Run id** — the branch name or task id, `/` and whitespace → `_`.
 - **Gates** — select initial gate profiles from the task's `gate_profiles`, declared
   language(s), and `allowed_paths`. After workers change files, re-select from
@@ -87,16 +89,23 @@ Resolve before the first dispatch:
   of that profile's `triggers` globs in `~/.claude/at/gates/*.json` (the lists cover both
   root-level and nested forms). A changed language with no gate → stop and report the
   missing gate instead of declaring done.
+- **Size budget** — the PR may add **35 counted lines of code**; past that it must argue,
+  and past the caps in step 5's `block` row it cannot land; past 75 on 1–2 files it must name
+  the piece a split would break. Counted lines exclude tests, lockfiles, and generated or
+  vendored output; prose (`.md` and friends) has its own 100-line target. The tool at
+  `~/.claude/at/scripts/pr_size` — not your own count — decides. The budget is yours:
+  workers are scoped to one behavior and never see it.
 
 ## Tool boundaries
 
 - `Write`/`Edit` only for files under `<run_root>/` (contents per Runtime resolution).
   Never edit production source, tests, rules, or gates as architect; route every code or
   test change to `worker-coder`.
-- `Bash` only for: `git`, `date`, JSONL validation, the schema validator, re-running a
-  worker's reported verification (e.g. the named GREEN test), the task-provided baseline
-  command, and the selected gate `setup`/`run` commands — all in `target_cwd`. Never run
-  gate `fix` commands directly; route fixes to `worker-coder`.
+- `Bash` only for: `git`, `date`, JSONL validation, the schema validator, the size gate
+  command in step 5, re-running a worker's reported verification (e.g. the named GREEN
+  test), the task-provided baseline command, and the selected gate `setup`/`run` commands —
+  all in `target_cwd`. Never run gate `fix` commands directly; route fixes to
+  `worker-coder`.
 - `Read`/`Grep`/`Glob` are unrestricted — use them to verify the task's boundary and
   interface claims during intake.
 - Before **Done**, validate that the JSONL parses and its rows match the subagent calls,
@@ -117,10 +126,11 @@ Resolve before the first dispatch:
    failure.
 3. **Plan behaviors.** Per `tdd.md`, list the user-facing **behaviors** (not impl steps) as
    thin vertical slices. Decide: **behavioral** (TDD required) or **non-behavioral**
-   (config/docs/rename — TDD skipped, log the skip + reason). Non-behavioral: log the
-   skipped RED (`step: RED, verdict: skip`), dispatch `worker-coder` `mode: non_behavioral`
-   (logged as `step: NON_BEHAVIORAL`), reproduce any reported passing check, then continue
-   at GATE → REVIEW → CRITIC — never enter the RED/GREEN loop.
+   (config/docs/rename — TDD skipped, log the skip + reason). **Size the plan here**: stop
+   for re-scope now if the behaviors together head past a cap (step 5's `block` row).
+   Non-behavioral: log the skipped RED (`step: RED, verdict: skip`), dispatch `worker-coder`
+   `mode: non_behavioral` (logged as `step: NON_BEHAVIORAL`), reproduce any reported passing
+   check, then continue at GATE → REVIEW → CRITIC — never enter the RED/GREEN loop.
 4. **Per behavior, in order:**
    a. **RED** → dispatch `tdd-runner`. Require `"status":"red"` and `"right_reason":true`;
       else re-dispatch with feedback — max 3 RED dispatches per behavior (each a fresh
@@ -185,10 +195,11 @@ Resolve before the first dispatch:
      always blocks), unless the human explicitly waived it in the run log (logged
      `step: REVIEW, verdict: skip, note: "waived by human: <finding>"`);
    - any critic verdict of `not_achieved` or `partial`, with its gaps.
-   **Never waivable: a CRITICAL finding, a red gate, a black-letter language-rule
-   violation** (a rule the language file states explicitly — keyword-only `*`, `Final[T]`,
-   per-binding type hints — always scores `>= 70`). Findings below 70 are advisory: surface
-   them in the final summary; they never block or loop. No blockers → **Done**.
+   **Never waivable: a CRITICAL finding, a red gate, a size-gate `block` or judge `split`,
+   a black-letter language-rule violation** (a rule the language file states explicitly —
+   keyword-only `*`, `Final[T]`, per-binding type hints — always scores `>= 70`). Findings
+   below 70 are advisory: surface them in the final summary; they never block or loop. No
+   blockers → **Done**.
 7. **Fix once, re-verify in proportion.** Capture `git rev-parse HEAD` as `<pre_fix>`, then
    route all blockers back as **one batched fix round** (never finding-by-finding):
    - a **behavioral** gap (missing behavior; a wrong RED test — bad assertion,
@@ -197,19 +208,21 @@ Resolve before the first dispatch:
    - a **mechanical or design** fix goes to `worker-coder` directly
      (`mode: non_behavioral` for format/lint/type/rename; `mode: refactor` for a
      behavior-preserving restructure).
-   Then re-verify in proportion — never a blanket re-run: **always** re-run the gates; a
-   gate red on this re-run is a blocker introduced by the round — it consumes the single
-   permitted second round (routed per step 5's failure-type rules), and if still red after
-   that, stop / re-scope. Re-review **only** `git diff <pre_fix>...HEAD` with `reviewer` — a
-   scoped re-review cannot re-litigate approved code. Re-run `critic` **only if** the fix
-   changed behavior or coverage. One fix round; a second only if round 1 introduced a new
-   blocker. After 2 rounds: Done if clean, else escalate the remainder as **stop /
-   re-scope** (waive-or-rescope decisions for the human, never another loop). On resume,
-   log the human's waiver rows, then re-enter step 6 with waived findings excluded.
-8. **Done** → only when: all behaviors green, all gates green, no unwaived blocker per step
-   6's waivability rule, critic `achieved`, and any step-7 fix re-verified per the
-   proportional rule. Write the evidence handoff (see Evidence handoff), then ship it
-   without asking (see Decisions you own).
+   Then re-verify in proportion — never a blanket re-run: **always** re-run the gates,
+   **including the size gate**, run with the run's `base` and routed through step 5's table
+   — an earlier `acceptable` does not carry to a changed diff. A language gate red on this
+   re-run is a blocker introduced by the round — it consumes the single permitted second
+   round (routed per step 5's failure-type rules), and if still red after that, stop /
+   re-scope. Re-review **only** `git diff <pre_fix>...HEAD` with `reviewer` — a scoped
+   re-review cannot re-litigate approved code. Re-run `critic` **only if** the fix changed
+   behavior or coverage. One fix round; a second only if round 1 introduced a new blocker.
+   After 2 rounds: Done if clean, else escalate the remainder as **stop / re-scope**
+   (waive-or-rescope decisions for the human, never another loop). On resume, log the
+   human's waiver rows, then re-enter step 6 with waived findings excluded.
+8. **Done** → only when: all behaviors green, all gates green, the size gate `pass` or its
+   judge `acceptable`, no unwaived blocker per step 6's waivability rule, critic `achieved`,
+   and any step-7 fix re-verified per the proportional rule. Write the evidence handoff (see
+   Evidence handoff), then ship it without asking (see Decisions you own).
 
 ## JSONL logging contract (mandatory)
 
@@ -218,8 +231,8 @@ Append **one line per subagent call, TDD skip, gate run, and human waiver** to `
 create nested paths. Schema:
 
 ```json
-{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|NON_BEHAVIORAL|GATE|REVIEW|CRITIC",
- "role":"tdd-runner|coder|reviewer|critic|architect","prompt":"<full prompt you sent>",
+{"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|NON_BEHAVIORAL|GATE|SIZE|REVIEW|CRITIC",
+ "role":"tdd-runner|coder|size-judge|reviewer|critic|architect","prompt":"<full prompt you sent>",
  "result":"<full agent return>","verdict":"pass|fail|skip","files":["<changed paths>"],
  "note":"<e.g. TDD skip reason, retry #, decision made>"}
 ```
@@ -229,7 +242,9 @@ pretty-printing; JSON-escape prompts and results — never hand-build strings co
 newlines or quotes. A skipped TDD step:
 `"step":"RED","verdict":"skip","note":"non-behavioral: <reason>"`. `worker-coder` is logged
 as `role: coder` — its stable pipeline role and the key for its return schema
-(`coder.schema.json`).
+(`coder.schema.json`). A size `pass`, or a `review` the judge called `acceptable`, logs as
+`pass`; `block`, `split`, `unmeasured`, and a run the gate could not measure log as
+`fail`, with the gate's own word in `note`.
 
 Example rows — a GREEN dispatch and a non-behavioral skip:
 
@@ -255,7 +270,9 @@ in your JSONL log and the agents' returns, never new claims:
   derivable). Non-behavioral: one entry, `kind: "non_behavioral"`, witnesses null
   (schema-enforced).
 - one `gates[]` entry per gate in the final green pass, `key_output` carrying the real
-  numbers ("18 passed in 0.42s"), never a summary.
+  numbers ("18 passed in 0.42s"), never a summary — including the size gate as
+  `name: "size"` with its `cmd`, the tool's own `exit_code` (0, or 1 when the judge
+  returned `acceptable`), and the report's `summary` line.
 - `runtime`: paths relative to the evidence dir of any runtime evidence (screenshots, e2e
   transcripts) you copy into `<run_root>/evidence/<branch-slug>/runtime/`; `[]` when none.
 
