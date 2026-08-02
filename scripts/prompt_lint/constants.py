@@ -16,3 +16,17 @@ REQUIRED_KEYS: Final[dict[str, tuple[str, ...]]] = {
     "agents/*.md": ("name", "description", "tools", "model"),
     "rules/*.md": ("paths",),
 }
+
+CATALOG_PATH: Final[str] = "installer/catalog.toml"
+UNITS_TABLE: Final[str] = "units"
+MISSING_ROW: Final[str] = f"no [[{UNITS_TABLE}]] row in {CATALOG_PATH}"
+STALE_ROW: Final[str] = f"{CATALOG_PATH}: unit {{unit}} has no prompt at {{path}}"
+
+# Where a unit of each kind sits in the tree — one row per kind, so a new kind is a row
+# here rather than another branch. Filled with a name it is the path a [[units]] row
+# stands for; filled with '*' it is the glob that finds every unit of that kind.
+UNIT_PATHS: Final[dict[str, str]] = {
+    "skill": "skills/{name}",
+    "agent": "agents/{name}.md",
+    "rule": "rules/{name}.md",
+}
