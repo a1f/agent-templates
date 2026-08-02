@@ -30,9 +30,20 @@ from .types import CommandRunner, SizeError, SizeReport
 
 
 def _subprocess_runner(*, argv: tuple[str, ...]) -> str:
-    """The real boundary: run a command, returning stdout, SizeError on failure."""
+    """The real boundary: run a command, returning stdout, SizeError on failure.
+
+    Git speaks UTF-8 whatever the caller's locale is, and a byte that is not is
+    replaced rather than raised: a line the policy counts is not made uncountable by
+    how it is spelled, and a decode error the caller reads as a verdict is worse than
+    one U+FFFD in a path.
+    """
     result: subprocess.CompletedProcess[str] = subprocess.run(
-        argv, capture_output=True, text=True, check=False
+        argv,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
     )
     if result.returncode != 0:
         detail: str = result.stderr.strip() or result.stdout.strip()
@@ -80,7 +91,7 @@ def run_cli(
             repo=repo,
             run=run if run is not None else _subprocess_runner,
         )
-    except (SizeError, OSError) as error:
+    except (SizeError, OSError, UnicodeError) as error:
         print(f"error: {error}", file=sys.stderr)
         return EXIT_ERROR
     payload: dict[str, Any] = {

@@ -8,6 +8,7 @@ and the shell through an injected fake runner — never a real git.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from typing import Final
 
@@ -308,6 +309,20 @@ def test_an_unmeasurable_change_exits_non_zero_without_a_verdict(
     assert capsys.readouterr().out == ""
 
 
+def test_a_path_the_locale_cannot_encode_exits_without_a_verdict(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An ASCII locale cannot put a non-ASCII path in git's argv — not a verdict."""
+
+    def explode(*, argv: tuple[str, ...]) -> str:
+        raise UnicodeEncodeError("ascii", argv[-1], 0, 1, "ordinal not in range(128)")
+
+    exit_code: int = run_cli(base="HEAD~1", head="HEAD", repo=".", run=explode)
+
+    assert exit_code not in {0, 1, 2}
+    assert capsys.readouterr().out == ""
+
+
 def test_an_added_line_that_looks_like_a_header_is_still_counted() -> None:
     """git renders an added line `++ x` as `+++ x`; only a paired header ends a file."""
     diff_text: str = (
@@ -511,3 +526,32 @@ def test_click_command_requires_a_base() -> None:
 
     assert result.exit_code == 2
     assert "--base" in result.output
+
+
+def test_a_line_git_cannot_decode_still_counts(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A latin-1 line is still a line — decoding must not cost the gate its verdict."""
+    repo: Path = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "commit", "-q", "--allow-empty", "-m", "base"], cwd=repo, check=True
+    )
+    (repo / "latin1.txt").write_bytes(b"caf\xe9 not utf-8\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "add latin-1"], cwd=repo, check=True)
+
+    code: int = run_cli(base="HEAD~1", head="HEAD", repo=str(repo))
+
+    assert code == 0
+    payload: dict[str, object] = json.loads(capsys.readouterr().out)
+    assert payload["code"] == {
+        "files": 1,
+        "lines": 1,
+        "target": 35,
+        "cap": 100,
+        "band": "target",
+        "verdict": "pass",
+    }
