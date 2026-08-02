@@ -20,6 +20,7 @@ REQUIRED_KEYS: Final[dict[str, tuple[str, ...]]] = {
 CATALOG_PATH: Final[str] = "installer/catalog.toml"
 UNITS_TABLE: Final[str] = "units"
 MISSING_ROW: Final[str] = f"no [[{UNITS_TABLE}]] row in {CATALOG_PATH}"
+STALE_ROW: Final[str] = f"{CATALOG_PATH}: unit {{unit}} has no prompt at {{path}}"
 
 # Where a unit of each kind sits in the tree — one row per kind, so a new kind is a row
 # here rather than another branch. Filled with a name it is the path a [[units]] row

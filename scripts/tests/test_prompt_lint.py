@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
@@ -403,4 +404,73 @@ def test_prompt_without_a_units_row_is_reported_with_the_catalog(
     for unit_path in _unit_paths(prompts=REGISTERED_PROMPTS):
         assert unit_path not in result.stdout, (
             f"{unit_path} has a [[units]] row but was reported: {result.stdout!r}"
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class _StaleRow:
+    """A [[units]] row and the path the installer would need on disk to place it."""
+
+    kind: str
+    name: str
+    missing_path: str
+
+
+# One row per prompt kind the tree holds no files for. The names share no prefix with
+# the registered ones, so a diagnostic naming a stale row cannot be read as naming a
+# row whose files are present.
+STALE_ROWS: Final[tuple[_StaleRow, ...]] = (
+    _StaleRow(kind="skill", name="vanished", missing_path="skills/vanished"),
+    _StaleRow(kind="agent", name="departed", missing_path="agents/departed.md"),
+    _StaleRow(kind="rule", name="retired", missing_path="rules/retired.md"),
+)
+
+# The installer also places hooks, and `hooks/` is no part of the prompt tree. A row of
+# that kind stands for no prompt path, so it can never go stale.
+HOOK_KIND: Final[str] = "hook"
+HOOK_NAME: Final[str] = "ruff-format"
+
+
+def _units_row(*, kind: str, name: str) -> str:
+    """The shape the catalog registers one unit in."""
+    return f'[[units]]\nkind = "{kind}"\nname = "{name}"\n'
+
+
+def _catalog_with_stale_rows() -> dict[str, str]:
+    """The rows for REGISTERED_PROMPTS, plus stale ones and one of a non-prompt kind."""
+    rows: list[str] = [
+        PARTIAL_CATALOG[CATALOG],
+        *(
+            _units_row(kind=stale_row.kind, name=stale_row.name)
+            for stale_row in STALE_ROWS
+        ),
+        _units_row(kind=HOOK_KIND, name=HOOK_NAME),
+    ]
+    return {CATALOG: "\n".join(rows)}
+
+
+def test_units_row_with_no_files_on_disk_is_reported_with_the_missing_path(
+    tmp_path: Path,
+) -> None:
+    _write_prompts(root=tmp_path, prompts=REGISTERED_PROMPTS)
+    _write_prompts(root=tmp_path, prompts=_catalog_with_stale_rows())
+
+    result: subprocess.CompletedProcess[str] = _run_prompt_lint(root=tmp_path)
+
+    assert result.returncode == 1, (
+        f"expected a failing lint for the stale [[units]] rows: {result.stdout!r}"
+    )
+    reported_lines: list[str] = result.stdout.splitlines()
+    for stale_row in STALE_ROWS:
+        unit: str = f"{stale_row.kind}/{stale_row.name}"
+        assert any(
+            CATALOG in line and unit in line and stale_row.missing_path in line
+            for line in reported_lines
+        ), f"the row for {unit} has no files unreported: {result.stdout!r}"
+    assert HOOK_NAME not in result.stdout, (
+        f"the {HOOK_KIND} row registers no prompt but was reported: {result.stdout!r}"
+    )
+    for unit_path in _unit_paths(prompts=REGISTERED_PROMPTS):
+        assert unit_path not in result.stdout, (
+            f"{unit_path} is on disk with a row but was reported: {result.stdout!r}"
         )
