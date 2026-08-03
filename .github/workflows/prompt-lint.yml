@@ -1,0 +1,60 @@
+name: prompt-lint
+
+# CI for the prompt tree — skills/, agents/, rules/, and the CLAUDE.md template — which no
+# workflow watched before. `Lint the prompt tree` runs scripts/prompt_lint from the repo root
+# exactly as the package documents it (the checker reads the tree at the cwd), and
+# `Checker tests` runs the scripts/ suite so a change to the checker itself cannot regress it
+# silently. installer.yml is the sibling workflow for installer/; keep the checkout and uv
+# setup steps in sync with it.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skills/**"
+      - "agents/**"
+      - "rules/**"
+      - "templates/CLAUDE.md.template"
+      # The inputs the checks read, and the checker itself: catalog.toml drives the
+      # unit/extras cross-check, schemas/ the agent-example drift check, and scripts/ holds
+      # both prompt_lint and the suite the second step runs.
+      - "installer/catalog.toml"
+      - "schemas/**"
+      - "scripts/**"
+      - ".github/workflows/prompt-lint.yml"
+  pull_request:
+    paths:
+      - "skills/**"
+      - "agents/**"
+      - "rules/**"
+      - "templates/CLAUDE.md.template"
+      - "installer/catalog.toml"
+      - "schemas/**"
+      - "scripts/**"
+      - ".github/workflows/prompt-lint.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: scripts/uv.lock
+      - name: Sync dependencies
+        run: uv sync --frozen --project scripts
+      - name: Lint the prompt tree
+        run: PYTHONPATH=scripts uv run --project scripts python -m prompt_lint
+      - name: Checker tests
+        working-directory: scripts
+        run: uv run pytest
