@@ -66,9 +66,37 @@
         }
       }
     },
-    "runtime": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+    "runtime": {
+      "$comment": "Evidence that the built artifact itself was watched working — pr-explain scores these rows into its proof chapter, where tests and gates together are worth 7 of 100 and can never clear the bar alone.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/runtime_evidence" }
+    }
   },
   "$defs": {
+    "runtime_evidence": {
+      "$comment": "One captured run of the built artifact, classified by what makes it strong. Either a file copied into runtime/ (a screenshot) or the verbatim output, or both.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "what", "cmd"],
+      "anyOf": [{ "required": ["path"] }, { "required": ["key_output"] }],
+      "properties": {
+        "kind": {
+          "$comment": "before_after: one command on the base and on the head. screenshot: a picture of the surface running. replay: one deterministic command a reader reruns to reproduce it. run_output: the built artifact driven end to end. load_bearing: the change reverted, and the break it caused. measurement: a number for a claim the PR makes.",
+          "enum": [
+            "before_after",
+            "screenshot",
+            "replay",
+            "run_output",
+            "load_bearing",
+            "measurement"
+          ]
+        },
+        "what": { "type": "string", "minLength": 1 },
+        "cmd": { "type": "string", "minLength": 1 },
+        "path": { "type": "string", "minLength": 1 },
+        "key_output": { "type": "string", "minLength": 1 }
+      }
+    },
     "witness": {
       "$comment": "One witnessed command run, quoted verbatim from the run that produced it.",
       "type": "object",
