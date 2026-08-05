@@ -235,8 +235,8 @@ in your JSONL log and the agents' returns, never new claims:
 - one `gates[]` entry per gate in the final green pass, `key_output` carrying the real
   numbers ("18 passed in 0.42s"), never a summary.
 - `runtime`: the branch is hot and built right now — this is the cheapest moment in the whole
-  pipeline to watch the change actually work, and `/pr-explain` scores these rows into the
-  proof chapter where tests and gates together are worth 7 of 100. For a behavioral run,
+  pipeline to watch the change actually work, and `/pr-explain` scores these rows on its proof
+  ladder, where a green suite is worth a fraction of one real run. For a behavioral run,
   capture at least one: **drive the built artifact** end to end (`run_output` — boot the
   server, run the installed CLI, put a real request through it with real data seeded) and,
   when anything a person looks at comes out different, a **screenshot** of it running. One

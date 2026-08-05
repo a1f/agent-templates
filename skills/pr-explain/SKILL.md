@@ -308,8 +308,8 @@ The draft leaves Phase 4 only after both gates. Run them in order:
     against the draft; every one appears. Phase 2 spotted a visible surface → grep the page
     for `img.evidence`; zero hits fails the gate unless Chapter 4 carries the declared ⚠.
   - *Proof*: add the points of the lit `.rung` rows and check the total matches the printed
-    score. Every ladder row appears, lit or unlit — `grep -c 'class="rung' <page>` equals the
-    ladder's row count. Under 30 on a behavior PR → `.short-proof` is present and the ⚠ is in
+    score. Every scorable row appears, lit or unlit — `grep -c 'class="rung' <page>` is 9; the
+    0-point assertion row is prose, never a rung. Under 30 on a behavior PR → `.short-proof` is present and the ⚠ is in
     the teaser. A lit row with no captured command or artifact behind it fails the gate: unlight
     it and re-score.
   - *Prose*: `wc -w` each budgeted unit and cut anything over. `grep` the draft for every
@@ -326,7 +326,7 @@ The draft leaves Phase 4 only after both gates. Run them in order:
   - **Whole diff walked** — every hunk shown or named; each shown hunk's note answers what,
     why, and where; the walkthrough reads in call-path order like a narration.
   - **Enumerated & real** — every test in the diff is on the list with a plain line; every
-    output and lit rung was actually run or quoted from evidence/CI; the score is what the lit
+    output and lit row was actually run or quoted from evidence/CI; the score is what the lit
     rows add up to; the ⚠ banner or no-proof verdict, if present, is honest.
   - **Sharp & short** — clean statements; ≤ 25-word sentences; every unit within budget;
     Chapter 1 is the three moves and nothing more.
