@@ -1,6 +1,7 @@
 ---
 name: shipped
 description: Use when PRs have merged and the plan records need catching up — ticks every merged-but-unrecorded PR row (✅ + PR link) in the central plan issue, its build-plan artifact, and any cross-referenced issue, or invokes /shipped.
+model: sonnet
 ---
 
 # Shipped
