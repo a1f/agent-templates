@@ -73,8 +73,10 @@ forced tests or proof; log the shrink and its reason in the report.
 
 ## The proof ladder
 
-Chapter 4 scores what actually ran against this change, out of 100. Take the strongest
-instance of each row, score each row at most once, and add them up.
+Chapter 4 scores what actually ran against this change, out of 100. Add up the rows you earned,
+each at most once — two screenshots are still 20. One capture may earn several rows when it
+proves each independently: a before/after pair of screenshots proves both that the change
+happened (25) and that the surface renders (20). The rows are claims, not artifacts.
 
 | Pts | The proof | What earns it |
 |----:|-----------|---------------|
@@ -358,17 +360,21 @@ The draft leaves Phase 4 only after both gates. Run them in order:
   `.ba-label`, the replay and the run output as one `.cmd` block each.
 - Screenshots and e2e output embed as `data:` URIs via `img.evidence`, each followed by
   its one-line `.evidence-cap` caption.
-- **Colour check, on the built file, before Phase 6.** An installed template that lags the
-  repo drops the syntax tokens silently, and every hunk renders as flat red and green — the
-  page still validates, so only these greps catch it:
-  - `grep -c -- --syn-kw <page>` → `0` means the template is stale. Rebuild from the repo's
-    `templates/pr-explain-page.html`; never hand-patch the built page.
+- **Staleness check, on the built file, before Phase 6.** An installed template that lags the
+  repo drops whole rule sets silently — the page still validates, and only these greps catch it.
+  A stale template is never hand-patched: rebuild from the repo's
+  `templates/pr-explain-page.html`.
+  - `grep -c -- --syn-kw <page>` → `0` is a template older than the syntax tokens, and every
+    hunk renders as flat red and green.
+  - `grep -c '\.rung' <page>` → `0` is a template older than the ladder, and Chapter 4 renders
+    as unstyled text. Each generation of the template needs its own grep here: add one whenever
+    a chapter gains a class the last generation lacked.
   - `grep -c tok- <page>` → every `.diff` block holding code carries at least one token span.
     A block quoting prose (a Markdown file, a plain-text log) is the only allowed zero.
   - `grep -n '\.diff \.\(add\|del\) {' <page>` → neither rule sets `color:`. Red and green
     live in the line background and the `.sign` gutter, never on the code text.
 
-  Any one failing → fix it here. Publishing a flat diff is a failed run.
+  Any one failing → fix it here. Publishing a flat diff or a bare ladder is a failed run.
 
 ## Phase 6 — Publish
 
@@ -418,6 +424,6 @@ with what it would have taken** (plus the ⚠ flag when under the bar or nothing
 screenshots embedded, or the visible surface that shipped unseen and why (⚠); chapters
 emitted vs dropped (with the tiny-PR shrink reason if used); the PR whose teaser you
 updated; the mechanical gate result (coverage greps, Vale alerts fixed, or "vale
-unavailable — wc + grep only"); the colour check (tokens present, or the stale template you
-rebuilt from); and the critic score — naming any dimension left under the bar when the page
-shipped flagged.
+unavailable — wc + grep only"); the staleness check (tokens and ladder present, or the stale
+template you rebuilt from); and the critic score — naming any dimension left under the bar when
+the page shipped flagged.
