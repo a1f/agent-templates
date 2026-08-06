@@ -125,7 +125,7 @@ that plan honest as PRs land.
 
 ## Language Rules
 
-Opinionated coding standards that load automatically when editing matching files — per-language conventions plus two cross-cutting rules (design and TDD).
+Opinionated coding standards that load automatically when editing matching files — per-language conventions plus three cross-cutting rules (design, TDD, and English).
 
 | Language | File | Target | Highlights |
 |----------|------|--------|------------|
@@ -136,12 +136,13 @@ Opinionated coding standards that load automatically when editing matching files
 
 ### Cross-cutting rules
 
-Two language-agnostic rules install alongside the language rules and load on broader globs:
+Three language-agnostic rules install alongside the language rules and load on broader globs:
 
 | Rule | File | Loads on | Covers |
 |------|------|----------|--------|
 | Design principles | `rules/design-principles.md` | any source file | deep modules, information hiding, naming, complexity (Ousterhout) |
 | TDD | `rules/tdd.md` | test files | red→green→refactor, vertical slices, public-interface tests |
+| English | `rules/english.md` | every file | one word one meaning, simple tenses, 20/25-word sentences, banned words, when a picture earns its place (ASD-STE100) |
 
 ### Installation
 

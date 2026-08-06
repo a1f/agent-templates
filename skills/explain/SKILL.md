@@ -66,17 +66,14 @@ If the source is too thin for a real "why", say so and ask for one sentence of i
 
 ### The voice
 
-- Commonest words. If a code word is the only fit (symlink, hash, CI), say what it
-  does in plain words right after — once.
-- Short sentences. One idea each.
-- Active voice. "It checks the files," not "the files are checked."
-- Talk to the reader: "you", "your".
-- Concrete nouns. Name the real thing — not "functionality."
-- No wind-up. Start with the point.
+The `english` rule governs every word — it loads each session, so you already have it.
+Two additions this skill owns:
 
-**Banned words:** leverage, robust, seamless, comprehensive, powerful, streamline,
-utilize, facilitate, ensure, delve, furthermore, moreover, "in order to", "it's
-worth noting", "game-changer", "not only… but also".
+- If a code word is the only fit (symlink, hash, CI), say what it does in plain words
+  right after — once.
+- Talk to the reader: "you", "your".
+
+Read the draft against the rule before you print it, and fix what it catches.
 
 Under ~150 words. Plain paragraphs — no bullets or emoji. Print it in chat; post it
 to the PR or issue only if they ask.

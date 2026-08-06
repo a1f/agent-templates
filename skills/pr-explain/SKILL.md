@@ -13,10 +13,10 @@ does that. They want to *understand the whole change*, not a sampler of it.
 
 Three rules run through the whole page:
 
-- **Plain words.** Say it the way you would to a smart friend who has not seen the code.
-  If a code word is the only word that fits (`hash`, `symlink`, `CI`), say what it does in
-  plain words right after — once. Short sentences, one idea each. Active voice. Talk to the
-  reader: "you", "your". Start with the point; no wind-up.
+- **Plain words.** The `english` rule governs every word on the page — it loads each
+  session, so you already have it. Say it the way you would to a smart friend who has not
+  seen the code. If a code word is the only word that fits (`hash`, `symlink`, `CI`), say
+  what it does in plain words right after — once. Talk to the reader: "you", "your".
 - **The whole diff.** Every change in the PR is either shown and explained or named in a
   roll-up line. A reader who finishes the walkthrough has seen the change — never two
   excerpts from a hundred-line diff.
@@ -213,14 +213,13 @@ Draft the prose in a scratch buffer under these rules:
    ladder row, captured output. "Faster", "safer", "fixed" each arrive with a number or output.
 3. **Concrete before abstract.** The failing command, the error, or the real line comes before
    any statement about it. Examples are trimmed from the actual diff, never invented.
-4. **Plain words, ≤ 25-word sentences, one idea per sentence, data over adjectives.**
+4. **The `english` rule holds on every line** — its word caps, its banned list, its
+   anti-overuse clauses. Data over adjectives.
 5. **One name per concept — the name from the code.** Present tense for the new behavior; past
    tense only for what it replaced.
 
-Banned on sight: leverages, robust, seamless, comprehensive, delve, streamlined, powerful,
-simply, utilize, facilitate, ensures, significantly, various, clearly, essentially, furthermore,
-moreover, "in order to", "it's worth noting", "not only… but also", and "should" when you mean
-what the code *does*.
+Banned here on top of the rule's list: simply, significantly, various, clearly, essentially,
+and "should" when you mean what the code *does*.
 
 ### Chapter 1 — What & why
 
@@ -318,7 +317,8 @@ The draft leaves Phase 4 only after both gates. Run them in order:
     present and the ⚠ is in the teaser. A lit row with no command or artifact behind it: unlight
     it and re-score.
   - *Prose*: `wc -w` each budgeted unit and cut anything over. `grep` the draft for every
-    banned word above and rewrite each hit. Then, **if `vale` is on PATH**, write the draft
+    banned word — the `english` rule's list plus the five above — and rewrite each hit. Then
+    read the draft once against the rule and fix what it catches. **If `vale` is on PATH**, write the draft
     to a scratch `.md` and run `vale --config ~/.claude/at/templates/pr-explain.vale.ini
     <draft>.md` (run `vale --config … sync` once first if `StylesPath` is empty), rewriting
     every alert. `vale` absent or `sync` can't reach the registry → degrade to the `wc` +
