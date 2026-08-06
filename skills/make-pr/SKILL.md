@@ -234,8 +234,16 @@ in your JSONL log and the agents' returns, never new claims:
   (schema-enforced).
 - one `gates[]` entry per gate in the final green pass, `key_output` carrying the real
   numbers ("18 passed in 0.42s"), never a summary.
-- `runtime`: paths relative to the evidence dir of any runtime evidence (screenshots, e2e
-  transcripts) you copy into `<run_root>/evidence/<branch-slug>/runtime/`; `[]` when none.
+- `runtime`: the branch is hot and built right now — this is the cheapest moment in the whole
+  pipeline to watch the change actually work, and `/pr-explain` scores these rows on its proof
+  ladder, where a green suite is worth a fraction of one real run. For a behavioral run,
+  capture at least one: **drive the built artifact** end to end (`run_output` — boot the
+  server, run the installed CLI, put a real request through it with real data seeded) and,
+  when anything a person looks at comes out different, a **screenshot** of it running. One
+  entry per capture — `kind`, `what` (one line naming what the reader sees), the `cmd` behind
+  it, and either `key_output` verbatim or a `path` to a file you copied into
+  `<run_root>/evidence/<branch-slug>/runtime/`. `[]` only when the run is non-behavioral or
+  nothing can be launched here — and say which in the summary.
 
 Validate it with the same validator command as agent returns, against
 `~/.claude/at/schemas/evidence.schema.json` — a failing file blocks the push: fix the file,

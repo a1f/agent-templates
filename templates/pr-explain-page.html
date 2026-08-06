@@ -123,7 +123,30 @@
   .tag.red { color: var(--red); background: var(--red-soft); }
   .tag.green { color: var(--green); background: var(--green-soft); }
 
-  /* Chapter 4 — the proof: gate chips + runtime evidence. */
+  /* Chapter 4 — the proof: the scored ladder, then the evidence itself.
+     A rung is lit only when something ran; unlit rungs stay on the page with their
+     points, so the reader sees what was NOT done. */
+  .score { font-family: var(--mono); font-size: 11px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--ink-3); margin-top: 14px; }
+  .score .n { font-size: 15px; color: var(--ink); font-weight: 700; letter-spacing: 0; }
+  .score .bar { display: block; height: 5px; border-radius: 3px; background: var(--line);
+    margin-top: 6px; overflow: hidden; }
+  .score .bar i { display: block; height: 100%; background: var(--accent); }
+  .score.short .bar i { background: var(--amber); }
+  .ladder { margin-top: 14px; border-top: 1px solid var(--line); }
+  .rung { display: flex; gap: 12px; align-items: baseline; padding: 8px 0;
+    border-bottom: 1px solid var(--line); font-size: 15.5px; }
+  .rung .pts { font-family: var(--mono); font-size: 12px; font-weight: 700;
+    color: var(--accent); min-width: 2.6em; text-align: right; flex: none; }
+  .rung .what { color: var(--ink); }
+  .rung .how { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .rung.unlit { opacity: 0.5; }
+  .rung.unlit .pts { color: var(--ink-3); }
+  .rung-eq { padding: 10px 0 2px; }
+  .short-proof { border: 1px solid var(--amber); background: var(--amber-soft);
+    border-radius: 8px; padding: 14px 18px; margin-top: 10px; font-size: 15.5px; }
+  .short-proof .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700;
+    color: var(--amber); letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
   .gate-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
   .gate-chip { font-family: var(--mono); font-size: 11.5px; padding: 3px 9px;
     border-radius: 999px; background: var(--green-soft); color: var(--green); }
@@ -132,6 +155,8 @@
     padding: 14px 18px; margin-top: 10px; font-size: 15.5px; }
   .no-proof .tag { font-family: var(--mono); font-size: 10.5px; font-weight: 700;
     color: var(--red); letter-spacing: 0.08em; display: block; margin-bottom: 4px; }
+  .ba-label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--ink-3); margin: 12px 0 -6px; }
   img.evidence { max-width: 100%; border: 1px solid var(--line-strong); border-radius: 6px; margin-top: 12px; }
   .evidence-cap { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); margin: 4px 0 0; }
 
@@ -203,20 +228,40 @@
 
   <div class="chapter">
     <div class="clabel">The proof</div>
-    <!-- SLOT: 40-70 words + evidence — only what actually ran, strongest first:
-         fresh runs from this session, then evidence-file gates, then CI. Chips carry real numbers:
-         <div class="gate-row"><span class="gate-chip">run here — pytest 161 passed</span><span class="gate-chip">mypy strict</span></div>
-         A visual surface in the diff (page, TUI, chart) REQUIRES a screenshot of it running,
-         embedded as <img class="evidence" src="data:…"> with a
-         <p class="evidence-cap">one-line caption of what the reader sees</p> — text output
-         about the surface never substitutes; no screenshot → declare the gap + ⚠.
-         Other runtime evidence (e2e output) embeds the same way.
-         CI check results as chips (class "fail" for red ones);
-         PR-body claims appear only attributed in prose ("PR body reports: …"), never as chips.
-         A behavior PR with NOTHING run → this verdict, verbatim, instead (never drop, never pad):
-         <div class="no-proof"><span class="tag">NO PROOF</span>No proof exists: nothing was run to
+    <!-- SLOT: 40-70 words, then the ladder, then the evidence itself — NOT a sentence saying
+         a run happened. Score = the lit rungs added up; bar is 30 for a PR with behavior.
+         The score, its bar filled to score%:
+      <div class="score">the proof — <span class="n">62 / 100</span>
+        <span class="bar"><i style="width:62%"></i></span></div>
+         Then EVERY ladder row in ladder order — earned ones lit, the rest unlit but present,
+         because an unlit "before and after · 25" tells the reader what was not done:
+      <div class="ladder">
+        <div class="rung unlit"><span class="pts">50</span><span class="what">The owner ran it
+          — <span class="how">you have not run this yourself yet</span></span></div>
+        <div class="rung"><span class="pts">25</span><span class="what">Before and after on the
+          real thing — <span class="how">curl /agents on main: 48 rows · on this branch: 3</span></span></div>
+        <div class="rung"><span class="pts">5</span><span class="what">The tests pass —
+          <span class="how">cargo test · 82 passed, 0 failed</span></span></div>
+        <div class="rung"><span class="pts">2</span><span class="what">The gates —
+          <span class="how">fmt, clippy -D warnings, CI</span></span></div>
+      </div>
+         The gates rung may carry its chips (class "fail" for red CI):
+      <div class="gate-row"><span class="gate-chip">CI check — pass 31s</span></div>
+         Evidence hangs UNDER the rung it scores. Screenshot (required when Phase 2 spotted
+         something a person sees — curl output never substitutes; none → say which surface
+         shipped unseen + ⚠):
+      <img class="evidence" src="data:…"><p class="evidence-cap">what the reader is looking at</p>
+         Before/after — two labelled blocks, same command, base then head:
+      <p class="ba-label">on main</p><div class="cmd">…</div>
+      <p class="ba-label">on this branch</p><div class="cmd">…</div>
+         Under the bar → open the chapter with this, and ⚠ the teaser:
+      <div class="short-proof"><span class="tag">PROOF UNDER THE BAR</span>17 of 100. Nothing but
+         the suite and the gates ran against this change. The cheapest thing missing: <what>.</div>
+         NOTHING ran at all → this verdict instead, verbatim (never drop, never pad):
+      <div class="no-proof"><span class="tag">NO PROOF</span>No proof exists: nothing was run to
          show this change works. A PR whose proof cannot be written had nothing to prove — that is
-         a finding about the PR, not this page.</div> -->
+         a finding about the PR, not this page.</div>
+         PR-body claims appear only attributed in prose ("PR body reports: …"), never as a rung. -->
   </div>
 
   <div class="chapter">

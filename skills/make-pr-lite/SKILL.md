@@ -138,7 +138,13 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    slice's non-test files>`, or `null` for every slice sharing a production file with another
    slice (a shared file makes per-slice counts non-derivable; never double-count) — plus one
    `gates[]` entry per gate in the final green pass with its
-   real `key_output` numbers, and `runtime: []` unless you copied artifacts into `.../runtime/`.
+   real `key_output` numbers, and one `runtime[]` entry per capture of the change actually
+   working — the branch is built right now, so for a behavioral run drive the built artifact
+   end to end (`kind: "run_output"`, real data seeded) and screenshot anything a person looks
+   at that now comes out different; each entry carries `kind`, `what`, the `cmd`, and either
+   verbatim `key_output` or a `path` copied into `.../runtime/`. `/pr-explain` scores these on
+   its proof ladder, where a green suite is worth a fraction of one real run. `[]` only when the slice is
+   non-behavioral or nothing can be launched here — say which in the summary.
    Validate it:
    `uv run --no-project --with jsonschema python ~/.claude/at/scripts/validate_return.py ~/.claude/at/schemas/evidence.schema.json <that file>`
    — a failing file blocks the push. Then ship it
