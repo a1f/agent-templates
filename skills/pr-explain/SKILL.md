@@ -209,8 +209,8 @@ take every row still cheap to reach after that.
 Draft the prose in a scratch buffer under these rules:
 
 1. **One PR, one thing.** Chapter 1 leads with it. Secondary changes get one line, never an arc.
-2. **Every claim points at something the page shows** — a walkthrough hunk, a test line, a
-   gate chip, captured output. "Faster", "safer", "fixed" each arrive with a number or output.
+2. **Every claim points at something the page shows** — a walkthrough hunk, a test line, a lit
+   ladder row, captured output. "Faster", "safer", "fixed" each arrive with a number or output.
 3. **Concrete before abstract.** The failing command, the error, or the real line comes before
    any statement about it. Examples are trimmed from the actual diff, never invented.
 4. **Plain words, ≤ 25-word sentences, one idea per sentence, data over adjectives.**
@@ -361,8 +361,6 @@ The draft leaves Phase 4 only after both gates. Run them in order:
   three with `class="rung unlit"`. Evidence hangs under the row it scores: the screenshot as
   `img.evidence` + `.evidence-cap`, the before/after as two `.cmd` blocks each opened by a
   `.ba-label`, the replay and the run output as one `.cmd` block each.
-- Screenshots and e2e output embed as `data:` URIs via `img.evidence`, each followed by
-  its one-line `.evidence-cap` caption.
 - **Staleness check, on the built file, before Phase 6.** An installed template that lags the
   repo drops whole rule sets silently — the page still validates, and only these greps catch it.
   A stale template is never hand-patched: rebuild from the repo's
