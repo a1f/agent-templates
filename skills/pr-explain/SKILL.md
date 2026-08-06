@@ -22,8 +22,8 @@ Three rules run through the whole page:
   excerpts from a hundred-line diff.
 - **Proof is scored, not asserted.** Output on the page is output you captured, and every
   piece of it sits on the ladder below carrying its points — so a reader sees at a glance
-  whether this change was watched working or merely compiled. Tests and gates together are
-  worth 7 of 100: "all tests passed" is the weakest sentence on the page, never the proof.
+  whether this change was watched working or merely compiled. "All tests passed" is the
+  weakest sentence on the page, never the proof.
 
 ## Arguments
 
@@ -164,8 +164,9 @@ may not be the one you were asked about. `--json files` gives every touched path
 ## Phase 3 — Run (climb the ladder)
 
 Before writing, run the change. Everything here executes in the target repo, on the PR's
-head; capture output verbatim for Chapters 4 and 5. Work the ladder from the bottom up and
-stop once the score clears 30 — but never skip a row that is cheap to reach here.
+head; capture output verbatim for Chapters 4 and 5. Get the artifact running first — four of
+the rows below reuse that one instance — then work down them until the score clears 30, and
+take every row still cheap to reach after that.
 
 - **Drive the built artifact end to end** (10). Build it, boot it, and put a real request
   through it: the compiled binary, the server on a local port, the installed CLI. Seed real
@@ -311,8 +312,8 @@ The draft leaves Phase 4 only after both gates. Run them in order:
     for `img.evidence`; zero hits fails the gate unless Chapter 4 carries the declared ⚠.
   - *Proof*: add the points of the lit `.rung` rows and check the total matches the printed
     score. Every scorable row appears, lit or unlit — `grep -c 'class="rung' <page>` is 9; the
-    0-point assertion row is prose, never a rung. Under 30 on a behavior PR → `.short-proof` is present and the ⚠ is in
-    the teaser. A lit row with no captured command or artifact behind it fails the gate: unlight
+    0-point assertion row is prose, never a rung. Under 30 on a behavior PR → `.short-proof` is
+    present and the ⚠ is in the teaser. A lit row with no command or artifact behind it: unlight
     it and re-score.
   - *Prose*: `wc -w` each budgeted unit and cut anything over. `grep` the draft for every
     banned word above and rewrite each hit. Then, **if `vale` is on PATH**, write the draft
