@@ -15,9 +15,9 @@ run missed is booked next time.
 
   1. Find the records            (plan issue + its artifact)
   2. Compare the plan to GitHub  (merged but unbooked)
-  3. Tick the issue rows
-  4. Tick the artifact           (then pin its marker)
-  5. Tick cross-referenced issues
+     ├─ issue lane      3. Tick the issue rows → 5. Tick cross-referenced issues
+     └─ artifact lane   4. Tick the artifact
+     join               pin the artifact marker, report
 ```
 
 **No approval gates** — never preview or confirm an edit; invoking the skill is the
@@ -54,10 +54,10 @@ stop and report with nothing written.
    its line appears more than once (either kind). Stale or absent → match a title from
    the user's artifact list to this repo and the plan's goal — the shapes in the wild:
    `<goal>, one small PR at a time`, `<repo> — PR map`, `<goal> — Build Plan`.
-3. Skip Phase 4, saying so in the report, on any of: no confident title match;
-   several matches (a guess would pin the wrong page); no Artifact tool; a headless
-   run. Phase 4 adds the runtime skips: a failed fetch, markup that isn't the page's
-   source, a refused or URL-changing republish.
+3. Skip Phase 4 — don't dispatch the artifact lane — saying so in the report, on any
+   of: no confident title match; several matches (a guess would pin the wrong page);
+   no Artifact tool; a headless run. Phase 4 adds the runtime skips: a failed fetch,
+   markup that isn't the page's source, a refused or URL-changing republish.
 
 ## Phase 2 — Compare the plan to GitHub
 
@@ -87,10 +87,36 @@ report's Skipped line. A local row matches a PR by, in order:
 The work list is every row whose PR is `MERGED` but isn't booked yet. Any ambiguity —
 a merged PR whose branch or title carries a row id but matches no row, one that
 matches two rows, two PRs matching one row — goes to the report, never a guess.
-**Empty work list → skip Phase 3**, but still run Phases 4–5 as truth checks (they
-no-op when already true).
+**Empty work list → the issue lane skips Phase 3** and runs Phase 5 alone; both lanes
+still dispatch, as truth checks (they no-op when already true).
 
-## Phase 3 — Tick the issue rows
+## Dispatch — the two lanes
+
+**The issue and the artifact are booked in parallel by two `general-purpose`
+subagents, launched in one message** (never `Explore` — both lanes write; never a
+coder). Neither inherits this conversation, so give each its phases of this skill
+**quoted verbatim**, plus the facts it needs:
+
+| Lane | Phases | Also gets |
+|---|---|---|
+| issue | 3, then 5 | `owner/repo`, the issue number, the scratch dir, the work list (row id · `#NN` · title), and the full booked-row set Phase 5 sweeps |
+| artifact | 4, plus Phase 3's diff-gate paragraph it refers back to | the artifact URL, the scratch dir, the work list, and the plan's landed/total counts for the recount |
+
+**Neither lane touches the other's record**, so they never race the plan issue's
+body: the artifact lane never runs `gh issue edit` — the marker pin is the join's —
+and the issue lane never publishes a page. They share the scratch dir but not
+filenames. Each returns one compact block for the Report:
+
+- **issue** — rows booked (`id → #NN`, link repairs included), headings ticked,
+  cross-ref issues ticked, whatever went unmatched or ambiguous, and any abort with
+  its reason.
+- **artifact** — `updated (x/y landed)` | `already true` | `skipped: <reason>`, and
+  the URL its republish returned.
+
+A lane that dies or returns nothing → its leg is skipped in the report, with the
+reason; never re-run or take over the other lane.
+
+## Phase 3 — Tick the issue rows *(issue lane)*
 
 Flip only the matched rows, mirroring how the issue's already-booked rows look. No
 booked row to mirror yet → tick the row's status cell in its own shape — the status
@@ -126,7 +152,7 @@ gh issue edit "$ISSUE" --body-file "$SCRATCH/new-body.md" \
   && echo "issue #$ISSUE updated"
 ```
 
-## Phase 4 — Tick the artifact
+## Phase 4 — Tick the artifact *(artifact lane)*
 
 Fetch the live page (WebFetch on the artifact URL) and save the returned source as
 `$SCRATCH/old-page.html`. **Check it is the page's real source first**: it must carry
@@ -150,19 +176,9 @@ as the `url` parameter** — without it a republish mints a new page and orphans
 link to the old one. Keep the title and favicon the page already has. An empty diff →
 don't republish; a refused republish → skip and report; a republish returning a
 **different** URL failed: report both URLs and leave any marker untouched — never pin
-the new page.
+the new page. Return the outcome and that URL; the marker pin is the join's.
 
-**Then pin the marker** — once a title-matched artifact is true (republished, or its
-diff was already empty): put `<!-- shipped:artifact url=... -->` directly **above**
-the `## PR breakdown` heading (that skill's redraw rewrites its section but preserves
-everything before the heading; no such heading → append as the new last line),
-**replacing** every existing `shipped:artifact` line. Re-fetch a fresh baseline —
-Phase 3 may have changed the body — and repeat the Phase 3 recipe; the new marker line
-and the old ones' removal are the only legal hunks. Never write `pr-breakdown:map` — that
-marker belongs to `/pr-breakdown`, and pointing its template redraw at a hand-crafted
-page would clobber the page.
-
-## Phase 5 — Tick cross-referenced issues
+## Phase 5 — Tick cross-referenced issues *(issue lane)*
 
 Sweep the cross-references of **all** booked rows — not just the rows this run
 flipped. The set: issues linked from those rows' cells or their merged PRs' bodies
@@ -175,12 +191,25 @@ repo. A bare `#NN` there names **that** repo's PR, so match by row id or full UR
 only. Only the cell that names the work — never any other line — and the same
 ambiguity rule: unsure the cell means this work → the report, not a tick.
 
+## Join — pin the artifact marker
+
+**Once both lanes have returned**, pin the marker — but only when a title-matched
+artifact (Phase 1's step 2) came back true (republished, or its diff was already
+empty): put `<!-- shipped:artifact url=... -->` directly **above** the
+`## PR breakdown` heading (that skill's redraw rewrites its section but preserves
+everything before the heading; no such heading → append as the new last line),
+**replacing** every existing `shipped:artifact` line. Re-fetch a fresh baseline — the
+issue lane may have changed the body — and repeat the Phase 3 recipe; the new marker
+line and the old ones' removal are the only legal hunks. Never write
+`pr-breakdown:map` — that marker belongs to `/pr-breakdown`, and pointing its template
+redraw at a hand-crafted page would clobber the page.
+
 ## Report
 
 ```
 Shipped: <count> PRs booked — issue #N (<row ids>), artifact <updated (x/y landed) | already true | skipped>, <count> cross-refs
 Unmatched: <#NN — no confident row / matches two rows> · <row n.k — recorded PR not found> (or none)
-Skipped: <foreign-repo rows, artifact leg with its reason, headless> (or none)
+Skipped: <foreign-repo rows, a lane that skipped or died with its reason, headless> (or none)
 ```
 
 `<count>` = rows newly booked, link repairs included. Add the marker URL if newly
@@ -195,3 +224,5 @@ incomplete — say so.
 | Trusting cell position in a hand-evolved table | Escaped pipes (`\|`) shift cell counts — re-read the row before trusting the diff |
 | A tick-shaped hunk on the wrong row | Fix `new-body.md` before publishing — publish-then-correct is never the remedy |
 | A republish that returns a new URL | That leg failed: report both URLs, leave the marker alone |
+| A lane writing the other's record | The artifact lane never edits an issue, the issue lane never publishes — the marker pin waits for the join |
+| Running the lanes one after the other | Both go out in **one** message; only the marker pin needs both back |
