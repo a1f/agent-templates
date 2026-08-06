@@ -37,8 +37,9 @@ Three rules run through the whole page:
 ## Runtime resolution
 
 - **Template**: `~/.claude/at/templates/pr-explain-page.html` — design tokens plus the
-  `.bottomline`, `.goals`, `.tree`, `.hunk-head`, `.testlist`, `.wit`, `.gate-chip`,
-  `.no-proof`, and `.cmd` classes the chapters use. Missing? Still ship: build a
+  `.bottomline`, `.goals`, `.tree`, `.hunk-head`, `.testlist`, `.wit`, `.score`, `.rung`,
+  `.short-proof`, `.gate-chip`, `.no-proof`, `.ba-label`, and `.cmd` classes the chapters
+  use. Missing? Still ship: build a
   single-file HTML page with inline CSS that follows the chapter contract. Visual polish
   degrades; the contract does not.
 - **Vale config**: `~/.claude/at/templates/pr-explain.vale.ini`, staged with the template. It
@@ -100,9 +101,9 @@ under 30 ships flagged.
 ```bash
 branch="$(git branch --show-current)"           # blank arg; empty output → detached HEAD: stop, ask for #N
 gh pr list --head "$branch" --json number,url    # [] → no open PR: stop, ask for #N
-gh pr view <N> --json number,title,body,url,headRefName,additions,deletions,createdAt,files
-gh pr diff <N>
-gh pr checks <N> || true
+gh pr view "<N>" --json number,title,body,url,headRefName,additions,deletions,createdAt,files
+gh pr diff "<N>"
+gh pr checks "<N>" || true                       # <N> is the PR number you substitute
 ```
 
 Always pass the explicit `<N>` — a bare `gh pr view` targets the current branch's PR, which
@@ -266,8 +267,8 @@ the witnesses are absent.
 Score the ladder, then show the evidence — **the evidence itself, in this chapter**. Chapter 5
 is what the *reader* can paste; Chapter 4 is what *ran*, and a sentence reporting that a run
 happened is not that run. So the strong rows carry their artifact here: the screenshot embeds,
-the before/after prints as two labelled blocks, the replay prints as its one command with the
-output it produced.
+the before/after prints as two labelled blocks, and the replay prints as the one command with
+the output it produced here — Chapter 5 then points back at it rather than printing it twice.
 
 Open with the score (`the proof — 62 / 100`). Then one `.rung` per ladder row, in ladder
 order, each earned row carrying its real number and the command behind it. **Rows you did not
@@ -298,8 +299,9 @@ surface shipped unseen and why, and the same ⚠ carries into the teaser and the
 ### Chapter 5 — See for yourself
 
 One or two command blocks the reader can paste to confirm *this* change, each followed by
-the output you captured in Phase 3. Commands you could not run here carry the
-`not run here — needs <thing>` mark instead of output.
+the output you captured in Phase 3. A replay already printed in Chapter 4 is named here, not
+reprinted. Commands you could not run here carry the `not run here — needs <thing>` mark
+instead of output.
 
 ### The bar
 
@@ -335,8 +337,8 @@ The draft leaves Phase 4 only after both gates. Run them in order:
     Chapter 1 is the three moves and nothing more.
 
   Below **90** → apply the specific misses as one rewrite pass, then re-score once. After the
-  rewrite, re-run the coverage greps and per-unit `wc` — those are hard and must still hold
-  at publish.
+  rewrite, re-run the coverage greps, the proof arithmetic, and per-unit `wc` — those are hard
+  and must still hold at publish.
 - **Ship-flag.** Still < 90 after the rewrite → publish anyway and record the final score and
   the unmet dimensions in the report. Never block the publish or loop a third time.
 
