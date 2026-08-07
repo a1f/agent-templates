@@ -213,7 +213,7 @@ Draft the prose in a scratch buffer under these rules:
    ladder row, captured output. "Faster", "safer", "fixed" each arrive with a number or output.
 3. **Concrete before abstract.** The failing command, the error, or the real line comes before
    any statement about it. Examples are trimmed from the actual diff, never invented.
-4. **The `english` rule holds on every line** — its word caps, its banned list, its
+4. **The `english` rule governs every line** — its word caps, its banned list, its
    anti-overuse clauses. Data over adjectives.
 5. **One name per concept — the name from the code.** Present tense for the new behavior; past
    tense only for what it replaced.
@@ -317,7 +317,7 @@ The draft leaves Phase 4 only after both gates. Run them in order:
     present and the ⚠ is in the teaser. A lit row with no command or artifact behind it: unlight
     it and re-score.
   - *Prose*: `wc -w` each budgeted unit and cut anything over. `grep` the draft for every
-    banned word — the `english` rule's list plus the five above — and rewrite each hit. Then
+    banned word — the `english` rule's list plus the six above — and rewrite each hit. Then
     read the draft once against the rule and fix what it catches. **If `vale` is on PATH**, write the draft
     to a scratch `.md` and run `vale --config ~/.claude/at/templates/pr-explain.vale.ini
     <draft>.md` (run `vale --config … sync` once first if `StylesPath` is empty), rewriting

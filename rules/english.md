@@ -1,14 +1,13 @@
 ---
-paths: "**/*"
+paths: "**/*", "*"
 ---
 
 # English Rules
 
 Every word we emit: chat replies, artifact pages, PR bodies, issue text, commit messages,
 code comments, agent briefs, error strings. Adapted from ASD-STE100 Simplified Technical
-English (Issue 9), the controlled language the aerospace industry wrote so a technician
-cannot misread a maintenance instruction. Our reader sits in the same seat — no
-back-channel, no follow-up question. Write for one reading.
+English (Issue 9), the aerospace standard for instructions a technician cannot misread.
+Our reader has no back-channel either. Write for one reading.
 
 Two faults break one reading: a word with more than one meaning, and a sentence with more
 than one possible structure. Every rule below removes one of them.
@@ -16,7 +15,9 @@ than one possible structure. Every rule below removes one of them.
 ## Words
 
 - **One word, one meaning.** Give a concept one word and use that word everywhere. Never
-  use one word for two concepts. A `gate` is the CI check, and it is nothing else.
+  use one word for two concepts. A `slice` is the vertical unit of work, and nothing else.
+- **Concrete nouns.** Name the real thing. `functionality`, `capability`, and `solution`
+  name nothing.
 - **The commonest word wins.** `use`, not `utilize`. `about`, not `regarding`. `start`, not
   `initiate`. Take the short common word before the formal one.
 - **Approved terms are the names already in the tree** — `slice`, `unit`, `package`,
@@ -52,7 +53,8 @@ STE restricts verb forms, because a compound tense hides who acts and when.
 
 ## Sentences
 
-- **20 words** is the cap for an instruction. **25 words** is the cap for description.
+- **20 words** is the cap for an instruction — a sentence that tells someone to act.
+  **25 words** is the cap for every other sentence.
 - **One instruction per sentence.** Two actions are two sentences.
 - **Three words is the cap for a noun cluster.** "prompt lint check" reads. "prompt lint
   check failure report" is not a phrase, it is a puzzle.
@@ -83,8 +85,8 @@ A picture earns its place when it shows what prose must spell out slowly.
 | numbers carry the argument | |
 
 A picture shows the real mechanism, with the real names from the tree. A decorative
-diagram costs a read and returns nothing, so it is worse than no diagram. The
-`artifact-diagramming` and `dataviz` skills own how to draw one.
+diagram costs a read and returns nothing, so it is worse than no diagram. When the
+`artifact-diagramming` or `dataviz` skills are available, they own how to draw one.
 
 ## Where these rules stop
 

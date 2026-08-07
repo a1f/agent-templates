@@ -41,7 +41,7 @@ a time, concrete options) — otherwise skip when context is rich.
 **Write it tight:**
 
 - One screen. Cut anything that doesn't change a decision.
-- The `english` rule holds on every line — it loads each session, so you already have it. Cut all hedging.
+- The `english` rule governs every line — it loads each session, so you already have it. Cut all hedging.
 - Tables and bullets over paragraphs. A PRD is scanned, not read: this is the one document where a list beats prose.
 - Only what was discussed or confirmed — invent nothing.
 - No file paths or code; they rot. Rare exception: a tiny snippet that nails a decision — a type, a schema.
