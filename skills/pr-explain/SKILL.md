@@ -1,6 +1,6 @@
 ---
 name: pr-explain
-description: Use when the user invokes /pr-explain or wants a reader-facing explainer page for a pull request — a plain-words page with five chapters (what & why, a walkthrough of the whole diff, every test enumerated, a scored proof, and confirm commands run with their real output), published as a private claude.ai artifact with a teaser in the PR body.
+description: Use when the user invokes /pr-explain or wants a reader-facing explainer page for a pull request. It is a plain-words page with five chapters. They are: what & why, a walkthrough of the whole diff, every test enumerated, a scored proof, and confirm commands run with their real output. It is published as a private claude.ai artifact with a teaser in the PR body.
 argument-hint: "[#N | PR URL | blank = current branch's PR] [--confirmed \"<what you saw>\"]"
 ---
 
@@ -20,8 +20,8 @@ Three rules run through the whole page:
 - **The whole diff.** Every change in the PR is either shown and explained or named in a
   roll-up line. A reader who finishes the walkthrough has seen the change — never two
   excerpts from a hundred-line diff.
-- **Proof is scored, not asserted.** Output on the page is output you captured, and every
-  piece of it sits on the ladder below carrying its points — so a reader sees at a glance
+- **Proof is scored, not asserted.** Output on the page is output you captured. Every
+  piece of it sits on the ladder below, carrying its points. A reader sees at a glance
   whether this change was watched working or merely compiled. "All tests passed" is the
   weakest sentence on the page, never the proof.
 
@@ -51,11 +51,11 @@ Three rules run through the whole page:
 
 ## The page — five chapters
 
-The shape follows what the big open-source repos converged on for PR descriptions —
-Kubernetes ("what this PR does / why we need it"), Google's CL guide (a standalone
-imperative first line), React ("the exact commands you ran and their output") — retold in
-plain words. Each chapter answers one question. A budget is a ceiling, not a target; drop
-an empty chapter, never pad it.
+The shape follows what the big open-source repos converged on for PR descriptions,
+retold in plain words. Kubernetes gives "what this PR does / why we need it", Google's
+CL guide a standalone imperative first line, React "the exact commands you ran and
+their output". Each chapter answers one question. A budget is a ceiling, not a target;
+drop an empty chapter, never pad it.
 
 | # | Chapter | The question it answers | Budget |
 |---|---------|-------------------------|--------|
@@ -69,8 +69,8 @@ Prose scales with the diff: chapters 1, 4, and 5 keep fixed budgets; the walkthr
 one note per hunk and the test list one line per test. Code, diffs, trees, command blocks,
 captured output, and test names never count as prose. Each diff or command block caps at
 12 lines — trim to the lines that carry the decision. A tiny PR with no behavior (docs, a
-version bump, one-line config) shrinks to Chapter 1, a one-line tree, and Chapter 5 — no
-forced tests or proof; log the shrink and its reason in the report.
+version bump, one-line config) shrinks to Chapter 1, a one-line tree, and Chapter 5.
+Force no tests or proof there; log the shrink and its reason in the report.
 
 ## The proof ladder
 
@@ -111,19 +111,20 @@ may not be the one you were asked about. `--json files` gives every touched path
 `additions`/`deletions`; that list builds the Chapter 2 tree.
 
 - **The why (Chapter 1)**: read the issue or PRD the PR body references (`Closes #N` /
-  `Refs #N`; prefer `Closes`, first match) with `gh issue view <N> --json title,body` (this
-  repo needs `--json`, a bare `gh issue view` errors on classic project cards). The reason
+  `Refs #N`; prefer `Closes`, first match). Use `gh issue view <N> --json title,body` —
+  this repo needs `--json`, and a bare `gh issue view` errors on classic project cards. The reason
   comes from there — the slice/PR row the body names, else the issue's headline problem — not
   from the diff. Nothing referenced → derive it from the PR body and diff, and say so on the
   page.
 - **Evidence (Chapters 3-4)**: slug the head branch (`/` and whitespace → `_`) and read
   `<target_repo>/.v1-runs/evidence/<slug>/evidence.json` — the make-pr / make-pr-lite handoff.
-  It carries `behaviors[]` (each with a RED and a GREEN witness), `gates[]` (real gate numbers
-  from the run), and `runtime[]` — the ladder rows the pipeline already captured, each with its
-  `kind`, the `cmd` behind it, and a `path` into that dir or verbatim `key_output`. Chapters 3
-  and 4 quote it verbatim: the RED witness carries the failure reason, the GREEN witness what
-  made it pass plus `+<lines_added>`, the gates collapse into the ladder's one 2-point row, and
-  each `runtime[]` entry scores its own row. **Never invent evidence.** Rows the handoff does
+  It carries `behaviors[]` (each with a RED and a GREEN witness) and `gates[]` (real gate
+  numbers from the run). It also carries `runtime[]`, the ladder rows the pipeline
+  already captured. Each one has its `kind`, the `cmd` behind it, and a `path` into that
+  dir or verbatim `key_output`. Chapters 3 and 4 quote it verbatim. The RED witness carries the
+  failure reason, the GREEN witness what made it pass plus `+<lines_added>`. The gates
+  collapse into the ladder's one 2-point row, and each `runtime[]` entry scores its own
+  row. **Never invent evidence.** Rows the handoff does
   not carry are rows Phase 3 climbs itself, or leaves unlit.
 
 ## Phase 2 — Understand (before writing a word)
@@ -134,8 +135,8 @@ may not be the one you were asked about. `--json files` gives every touched path
    `__tests__`, `.test.`, `.spec.`, or lives under `tests/`). Production files drive Chapter 2;
    test files drive Chapter 3.
 3. **Take the hunk inventory.** List every hunk in `gh pr diff` (each `@@` block). Classify
-   each: a **decision** hunk changes behavior, an interface, or logic — anything you would
-   pause on while pair-programming; a **mechanical** hunk is imports, re-exports, wiring,
+   each. A **decision** hunk changes behavior, an interface, or logic — anything you would
+   pause on while pair-programming. A **mechanical** hunk is imports, re-exports, wiring,
    formatting, renames, lockfiles. Every decision hunk becomes a walkthrough entry with its
    own diff lines and note. Mechanical hunks roll up into one named line per file ("plus the
    import and route registration"). Shown or named — those are the only two options; a hunk
@@ -146,7 +147,7 @@ may not be the one you were asked about. `--json files` gives every touched path
 5. **Take the test inventory.** For every test file in the diff, list each added or changed
    test by its name in the code. Each becomes one Chapter 3 line.
 6. **Build the tree** (Chapter 2): the touched subtree only. Group touched files under their
-   folders; show a touched file with a `●`, its name in bold, and `+adds −dels`; mark test
+   folders. Show a touched file with a `●`, its name in bold, and `+adds −dels`. Mark test
    files with a `test` tag and give them no callout. Add a couple of untouched siblings, dimmed
    with `·`, only when they help the reader place the change — do not print the whole folder.
    Cap the tree around 20 rows.
@@ -155,18 +156,18 @@ may not be the one you were asked about. `--json files` gives every touched path
    contain a touched file. Same strip, same order, every PR — it orients the reader in the
    whole repo without printing it.
 8. **Spot what a person sees.** Not "does the diff touch a template" — *after this merges,
-   does anything a human looks at come out different?* A page, a TUI, a chart, an email body,
-   the shape of a CLI's output, or a rendered view of data this PR changes even when the
-   rendering file is untouched: a board that now lists 3 rows where it listed 48 has changed
-   visibly, and "the page is untouched" is no excuse. Yes → Chapter 4 owes a screenshot of it
+   does anything a human looks at come out different?* Candidates: a page, a TUI, a chart,
+   an email body, the shape of a CLI's output, or a rendered view of data this PR changes.
+   That holds even when the rendering file is untouched. A board that now lists 3 rows where
+   it listed 48 has changed visibly, and "the page is untouched" is no excuse. Yes → Chapter 4 owes a screenshot of it
    running on this branch, and the before/after pair is there for the taking. Plan now how
    Phase 3 captures both.
 
 ## Phase 3 — Run (climb the ladder)
 
 Before writing, run the change. Everything here executes in the target repo, on the PR's
-head; capture output verbatim for Chapters 4 and 5. Get the artifact running first — four of
-the rows below reuse that one instance — then work down them until the score clears 30, and
+head; capture output verbatim for Chapters 4 and 5. Get the artifact running first, because
+four of the rows below reuse that one instance. Then work down them until the score clears 30, and
 take every row still cheap to reach after that.
 
 - **Drive the built artifact end to end** (10). Build it, boot it, and put a real request
@@ -184,7 +185,7 @@ take every row still cheap to reach after that.
   prove the server answered; only a picture proves a person sees it. Genuinely cannot launch
   it here → a gap Chapter 4 declares, never a step to skip.
 - **Write the replay** (15). Fold the end-to-end run into one command anyone can paste — a
-  `docker run` on a pinned image, or a script committed in the repo — and run it once from
+  `docker run` on a pinned image, or a script committed in the repo. Run it once from
   clean to confirm it reproduces. Deterministic or it does not score: pin the image, seed
   fixed data, and keep clocks, ports, and paths out of the compared output.
 - **Break it on purpose** (10). `git checkout <base> -- <the production file>`, re-run the one
@@ -229,7 +230,7 @@ Three moves, in order, nothing else:
   the PR by this line.
 - **One or two sentences of why** — what was missing or broken, and why now. From the issue
   or PRD, not the diff.
-- **Goals** — two to four short bullets, each an outcome that is true after merge and
+- **Goals** — two to four short bullets. Each is an outcome that is true after merge and
   checkable on this page (by a walkthrough hunk, a test line, or a run).
 
 Example shape (not words to copy):
@@ -256,7 +257,7 @@ per-file callouts stay — they are the index; the hunks are the walkthrough.
 ### Chapter 3 — The tests
 
 Enumerate, then witness. First the list: every test from the inventory, grouped under its
-file, one line each — the test's name from the code plus ≤ 14 plain words of what it checks.
+file, one line each. A line is the test's name from the code plus ≤ 14 plain words of what it checks.
 No test in the diff is left off the list. Then the RED → GREEN story from the witnesses,
 verbatim from the evidence file. No evidence file → the list stands alone and the page says
 the witnesses are absent.
@@ -265,32 +266,32 @@ the witnesses are absent.
 
 Score the ladder, then show the evidence — **the evidence itself, in this chapter**. Chapter 5
 is what the *reader* can paste; Chapter 4 is what *ran*, and a sentence reporting that a run
-happened is not that run. So the strong rows carry their artifact here: the screenshot embeds,
+happened is not that run. So the strong rows carry their artifact here. The screenshot embeds,
 the before/after prints as two labelled blocks, and the replay prints as the one command with
-the output it produced here — Chapter 5 then points back at it rather than printing it twice.
+the output it produced. Chapter 5 then points back at it rather than printing it twice.
 
 Open with the score (`the proof — 62 / 100`). Then one `.rung` per ladder row, in ladder
 order, each earned row carrying its real number and the command behind it. **Rows you did not
-earn stay on the page, unlit, with their points** — an unlit "before and after · 25" tells the
+earn stay on the page, unlit, with their points.** An unlit "before and after · 25" tells the
 reader what was not done, which is the whole reason the ladder is visible. The gates collapse
 into their single 2-point row, chips and all; a red CI check chips `fail`. Numbers claimed
 only in the PR body appear attributed in prose ("PR body reports: pytest 161 passed"), never
 as a scored row.
 
 **The bar is hard.** Under 30 on a PR with behavior → the chapter opens with the
-`.short-proof` banner naming the score and the cheapest unlit row, and a ⚠ carries into the
+`.short-proof` banner, naming the score and the cheapest unlit row. A ⚠ carries into the
 teaser and the report. Nothing ran at all → the `.no-proof` verdict instead, verbatim: *"No
 proof exists: nothing was run to show this change works. A PR whose proof cannot be written
 had nothing to prove — that is a finding about the PR, not this page."* Never light a row you
 did not earn: a page that scores 7 honestly is worth more than one that lies to clear 30.
 
-**The top row is yours alone.** The owner row renders on every page — unlit and explicit ("you
-have not run this yourself yet") unless this run was given `--confirmed`, in which case it
-carries the quoted words and today's date. Never fill it from a PR comment, a review approval,
+**The top row is yours alone.** The owner row renders on every page. It is unlit and explicit
+("you have not run this yourself yet") unless this run was given `--confirmed`. Given that
+flag, it carries the quoted words and today's date. Never fill it from a PR comment, a review approval,
 or something said in chat.
 
 **A visible change needs a picture.** Phase 2 spotted a visible surface → at least one Phase 3
-screenshot of it running embeds here (`img.evidence`, `data:` URI), each with a one-line
+screenshot of it running embeds here (`img.evidence`, `data:` URI). Each carries a one-line
 `.evidence-cap` caption naming what the reader is looking at. Rows about the surface — curl
 status, byte counts, grep hits — do not substitute. No screenshot → the chapter says which
 surface shipped unseen and why, and the same ⚠ carries into the teaser and the report.
@@ -351,16 +352,16 @@ The draft leaves Phase 4 only after both gates. Run them in order:
   `.note` classes exactly as the SLOT comment shows; indent rows with `l1`/`l2`/`l3`. A callout
   is a `.note` row directly under its file.
 - **The walkthrough**: one `.hunk-head` + `.diff` + `.diff-note` group per decision hunk;
-  roll-ups are a `.diff-note` alone. Diff lines read like an editor: every token wears its
-  syntax color (`tok-kw`, `tok-fn`, `tok-str`, `tok-num`, `tok-type`, `tok-com`), added and
+  roll-ups are a `.diff-note` alone. Diff lines read like an editor. Every token wears its
+  syntax color (`tok-kw`, `tok-fn`, `tok-str`, `tok-num`, `tok-type`, `tok-com`). Added and
   deleted lines open with a `.sign` `+`/`−`, and the red/green lives in the line background
   and sign — never in the code text.
 - **The test list**: `.testlist` with a `.tfile` row per file and a `.trow` per test.
-- **The ladder**: `.score` with the total and its `.bar`, then one `.rung` per row — earned
+- **The ladder**: `.score` with the total and its `.bar`, then one `.rung` per row. Earned
   rows carry `.pts`, `.what`, and a `.how` naming the command; unearned rows carry the same
-  three with `class="rung unlit"`. Evidence hangs under the row it scores: the screenshot as
-  `img.evidence` + `.evidence-cap`, the before/after as two `.cmd` blocks each opened by a
-  `.ba-label`, the replay and the run output as one `.cmd` block each.
+  three with `class="rung unlit"`. Evidence hangs under the row it scores. The screenshot goes
+  as `img.evidence` + `.evidence-cap`. The before/after goes as two `.cmd` blocks each opened
+  by a `.ba-label`. The replay and the run output go as one `.cmd` block each.
 - **Staleness check, on the built file, before Phase 6.** An installed template that lags the
   repo drops whole rule sets silently — the page still validates, and only these greps catch it.
   A stale template is never hand-patched: rebuild from the repo's
@@ -419,12 +420,17 @@ explainer`.
 
 ## Report
 
-End with: the artifact URL; hunks shown / rolled up / total; tests enumerated; commands run
-vs marked not-run; **the proof score out of 100, the rows you lit, and the cheapest unlit row
-with what it would have taken** (plus the ⚠ flag when under the bar or nothing ran);
-screenshots embedded, or the visible surface that shipped unseen and why (⚠); chapters
-emitted vs dropped (with the tiny-PR shrink reason if used); the PR whose teaser you
-updated; the mechanical gate result (coverage greps, Vale alerts fixed, or "vale
-unavailable — wc + grep only"); the staleness check (tokens and ladder present, or the stale
-template you rebuilt from); and the critic score — naming any dimension left under the bar when
-the page shipped flagged.
+End with one line each:
+
+- The artifact URL.
+- Hunks shown / rolled up / total, and tests enumerated.
+- Commands run vs marked not-run.
+- **The proof score out of 100, the rows you lit, and the cheapest unlit row with what it
+  would have taken.** Add the ⚠ flag when under the bar or nothing ran.
+- Screenshots embedded, or the visible surface that shipped unseen and why (⚠).
+- Chapters emitted vs dropped, with the tiny-PR shrink reason if used.
+- The PR whose teaser you updated.
+- The mechanical gate result: coverage greps, Vale alerts fixed, or "vale unavailable —
+  wc + grep only".
+- The staleness check: tokens and ladder present, or the stale template you rebuilt from.
+- The critic score, naming any dimension left under the bar when the page shipped flagged.

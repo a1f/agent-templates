@@ -74,8 +74,8 @@ Show the draft in chat. Wait for an OK or edits. **Don't publish until approved.
 
 ## Phase 5 — Publish
 
-Write the approved body to a temp file (dodges shell-escaping), drop an unknown
-label so the create can't fail on it, then print one parseable line:
+Write the approved body to a temp file, which dodges shell-escaping. Drop an unknown
+label so the create can't fail on it. Then print one parseable line:
 
 ```bash
 TITLE="..."; LABEL="${LABEL-Plan}"; BODY=$(mktemp)
