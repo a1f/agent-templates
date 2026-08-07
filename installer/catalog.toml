@@ -28,10 +28,6 @@ name = "explain"
 
 [[units]]
 kind = "skill"
-name = "grill-me"
-
-[[units]]
-kind = "skill"
 name = "improve-architecture"
 
 [[units]]
