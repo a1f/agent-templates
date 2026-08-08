@@ -1,6 +1,6 @@
 ---
 name: explain
-description: Use when the user wants a dead-simple, plain-words explanation of a slice or a PR — why we need it, what it is, what changes — or invokes /explain.
+description: Use when the user wants a dead-simple, plain-words explanation of a slice or a PR. It answers why we need it, what it is, and what changes. Also use when the user invokes /explain.
 ---
 
 # Explain
@@ -28,8 +28,8 @@ Resolve `<id>` in this order:
    `gh pr view --json title,body`).
 2. **`#92` or `PR 92`** → a GitHub PR. `gh pr view 92 --json title,body,files`;
    take the "why" from its body (no such PR → ask). Go to Phase 3.
-3. **A bare or dotted number** → open the plan issue (`gh issue view <N> --json body`)
-   and match the id *whole* against both tables; the table it sits in decides — **PR
+3. **A bare or dotted number** → open the plan issue (`gh issue view <N> --json body`).
+   Match the id *whole* against both tables. The table it sits in decides: **PR
    breakdown** → PR row, **slice** table → slice (including a hand-inserted `4.5`).
    Whole-cell, so `4.2` ≠ `14.2`.
 4. **No single match** → a whole number may be a GitHub PR; confirm "Did you mean PR
@@ -66,17 +66,14 @@ If the source is too thin for a real "why", say so and ask for one sentence of i
 
 ### The voice
 
-- Commonest words. If a code word is the only fit (symlink, hash, CI), say what it
-  does in plain words right after — once.
-- Short sentences. One idea each.
-- Active voice. "It checks the files," not "the files are checked."
-- Talk to the reader: "you", "your".
-- Concrete nouns. Name the real thing — not "functionality."
-- No wind-up. Start with the point.
+The `english` rule governs every word — it loads each session, so you already have it.
+Two additions this skill owns:
 
-**Banned words:** leverage, robust, seamless, comprehensive, powerful, streamline,
-utilize, facilitate, ensure, delve, furthermore, moreover, "in order to", "it's
-worth noting", "game-changer", "not only… but also".
+- If a code word is the only fit (symlink, hash, CI), say what it does in plain words
+  right after — once.
+- Talk to the reader: "you", "your".
+
+Read the draft against the rule before you print it, and fix what it catches.
 
 Under ~150 words. Plain paragraphs — no bullets or emoji. Print it in chat; post it
 to the PR or issue only if they ask.

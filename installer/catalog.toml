@@ -110,6 +110,10 @@ name = "design-principles"
 
 [[units]]
 kind = "rule"
+name = "english"
+
+[[units]]
+kind = "rule"
 name = "python"
 
 [[units]]
@@ -133,6 +137,8 @@ name = "ruff-format"
 # extras = source-relative paths (files or dirs) to the runtime support files a
 # skill reads — schemas, gates, helper scripts — staged with the units so an
 # install is self-contained.
+# rule/english rides in every package on purpose. It governs the words every skill
+# emits, so a user who installs one package still gets the voice.
 [[packages]]
 name = "architect-pr"
 units = [
@@ -142,6 +148,7 @@ units = [
   "agent/reviewer",
   "agent/critic",
   "rule/design-principles",
+  "rule/english",
   "rule/tdd",
 ]
 extras = ["schemas", "gates", "scripts/validate_return.py", "rules"]
@@ -154,6 +161,7 @@ units = [
   "agent/reviewer",
   "agent/critic",
   "rule/design-principles",
+  "rule/english",
   "rule/tdd",
 ]
 extras = ["schemas", "gates", "scripts/validate_return.py", "rules"]
@@ -162,7 +170,7 @@ extras = ["schemas", "gates", "scripts/validate_return.py", "rules"]
 # rule, composed in via the rules extra rather than a bundled in-skill copy.
 [[packages]]
 name = "improve-architecture"
-units = ["skill/improve-architecture", "rule/design-principles"]
+units = ["skill/improve-architecture", "rule/design-principles", "rule/english"]
 extras = ["rules"]
 
 [[packages]]
@@ -173,6 +181,7 @@ units = [
   "skill/to-issues",
   "skill/pr-breakdown",
   "skill/course-correct",
+  "rule/english",
 ]
 
 # pr-breakdown publishes a PR-map artifact from the issue's PR table; its page skeleton
@@ -182,7 +191,7 @@ units = [
 # installed without it. The planning bundle pulls this in so the flagship path ships it.
 [[packages]]
 name = "pr-breakdown"
-units = ["skill/pr-breakdown"]
+units = ["skill/pr-breakdown", "rule/english"]
 extras = ["templates/pr-breakdown-map.html"]
 
 [[packages]]
@@ -194,6 +203,7 @@ units = [
   "skill/pr-make-till-merge",
   "skill/latest-rebase",
   "skill/shipped",
+  "rule/english",
 ]
 
 # pr-explain publishes a per-PR explainer page; its page skeleton ships as a package
@@ -202,7 +212,7 @@ units = [
 # the page skeleton; both degrade gracefully when absent.
 [[packages]]
 name = "pr-explain"
-units = ["skill/pr-explain"]
+units = ["skill/pr-explain", "rule/english"]
 extras = ["templates/pr-explain-page.html", "templates/pr-explain.vale.ini"]
 
 # dispatch fans a plan's ready PRs out into parallel tmux windows; the mechanics live in
@@ -211,7 +221,7 @@ extras = ["templates/pr-explain-page.html", "templates/pr-explain.vale.ini"]
 # that reads it.
 [[packages]]
 name = "dispatch"
-units = ["skill/dispatch"]
+units = ["skill/dispatch", "rule/english"]
 extras = ["scripts/dispatch"]
 
 # --- bundles (provisional) ---
