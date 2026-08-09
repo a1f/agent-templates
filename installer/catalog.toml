@@ -72,6 +72,10 @@ name = "shipped"
 
 [[units]]
 kind = "skill"
+name = "to-dd"
+
+[[units]]
+kind = "skill"
 name = "to-issues"
 
 [[units]]
@@ -178,6 +182,7 @@ name = "breakdown"
 units = [
   "skill/breakdown",
   "skill/to-prd",
+  "skill/to-dd",
   "skill/to-issues",
   "skill/pr-breakdown",
   "skill/course-correct",
@@ -193,6 +198,15 @@ units = [
 name = "pr-breakdown"
 units = ["skill/pr-breakdown", "rule/english"]
 extras = ["templates/pr-breakdown-map.html"]
+
+# to-dd fills a design-doc page from the conversation; its skeleton ships as a package
+# extra so an install is self-contained. A dedicated single-skill package carries the
+# extra (like pr-breakdown and pr-explain) so the multi-skill breakdown package above
+# stays extra-free; the skill falls back to the repo copy when installed without it.
+[[packages]]
+name = "to-dd"
+units = ["skill/to-dd", "rule/english"]
+extras = ["templates/design-doc.html"]
 
 [[packages]]
 name = "pr-ops"
@@ -231,4 +245,4 @@ packages = ["architect-pr", "lite-pr"]
 
 [[bundles]]
 name = "planning"
-packages = ["breakdown", "pr-breakdown"]
+packages = ["breakdown", "to-dd", "pr-breakdown"]
