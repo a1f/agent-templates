@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Count the comment lines against the code lines a unified diff adds.
 
-The comment-reviewer agent runs this so its density number is measured, not estimated:
+Read the diff on stdin:
     git diff <base>...HEAD -U0 | uv run --no-project python comment_density.py
 """
 
