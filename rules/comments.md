@@ -6,8 +6,10 @@ paths: "**/*.py", "**/*.ts", "**/*.tsx", "**/*.rs", "**/*.go", "**/*.java", "**/
 
 What a comment may say, how long it may be, and where the rest of the reasoning goes.
 `design-principles.md` says a comment carries what the code cannot. This file says how much,
-because "carry the why" read alone produces a paragraph on every line. The coder writes to
-this file; the `comment-reviewer` agent scores against it.
+because "carry the why" read alone produces a paragraph on every line. Adapted from Ousterhout
+ch. 13, the Google style guides, and Anthropic's own coder guidance: state a constraint the
+code cannot show, never why your change is correct. The coder writes to this file; the
+`comment-reviewer` agent scores against it.
 
 ## The two comments always allowed
 
@@ -16,8 +18,8 @@ this file; the `comment-reviewer` agent scores against it.
 2. **The interface comment** on a public function, class, or module (the docstring, JSDoc,
    `///`). One sentence: what the caller gets, and why it exists when the name does not say.
    A second sentence only for a contract the signature and names cannot carry: a precondition,
-   the one error the caller must handle, an ordering guarantee, a side effect. Three lines is
-   the cap.
+   an error the body raises and the caller must handle, an ordering guarantee, a side effect.
+   Three lines is the cap.
 
 Every other comment is an **inline comment**, and an inline comment must earn its place.
 
@@ -26,7 +28,9 @@ Every other comment is an **inline comment**, and an inline comment must earn it
 Ask: **would a competent reader change this line wrongly without the comment?** If yes, write
 one line that names the constraint. If no, write nothing. The code says what it does. The
 names and types say what things are. The test says what must hold. The commit message and PR
-body say why the change was made. A comment repeats none of them.
+body say why the change was made. A comment repeats none of them. If a function needs a
+comment above each block, extract the blocks (the phased function in `design-principles.md`)
+instead of narrating them.
 
 ## Where the reasoning goes
 
@@ -53,9 +57,10 @@ and it does not defend the design.
 
 | Shape | What it looks like | Do this |
 |---|---|---|
-| **essay** | a docstring that walks through every failure mode or every decision | cut to the one-sentence contract; the rest goes to the PR body |
+| **essay** | a docstring that walks through every failure mode or every decision, or a comment that illustrates a constraint with the concrete case that taught it | cut to the one-sentence contract or the one-line constraint; the story goes to the PR body |
 | **defense** | a comment that argues the code is right, as a reply to a review that already happened | cut the argument; if a constraint hides in it (a security assumption, an ordering, an invariant), keep that as the one line |
 | **echo** | an inline comment that repeats the docstring, the commit message, or the test name | delete the copy |
+| **breadcrumb** | written about the change or the task, not the code: "added for", "used by X", "now", "previously", "per issue #123", "for a later slice" | delete; the PR body carries it |
 | **alternative history** | describes what the code does *not* do ("a Mount would instead …") | one clause naming the choice, or delete |
 | **restatement** | says what the next line plainly says | delete |
 | **emphasis** | CAPS, *italics*, "hence", "which is exactly how" | delete the emphasis; keep the fact if there is one |

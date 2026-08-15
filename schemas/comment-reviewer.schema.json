@@ -28,7 +28,7 @@
         "required": ["location", "shape", "action", "quote", "fix"],
         "properties": {
           "location": { "type": "string" },
-          "shape": { "enum": ["essay", "defense", "echo", "alternative", "restatement", "emphasis", "stale", "missing", "oversize"] },
+          "shape": { "enum": ["essay", "defense", "echo", "breadcrumb", "alternative", "restatement", "emphasis", "stale", "missing", "oversize"] },
           "action": { "enum": ["cut", "shorten", "move", "rewrite", "add"] },
           "quote": { "type": "string" },
           "fix": { "type": "string" }

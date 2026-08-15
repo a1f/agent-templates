@@ -38,9 +38,9 @@ empty `findings`, and a `summary` that says the base ref was missing.
    an interface comment states the contract in one sentence, three lines at most; an inline
    comment names one constraint in one line, two at most, and passes the test — a reader would
    change the line wrongly without it. Name the slop shape from the rule's table (`essay`,
-   `defense`, `echo`, `alternative`, `restatement`, `emphasis`, `stale`), `oversize` for a
-   sound comment past its line cap, or `missing` for a public interface whose non-obvious
-   contract has no interface comment.
+   `defense`, `echo`, `breadcrumb`, `alternative`, `restatement`, `emphasis`, `stale`),
+   `oversize` for a sound comment past its line cap, or `missing` for a public interface whose
+   non-obvious contract has no interface comment.
 3. **Write the fix, not a request for one.** Each finding's `fix` is the exact replacement text
    the coder pastes in — the shortened sentence, the one-line constraint — or the word `delete`.
    Quote the comment's first line in `quote` so the coder finds it. When a comment mixes a
@@ -54,14 +54,16 @@ empty `findings`, and a `summary` that says the base ref was missing.
    | stale | 20 |
    | essay, defense | 15 |
    | missing | 10 |
-   | echo, alternative, restatement | 8 |
+   | echo, breadcrumb, alternative, restatement | 8 |
    | emphasis, oversize | 5 |
 
    Then subtract for density: 10 when comment lines pass one third of code lines, 25 when
    they pass code lines. A diff that adds no comments and needs none scores 100.
 
 Do not pad. A clean diff returns an empty `findings` array and a high score. Do not reward a
-comment for being true: the ten true lines cut from the rule's BAD example still cost 15 points.
+comment for being true or thorough — a model judge leans toward the longer explanation, and
+this review exists to lean the other way: the ten true lines cut from the rule's BAD example
+still cost 15 points.
 
 ## Verdict
 
@@ -75,8 +77,8 @@ Return exactly one JSON object, with no markdown fence and no prose — **fill t
 do not add, rename, or drop required keys.** The authoritative schema is
 `schemas/comment-reviewer.schema.json`; the architect validates your return against it. The
 schema enforces `verdict` against its score band, so if they disagree, adjust the score, never
-the mapping. Allowed `shape` values: `essay`, `defense`, `echo`, `alternative`, `restatement`,
-`emphasis`, `stale`, `missing`, `oversize`. Allowed `action` values: `cut`, `shorten`, `move`,
+the mapping. Allowed `shape` values: `essay`, `defense`, `echo`, `breadcrumb`, `alternative`,
+`restatement`, `emphasis`, `stale`, `missing`, `oversize`. Allowed `action` values: `cut`, `shorten`, `move`,
 `rewrite`, `add`.
 
 ```json
