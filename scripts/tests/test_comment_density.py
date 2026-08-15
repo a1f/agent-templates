@@ -1,5 +1,3 @@
-"""Tests for the comment-density counter the comment-reviewer runs on a diff."""
-
 from __future__ import annotations
 
 import io
@@ -49,6 +47,24 @@ diff --git a/src/cart.ts b/src/cart.ts
 """
 
 
+LITERAL_DIFF: Final[str] = """\
+diff --git a/app/fixture.py b/app/fixture.py
+--- a/app/fixture.py
++++ b/app/fixture.py
+@@ -0,0 +1,4 @@
++SAMPLE: Final[str] = \"\"\"\\
++first line
++second line
++\"\"\"
+"""
+
+
+def test_a_string_literal_assigned_to_a_name_is_code_not_a_docstring() -> None:
+    density: Density = count_density(diff=LITERAL_DIFF)
+    assert density.comment_lines_added == 0
+    assert density.code_lines_added == 4
+
+
 def test_slash_and_block_comments_count_in_c_style_languages() -> None:
     # A trailing `// ...` on a code line stays a code line.
     density: Density = count_density(diff=TS_DIFF)
@@ -63,3 +79,9 @@ def test_cli_prints_the_density_as_json(
     main()
     printed: dict[str, int] = json.loads(capsys.readouterr().out)
     assert printed == {"comment_lines_added": 4, "code_lines_added": 3}
+
+
+def test_any_diff_prefix_is_accepted() -> None:
+    # `diff.mnemonicPrefix` (i/ w/ c/) changes the header, not the count.
+    density: Density = count_density(diff=PYTHON_DIFF.replace("+++ b/", "+++ w/"))
+    assert density.comment_lines_added == 4

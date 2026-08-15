@@ -21,7 +21,9 @@ _HASH_STARTS: Final[tuple[str, ...]] = (*_DOCSTRING_QUOTES, "#")
 _BLOCK_OPEN: Final[str] = "/*"
 _BLOCK_CLOSE: Final[str] = "*/"
 _LINE_COMMENT: Final[str] = "//"
-_FILE_HEADER: Final[str] = "+++ b/"
+_FILE_HEADER: Final[str] = (
+    "+++ "  # the a/ b/ i/ w/ prefix varies with git config; keep it
+)
 
 
 @dataclass(frozen=True)
@@ -31,16 +33,23 @@ class Density:
 
 
 def _hash_comment_lines(*, added: list[str]) -> int:
-    """Lines that are `#` comments or lie inside a triple-quoted string."""
+    """Lines that are `#` comments or lie inside a docstring."""
     count: int = 0
     in_docstring: bool = False
+    in_literal: bool = False  # a triple-quoted string assigned to a name is code
     for line in added:
         stripped: str = line.strip()
         quote_hits: int = sum(stripped.count(quote) for quote in _DOCSTRING_QUOTES)
-        if in_docstring or stripped.startswith(_HASH_STARTS):
+        opens_docstring: bool = stripped.startswith(_DOCSTRING_QUOTES)
+        if in_docstring or (not in_literal and stripped.startswith(_HASH_STARTS)):
             count += 1
         if quote_hits % 2 == 1:
-            in_docstring = not in_docstring
+            if in_docstring or in_literal:
+                in_docstring = in_literal = False
+            elif opens_docstring:
+                in_docstring = True
+            else:
+                in_literal = True
     return count
 
 
@@ -60,8 +69,7 @@ def _slash_comment_lines(*, added: list[str]) -> int:
 
 
 def count_density(*, diff: str) -> Density:
-    """The added comment and code lines of a diff, so a reviewer scores a measured ratio
-    instead of an estimate."""
+    """The added comment and code lines of a diff."""
     added_by_file: dict[str, list[str]] = {}
     current: str = ""
     for line in diff.splitlines():
