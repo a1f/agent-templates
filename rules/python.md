@@ -122,7 +122,10 @@ Prefer functions over classes unless state is needed. If a method doesn't use `s
 
 ## Docstrings
 
-Single sentence explaining WHY the function exists, not WHAT it does. Do not include `Args:`, `Returns:`, or `Raises:` sections -- type hints and names should be self-documenting. Only write a module-level docstring if it adds info beyond the filename. Non-obvious preconditions, error modes, and side effects belong in a prose interface comment (see `design-principles.md`), not in structured docstring sections.
+One sentence: what the caller gets. Do not include `Args:`, `Returns:`, or `Raises:` sections --
+type hints and names are the documentation. Only write a module-level docstring if it adds info
+beyond the filename. Length, the test for an inline comment, and where the reasoning goes
+instead are in `comments.md`.
 
 ## Testing
 

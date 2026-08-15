@@ -1,6 +1,6 @@
 ---
 name: make-pr-lite
-description: Use when explicitly asked to run /make-pr-lite on an already-scoped, low-risk single-module PR. A cheaper alternative to /make-pr — one self-TDD coder, the language gates, then a parallel 3-reviewer panel and a critic, squashed to one commit. Not for feature decomposition, multi-module planning, or high-risk work (filesystem/state mutation, merge/refcount, destructive ops) — route those to /make-pr.
+description: Use when explicitly asked to run /make-pr-lite on an already-scoped, low-risk single-module PR. A cheaper alternative to /make-pr — one self-TDD coder, the language gates, then a parallel panel of 3 reviewers plus a comment-reviewer and a critic, squashed to one commit. Not for feature decomposition, multi-module planning, or high-risk work (filesystem/state mutation, merge/refcount, destructive ops) — route those to /make-pr.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
 allowed-tools: Read, Write, Bash, Agent, TodoWrite, Skill
@@ -41,8 +41,8 @@ guarantees that.)
 - **gates** — preflight: pick `~/.claude/at/gates/<lang>.json` by the task's language(s) /
   `allowed_paths`. After the coder runs, re-check against `git diff --name-only <base>...HEAD`. A
   changed language with no profile → stop and report.
-- **rules to pass** — always `design-principles.md`; `tdd.md` for behavioral work; the language
-  rule (`python.md`/`typescript.md`/`rust.md`) per changed file type.
+- **rules to pass** — always `design-principles.md` and `comments.md`; `tdd.md` for behavioral
+  work; the language rule (`python.md`/`typescript.md`/`rust.md`) per changed file type.
 
 ## Agents
 
@@ -50,16 +50,20 @@ guarantees that.)
 |---|---|---|
 | `coder-lite` | 1 (+ fix) | plan behaviors, self-TDD the whole PR, one commit |
 | `reviewer` | 3, parallel | the panel — each a focused lens-group |
+| `comment-reviewer` | 1, with the panel | scores the added comments against `comments.md`; each finding carries its replacement text |
 | `critic` | 1 (+1 on `partial`) | goal-fit: did the PR achieve the task? |
 
-Dispatch the **3 reviewers in one message** (parallel). **Then**, after they return, dispatch the
-**critic** — it needs their findings. Each reviewer gets the base ref (it runs
-`git diff <base>...HEAD` itself) and the absolute rule paths, with one lens-group emphasized (it
-still reports any CRITICAL it sees outside its group). The groups partition the reviewer's five
-lenses:
+Dispatch the **3 reviewers and the comment-reviewer in one message** (parallel). **Then**, after
+they return, dispatch the **critic** — it needs the reviewers' findings. Each reviewer gets the
+base ref (it runs `git diff <base>...HEAD` itself) and the absolute rule paths, with one
+lens-group emphasized (it still reports any CRITICAL it sees outside its group). The groups
+partition the reviewer's five lenses:
 1. **correctness + security** — lenses `bug`, `security`.
 2. **rules-conformance + test-form** — lenses `readability`, `test`.
 3. **quality** — lens `quality` (covers simplicity/reuse).
+
+The comment-reviewer gets the base ref, `comments.md`, `english.md`, the language rule, and the
+density script path `~/.claude/at/scripts/comment_density.py`.
 
 The critic gets the task spec, task type (`behavioral` if any slice has a test, else
 `non_behavioral`), base, diff, changed test files, the coder's per-behavior RED evidence, the green
@@ -104,15 +108,17 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    | the `test` gate red | `mode: fix` — behavioral regression |
    | any other gate red | `mode: fix` — mechanical; name the gate |
    | gate `setup` itself fails | stop and report (environment, not a coder bug) |
-5. **Panel + critic (judgment — once, on the green diff).** Dispatch the 3 reviewers (one message),
-   then the critic; read the returns directly. Each finding's `score` is severity (1–100, higher =
-   worse). **Deduplicate by `(file:line)`** (fall back to `(file:issue)` when a finding has no line),
-   keeping the highest-scoring per location. Then block if any row fires:
+5. **Panel + critic (judgment — once, on the green diff).** Dispatch the 3 reviewers and the
+   comment-reviewer (one message), then the critic; read the returns directly. Each reviewer
+   finding's `score` is severity (1–100, higher = worse). **Deduplicate by `(file:line)`** (fall
+   back to `(file:issue)` when a finding has no line), keeping the highest-scoring per location.
+   Then block if any row fires:
 
    | Condition | Result |
    |---|---|
    | any finding CRITICAL, `score >= 70`, or a reviewer's `has_critical` | block |
    | summed `score` of `50–69` findings `>= 120` | block (findings `< 50` are advisory, never aggregate) |
+   | comment-reviewer verdict `fix` or `rewrite` | block; its findings go to the coder verbatim |
    | critic verdict `not_achieved` | block |
    | critic verdict `partial` | dispatch one second critic; block only if it also returns `partial`/`not_achieved` |
 
@@ -122,12 +128,13 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    all blockers back as one batched `coder-lite` `mode: fix` (findings verbatim). After it lands:
    **always** re-run the gates; re-review the fix with the reviewer(s) whose lens-group covers each
    routed blocker, passing `<pre_fix>` as the diff base so they see only the fix's hunks
-   (`git diff <pre_fix>...HEAD`); re-run the critic **only if** the fix changed behavior or
-   coverage. One fix round (separate from step 4's budget); a second only if round 1 introduced a
+   (`git diff <pre_fix>...HEAD`); re-run the comment-reviewer on the **full** `<base>...HEAD`
+   diff when the round touched a comment (its density ratio only means something over the whole
+   diff); re-run the critic **only if** the fix changed behavior or coverage. One fix round (separate from step 4's budget); a second only if round 1 introduced a
    new blocker.
    Then Done, or escalate the remainder to the human as waive-or-rescope.
-7. **Done.** When all behaviors and gates are green, no CRITICAL / `>=70` / aggregate blocker, and
-   critic `achieved`. **Squash to one commit:**
+7. **Done.** When all behaviors and gates are green, no CRITICAL / `>=70` / aggregate blocker,
+   comment-reviewer `pass`, and critic `achieved`. **Squash to one commit:**
    `git reset --soft <base> && git commit -m "<conventional subject>"` (no AI attribution).
    Confirm only boundary files changed (`git diff --name-only <base>...HEAD`). Write the evidence
    handoff `<run_root>/evidence/<branch-slug>/evidence.json` (schema

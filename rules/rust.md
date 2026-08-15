@@ -98,8 +98,9 @@ sections where applicable:
 - `# Safety` — required on every `unsafe fn`; document the invariants the caller must uphold.
 
 Apply `#[must_use]` on constructors, builders, and fallible operations whose return value should
-not be silently dropped (the `must_use_candidate` clippy lint catches misses). Comments explain
-*why*, not *what*; promote a lingering `TODO` into a tracked issue rather than leaving it in code.
+not be silently dropped (the `must_use_candidate` clippy lint catches misses). Comment length and
+the test for an inline comment are in `comments.md`; promote a lingering `TODO` into a tracked
+issue rather than leaving it in code.
 
 ## Unsafe Discipline
 

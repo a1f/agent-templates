@@ -20,19 +20,20 @@ architect (the /make-pr skill, the driver)
   │                    reason)
   │
   ├─ gates      — uv run ruff/mypy/pytest · pnpm exec biome/tsc/vitest · cargo fmt/clippy/check/test  (hard fail, run first)
-  ├─ reviewer   — quality + bugs + security on the diff   (is the code good?)
-  └─ critic     — goal-fit on the task spec               (did it achieve the task?)
+  ├─ reviewer         — quality + bugs + security on the diff   (is the code good?)
+  ├─ comment-reviewer — the added comments against comments.md  (are the comments the rule allows?)
+  └─ critic           — goal-fit on the task spec               (did it achieve the task?)
 
   → objective gates run before the judges; one batched fix round, then re-verify in proportion
     to the change (gates always; scoped re-review; critic only on behavioral change)
-  → done only when: all behaviors green, gates green, no CRITICAL, no unwaived review finding ≥70, critic=achieved
+  → done only when: all behaviors green, gates green, no CRITICAL, no unwaived review finding ≥70, comment-reviewer=pass, critic=achieved
 ```
 
 `architect` is a **skill** (now invoked as `/make-pr`) called explicitly in the main loop
 (`disable-model-invocation: true`, so it never auto-triggers), which lets it orchestrate,
 collect results, and loop.
-`worker-coder` (the GREEN/REFACTOR/non-behavioral coder), `tdd-runner`, `reviewer`, `critic`
-are **agents** (isolated, scope-locked workers it dispatches via the Agent tool).
+`worker-coder` (the GREEN/REFACTOR/non-behavioral coder), `tdd-runner`, `reviewer`,
+`comment-reviewer`, `critic` are **agents** (isolated, scope-locked workers it dispatches via the Agent tool).
 
 ## Task contract
 
@@ -74,11 +75,11 @@ dependencies_allowed: false
 The workflow's pieces now live at the repo root (no longer under a `v1/` directory):
 
 - `skills/make-pr/SKILL.md` — the driver (this skill): orchestration loop, JSONL logging contract, decision rules
-- `agents/` — `worker-coder.md` (GREEN/REFACTOR/non-behavioral), `tdd-runner.md` (RED), `reviewer.md`, `critic.md`
+- `agents/` — `worker-coder.md` (GREEN/REFACTOR/non-behavioral), `tdd-runner.md` (RED), `reviewer.md`, `comment-reviewer.md`, `critic.md`
 - `schemas/` — authoritative return-shape contracts the architect validates against (`_defs` + one per role)
-- `scripts/` — `validate_return.py`, `check_prompt_schemas.py`, plus pyproject/tests; run via `uv`
+- `scripts/` — `validate_return.py`, `check_prompt_schemas.py`, `comment_density.py` (the comment-reviewer's measured comment/code ratio), plus pyproject/tests; run via `uv`
 - `gates/` — declarative hard gates: `python.json`, `typescript.json`, `rust.json`
-- `rules/` — `design-principles.md`, `tdd.md`, `python.md`, `typescript.md`, `rust.md`; resolved by the architect via `rules_root` and shipped into each project's `.claude/rules/` by the installer
+- `rules/` — `design-principles.md`, `comments.md`, `tdd.md`, `python.md`, `typescript.md`, `rust.md`; resolved by the architect via `rules_root` and shipped into each project's `.claude/rules/` by the installer
 - `runs/` — gitignored placeholder; real run logs go to `<target_cwd>/.v1-runs` (`run_root`)
 
 ## How quality is enforced (two layers)

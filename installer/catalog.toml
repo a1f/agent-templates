@@ -89,6 +89,10 @@ name = "coder-lite"
 
 [[units]]
 kind = "agent"
+name = "comment-reviewer"
+
+[[units]]
+kind = "agent"
 name = "critic"
 
 [[units]]
@@ -104,6 +108,10 @@ kind = "agent"
 name = "worker-coder"
 
 # --- rules (rules/<name>.md) ---
+[[units]]
+kind = "rule"
+name = "comments"
+
 [[units]]
 kind = "rule"
 name = "cpp"
@@ -150,12 +158,14 @@ units = [
   "agent/tdd-runner",
   "agent/worker-coder",
   "agent/reviewer",
+  "agent/comment-reviewer",
   "agent/critic",
+  "rule/comments",
   "rule/design-principles",
   "rule/english",
   "rule/tdd",
 ]
-extras = ["schemas", "gates", "scripts/validate_return.py", "rules"]
+extras = ["schemas", "gates", "scripts/validate_return.py", "scripts/comment_density.py", "rules"]
 
 [[packages]]
 name = "lite-pr"
@@ -163,12 +173,14 @@ units = [
   "skill/make-pr-lite",
   "agent/coder-lite",
   "agent/reviewer",
+  "agent/comment-reviewer",
   "agent/critic",
+  "rule/comments",
   "rule/design-principles",
   "rule/english",
   "rule/tdd",
 ]
-extras = ["schemas", "gates", "scripts/validate_return.py", "rules"]
+extras = ["schemas", "gates", "scripts/validate_return.py", "scripts/comment_density.py", "rules"]
 
 # improve-architecture audits a subsystem; its rubric is the canonical design-principles
 # rule, composed in via the rules extra rather than a bundled in-skill copy.

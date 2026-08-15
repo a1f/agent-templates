@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "comment-reviewer.schema.json",
+  "title": "Comment reviewer agent return",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "role", "score", "verdict", "density", "summary", "findings"],
+  "properties": {
+    "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
+    "role": { "const": "comment-reviewer" },
+    "score": { "type": "integer", "minimum": 1, "maximum": 100 },
+    "verdict": { "enum": ["pass", "fix", "rewrite"] },
+    "density": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["comment_lines_added", "code_lines_added"],
+      "properties": {
+        "comment_lines_added": { "type": "integer", "minimum": 0 },
+        "code_lines_added": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "summary": { "type": "string" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["location", "shape", "action", "quote", "fix"],
+        "properties": {
+          "location": { "type": "string" },
+          "shape": { "enum": ["essay", "defense", "echo", "alternative", "restatement", "emphasis", "stale", "missing", "oversize"] },
+          "action": { "enum": ["cut", "shorten", "move", "rewrite", "add"] },
+          "quote": { "type": "string" },
+          "fix": { "type": "string" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "$comment": "verdict must sit in its score band: pass >= 85, fix 50-84, rewrite < 50.",
+      "if": { "properties": { "verdict": { "const": "pass" } } },
+      "then": { "properties": { "score": { "minimum": 85 } } }
+    },
+    {
+      "if": { "properties": { "verdict": { "const": "fix" } } },
+      "then": { "properties": { "score": { "minimum": 50, "maximum": 84 } } }
+    },
+    {
+      "if": { "properties": { "verdict": { "const": "rewrite" } } },
+      "then": { "properties": { "score": { "maximum": 49 } } }
+    }
+  ]
+}

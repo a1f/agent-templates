@@ -1,6 +1,6 @@
 ---
 name: make-pr
-description: Use when explicitly asked to run the architect workflow on an already-scoped PR (the /make-pr command) — drives one single-module coding task to done via a deterministic TDD loop: plans behavior slices, dispatches the tdd-runner/worker-coder/reviewer/critic agents, runs the language gates, and logs every subagent call to a per-run JSONL for validation. Not for feature decomposition, direct coding, exploratory fixes, or multi-module planning.
+description: Use when explicitly asked to run the architect workflow on an already-scoped PR (the /make-pr command) — drives one single-module coding task to done via a deterministic TDD loop: plans behavior slices, dispatches the tdd-runner/worker-coder/reviewer/comment-reviewer/critic agents, runs the language gates, and logs every subagent call to a per-run JSONL for validation. Not for feature decomposition, direct coding, exploratory fixes, or multi-module planning.
 argument-hint: "<task spec, issue ref, or path to a task file>"
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Bash, Grep, Glob, Agent, TodoWrite, Skill
@@ -26,7 +26,8 @@ decide the next step.
 | `tdd-runner` | RED, once per behavior | write ONE failing test, prove it fails for the right reason |
 | `worker-coder` | GREEN & REFACTOR (per behavior); non-behavioral edits | minimal code to pass the test, a behavior-preserving refactor, or an exact non-behavioral change; commit |
 | `reviewer` | after gates are green | quality + bugs + security + line-by-line rule conformance on the diff |
-| `critic` | with the reviewer, on the gate-green diff | goal-fit: did the PR achieve the task? |
+| `comment-reviewer` | with the reviewer, on the gate-green diff | comment quality: scores the added comments against `comments.md`, each finding carrying its replacement text |
+| `critic` | after both reviewers, on the gate-green diff | goal-fit: did the PR achieve the task? |
 
 Dispatch via the Agent tool. Give each agent the **task context + base + `target_cwd` +
 module boundary + allowed paths + exact files it needs + absolute rule paths**, and give
@@ -49,11 +50,11 @@ A tight RED dispatch reads, e.g.: "Write ONE failing test for: cart applies a pe
 discount to the subtotal. Module boundary: `cart` (`cart.py`, `tests/test_cart.py`). Public
 interface: `Cart.total(discount: Percent)`. target_cwd: <abs repo path>. Base: <base>. Rules
 (absolute paths): ~/.claude/at/rules/tdd.md, ~/.claude/at/rules/design-principles.md,
-~/.claude/at/rules/python.md." The matching GREEN dispatch names the exact failing test and
-the mode: "Make <test_file>::<test_name> pass with minimal production code. mode: green. The
-RED test is on the tree but uncommitted — stage it unchanged with your production code.
-Module boundary: `cart` only. target_cwd: <abs repo path>. Base: <base>. Rules (absolute
-paths): <the same three rule paths as the RED dispatch>."
+~/.claude/at/rules/comments.md, ~/.claude/at/rules/python.md." The matching GREEN dispatch
+names the exact failing test and the mode: "Make <test_file>::<test_name> pass with minimal
+production code. mode: green. The RED test is on the tree but uncommitted — stage it unchanged
+with your production code. Module boundary: `cart` only. target_cwd: <abs repo path>. Base:
+<base>. Rules (absolute paths): <the same four rule paths as the RED dispatch>."
 
 ## Runtime resolution
 
@@ -66,9 +67,9 @@ Resolve before the first dispatch:
   Reference each extra by its literal path under it; no dependency on a repo checkout.
 - **rules_root** — `~/.claude/at/rules`, composed by the installer from the canonical
   source. Pass rule files as **absolute** paths under it (a subagent's cwd is the target
-  repo — bare or repo-relative names won't resolve). Always `design-principles.md`; +
-  `tdd.md` for behavioral RED/GREEN steps; + the language rule (`python.md`,
-  `typescript.md`, `rust.md`) per changed file type.
+  repo — bare or repo-relative names won't resolve). Always `design-principles.md` and
+  `comments.md`; + `tdd.md` for behavioral RED/GREEN steps; + the language rule
+  (`python.md`, `typescript.md`, `rust.md`) per changed file type.
 - **target_cwd** — the absolute path to the repository being changed. Run every target-repo
   command there: `git`, verification commands, package-manager setup, gate runs.
 - **run_root** — a writable directory for run state, defaulting to `<target_cwd>/.v1-runs`:
@@ -153,15 +154,18 @@ Resolve before the first dispatch:
    behavioral regression that returns to that behavior's RED/GREEN cycle. Max **2 gate-fix
    rounds**, then stop / re-scope.
 6. **Review + critic (the judgment pass — once, on the gate-green diff).** Dispatch
-   `reviewer` with the base ref (it runs `git diff <base>...HEAD` itself), passing
-   `design-principles.md`, the language rule per changed file type, and `tdd.md`. Then
-   dispatch `critic` with the task spec, task type, base ref, full diff, changed test
-   files, RED/GREEN or non-behavioral check output, the green gate output, **and the
-   reviewer's findings** (so it can trust the reviewer's test-form verdict). Collect **all
-   blockers from both in one pass**:
+   `reviewer` and `comment-reviewer` **in one message** (parallel), each with the base ref
+   (each runs `git diff <base>...HEAD` itself). The reviewer gets `design-principles.md`,
+   the language rule per changed file type, and `tdd.md`; the comment-reviewer gets
+   `comments.md`, `english.md`, the language rule, and the density script path
+   `~/.claude/at/scripts/comment_density.py`. Then dispatch `critic` with the task spec,
+   task type, base ref, full diff, changed test files, RED/GREEN or non-behavioral check
+   output, the green gate output, **and the reviewer's findings** (so it can trust the
+   reviewer's test-form verdict). Collect **all blockers from the three in one pass**:
    - any reviewer finding that is CRITICAL or has `score >= 70` (`has_critical: true`
      always blocks), unless the human explicitly waived it in the run log (logged
      `step: REVIEW, verdict: skip, note: "waived by human: <finding>"`);
+   - a comment-reviewer verdict of `fix` or `rewrite`, with its findings verbatim;
    - any critic verdict of `not_achieved` or `partial`, with its gaps.
    **Never waivable: a CRITICAL finding, a red gate, a black-letter language-rule
    violation** (a rule the language file states explicitly — keyword-only `*`, `Final[T]`,
@@ -174,19 +178,24 @@ Resolve before the first dispatch:
      `tdd-runner` before GREEN; never ask `worker-coder` to edit a test;
    - a **mechanical or design** fix goes to `worker-coder` directly
      (`mode: non_behavioral` for format/lint/type/rename; `mode: refactor` for a
-     behavior-preserving restructure).
+     behavior-preserving restructure);
+   - a **comment** finding goes to `worker-coder` `mode: non_behavioral` with the
+     comment-reviewer's findings verbatim — each carries the replacement text, so the
+     coder pastes, never re-decides.
    Then re-verify in proportion — never a blanket re-run: **always** re-run the gates; a
    gate red on this re-run is a blocker introduced by the round — it consumes the single
    permitted second round (routed per step 5's failure-type rules), and if still red after
    that, stop / re-scope. Re-review **only** `git diff <pre_fix>...HEAD` with `reviewer` — a
-   scoped re-review cannot re-litigate approved code. Re-run `critic` **only if** the fix
-   changed behavior or coverage. One fix round; a second only if round 1 introduced a new
+   scoped re-review cannot re-litigate approved code. Re-run `comment-reviewer` on the
+   **full** `git diff <base>...HEAD` when the round touched a comment — its density ratio
+   only means something over the whole diff. Re-run `critic` **only if** the fix changed
+   behavior or coverage. One fix round; a second only if round 1 introduced a new
    blocker. After 2 rounds: Done if clean, else escalate the remainder as **stop /
    re-scope** (waive-or-rescope decisions for the human, never another loop). On resume,
    log the human's waiver rows, then re-enter step 6 with waived findings excluded.
 8. **Done** → only when: all behaviors green, all gates green, no unwaived blocker per step
-   6's waivability rule, critic `achieved`, and any step-7 fix re-verified per the
-   proportional rule. Write the evidence handoff (see Evidence handoff), then ship it
+   6's waivability rule, comment-reviewer `pass`, critic `achieved`, and any step-7 fix
+   re-verified per the proportional rule. Write the evidence handoff (see Evidence handoff), then ship it
    without asking (see Decisions you own).
 
 ## JSONL logging contract (mandatory)
@@ -197,7 +206,7 @@ create nested paths. Schema:
 
 ```json
 {"ts":"<ISO8601>","run":"<run-id>","step":"RED|GREEN|REFACTOR|NON_BEHAVIORAL|GATE|REVIEW|CRITIC",
- "role":"tdd-runner|coder|reviewer|critic|architect","prompt":"<full prompt you sent>",
+ "role":"tdd-runner|coder|reviewer|comment-reviewer|critic|architect","prompt":"<full prompt you sent>",
  "result":"<full agent return>","verdict":"pass|fail|skip","files":["<changed paths>"],
  "note":"<e.g. TDD skip reason, retry #, decision made>"}
 ```

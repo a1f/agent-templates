@@ -97,7 +97,8 @@ Use coroutines only with established library support (cppcoro, Boost.Asio, libun
 
 - Document all public API types and functions with Doxygen-style comments (`///` or `/** */`)
 - Use `@brief`, `@param`, `@return`, `@throws` only when the function is non-trivial
-- Prefer self-documenting names and types over verbose comments
+- Prefer self-documenting names and types over verbose comments; length and the test for an
+  inline comment are in `comments.md`
 
 ## No `std::cout` in Library Code
 

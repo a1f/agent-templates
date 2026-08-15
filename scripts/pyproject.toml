@@ -42,6 +42,7 @@ pythonpath = ["."]  # import the helper modules under test without a package
 addopts = [
   "--cov=validate_return",
   "--cov=check_prompt_schemas",
+  "--cov=comment_density",
   "--cov=dispatch",
   "--cov-report=term-missing",
 ]

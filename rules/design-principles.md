@@ -193,20 +193,17 @@ and obvious**.
 
 ## Comments
 
-Comments exist to capture what the code cannot: the *why*, the abstraction, and the
-non-obvious. They are part of the design, not an afterthought.
+Comments capture what the code cannot: the abstraction and the non-obvious. They are part of
+the design, not an afterthought. `comments.md` says what a comment may say and how long it
+may be; this section says only how comments serve design.
 
 - Comment the **interface** (what a caller needs to know to use it) separately from the
-  **implementation** (why it works this way). The interface comment is the abstraction.
+  **implementation** (the one constraint a reader would otherwise break). The interface
+  comment is the abstraction.
 - Write the interface comment *first*, before the body — if it's hard to write, the
   interface is too complex (design feedback, for free).
-- Never write a comment that just restates the code. Document the things that are *not*
-  obvious from reading it.
-- Comments describe *why*, not *what*. The code already says what.
-- **The interface comment is a complete contract when the signature and names are not enough.**
-  Prefer concise language-rule docstrings, but include any non-obvious preconditions, errors,
-  side effects, or ordering guarantees a caller needs. Do not duplicate obvious parameter or
-  return types just to be exhaustive.
+- Never write a comment that just restates the code, and never write one that argues for
+  the code. The reasoning behind a design lives in the commit message and PR body.
 
 ## Consistency
 
@@ -269,6 +266,7 @@ design, and sometimes a third that beats both.
 - **Re-validated input** — the same external value checked in many places instead of parsed once at the boundary.
 - **Conjoined methods** — two pieces only understandable by reading both back-to-back.
 - **Comment repeats code** — or, you can't write a comment without restating the body.
+- **Comment argues** — a paragraph of reasoning above a line; the reasoning belongs in the PR body (`comments.md`).
 - **Hard to name / hard to describe** — the unit's responsibilities aren't clean.
 - **Inconsistency** — a new pattern for something the codebase already does one established way.
 - **Non-obvious code** — a reader must stop and puzzle out what it does, or could read it wrong.

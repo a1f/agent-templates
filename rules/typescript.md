@@ -159,4 +159,6 @@ only on the gate command line.
 
 ## Documentation
 
-Single-sentence JSDoc explaining WHY the function exists, not WHAT it does. Parameter types and return types are in the signature; do not duplicate them in JSDoc `@param`/`@returns` tags.
+One-sentence JSDoc: what the caller gets. Parameter types and return types are in the signature;
+do not duplicate them in JSDoc `@param`/`@returns` tags. Length and the test for an inline
+comment are in `comments.md`.
