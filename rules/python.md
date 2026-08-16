@@ -71,6 +71,25 @@ Prefer functions over classes unless state is needed. If a method doesn't use `s
 - `set`/`frozenset` for membership tests; `dict.get(key, default)` over `in`-then-index
 - Prefer EAFP over LBYL; keep the one statement that can raise as the entire `try` body
 - Watch the aliasing footgun: `[[]] * n` shares one inner list — use `[[] for _ in range(n)]`
+- **Name the intermediate.** Never inline a comprehension, generator, or chained call as a
+  call argument. Bind it to an annotated local first, then pass the name: the name says what the
+  value is, the annotation pins its type, and the call reads as one line. Materialize it as
+  `frozenset`/`tuple`/`list` — a bare generator argument hides its type and reads once. Simple
+  beats compressed: two plain lines win over one dense one
+
+```python
+# BAD — the value has no name and no type; the call is a puzzle
+_refuse_repeated_name(names=(muscle.name for muscle in seed.muscles), kind="muscle")
+_refuse_repeated_name(
+    names=(exercise.name for exercise in seed.exercises), kind="exercise"
+)
+
+# GOOD — name it, type it, then pass the name
+muscle_names: frozenset[str] = frozenset(muscle.name for muscle in seed.muscles)
+_refuse_repeated_name(names=muscle_names, kind="muscle")
+exercise_names: frozenset[str] = frozenset(exercise.name for exercise in seed.exercises)
+_refuse_repeated_name(names=exercise_names, kind="exercise")
+```
 
 ## Project Structure
 
