@@ -8,14 +8,15 @@ Target TypeScript 5.8+. Use strict mode, modern ESM, and current tooling through
 
 ## Compiler Configuration
 
-Use `module: "nodenext"` (Node.js — it sets `moduleResolution` automatically) or, for bundled apps, `module: "preserve"` (TS 5.4+, which implies `moduleResolution: "bundler"`). If you instead use `module: "esnext"`, you must also set `moduleResolution: "bundler"` explicitly — alone it falls back to the legacy `classic` resolver, which cannot read package `exports` maps. Always enable strict mode plus additional flags:
+Use `module: "nodenext"` (Node.js — it sets `moduleResolution` automatically) or, for bundled apps, `module: "preserve"` (TS 5.4+, which implies `moduleResolution: "bundler"`). If you instead use `module: "esnext"`, you must also set `moduleResolution: "bundler"` explicitly — alone it falls back to the legacy `classic` resolver, which cannot read package `exports` maps. Always enable strict mode plus these flags (the last one lets imports carry the `.ts` extension the No Barrel Exports example uses):
 
 ```json
 {
   "strict": true,
   "noUncheckedIndexedAccess": true,
   "exactOptionalPropertyTypes": true,
-  "noPropertyAccessFromIndexSignature": true
+  "noPropertyAccessFromIndexSignature": true,
+  "rewriteRelativeImportExtensions": true
 }
 ```
 

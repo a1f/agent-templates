@@ -25,7 +25,7 @@ encode.
   **cargo-nextest** as the local runner (faster parallelism, better output), keep
   `cargo test --doc` alongside it — nextest does **not** run doc tests. **proptest** for
   property-based tests (per-value shrinking).
-- **CI checks:** `cargo doc --no-deps`, `cargo audit`, `cargo deny` (known vulnerabilities + license violations).
+- **CI checks:** `cargo doc --no-deps`, `cargo audit`, `cargo deny check` (known vulnerabilities + license violations).
 
 ## Naming
 
@@ -91,8 +91,8 @@ existing groups, so on stable these two are reviewer-enforced conventions; to au
 
 ## Documentation
 
-Doc comments (`///`) required on all public items, written as complete sentences. Include these
-sections where applicable:
+Doc comments (`///`) required on all public items: one complete sentence, what the caller gets; a
+second only for a contract the signature cannot carry. Include these sections where applicable:
 
 - `# Errors` — when the function returns `Result`, list the error conditions.
 - `# Panics` — document any conditions under which the function panics.
