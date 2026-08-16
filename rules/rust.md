@@ -64,6 +64,26 @@ genuine invariants excepted). No `unwrap()`/`expect()` on production paths.
   collection.
 - Use `Self` inside impls to refer to the type; never shadow a type name, and keep value shadowing
   to one level or a single type-changing conversion. Lowercase hex literals (`0xab5c`).
+- **Name the intermediate.** Never inline an iterator chain or a chained call as a call
+  argument. Bind it to a typed `let` first, then pass the name: the name says what the value is,
+  the type pins it, and the call reads as one line. Simple beats compressed: two plain lines win
+  over one dense one.
+
+```rust
+// BAD — the value has no name and no type; the call is a puzzle
+refuse_repeated_name(seed.muscles.iter().map(|muscle| muscle.name.as_str()), "muscle")?;
+refuse_repeated_name(
+    seed.exercises.iter().map(|exercise| exercise.name.as_str()),
+    "exercise",
+)?;
+
+// GOOD — name it, type it, then pass the name
+let muscle_names: BTreeSet<&str> = seed.muscles.iter().map(|muscle| muscle.name.as_str()).collect();
+refuse_repeated_name(&muscle_names, "muscle")?;
+let exercise_names: BTreeSet<&str> =
+    seed.exercises.iter().map(|exercise| exercise.name.as_str()).collect();
+refuse_repeated_name(&exercise_names, "exercise")?;
+```
 
 ## Generics and Dispatch
 
