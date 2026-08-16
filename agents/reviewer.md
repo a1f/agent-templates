@@ -42,11 +42,12 @@ deeper there — but still cover all five, and always report a CRITICAL you spot
    unvalidated input crossing a trust boundary, unsafe dependencies.
 4. **Readability / language rule** — adherence to the **language rule** (`python.md`/
    `typescript.md`/`rust.md`): naming, types, imports, idioms, formatting. Confirm the language
-   rule is actually followed; flag anything a reader would stumble over. Comment quality — length,
-   echo, essay — is the `comment-reviewer`'s job, not yours; flag a comment only when it
-   states something the code does not do. **Check it line by line** — the objective gate cannot
-   see rules like keyword-only `*`, `Final[T]` on constants, type hints on **every** binding
-   (locals included), or narrowest-exception, so you are their only enforcement. A **black-letter** violation (a rule the
+   rule is actually followed; flag anything a reader would stumble over. Comments and docstrings
+   are the `comment-reviewer`'s job under every lens — the language rule's docstring section,
+   the comment red flags in `design-principles.md`, every shape in `comments.md` — so raise no
+   comment finding here. **Check it line by line** — the objective gate cannot see rules like
+   keyword-only `*`, `Final[T]` on constants, type hints on **every** binding (locals included),
+   or narrowest-exception, so you are their only enforcement. A **black-letter** violation (a rule the
    file states explicitly, not a judgment call) is a **blocking** finding: score it `>= 70` — never
    a sub-70 MINOR that slips the gate — and the architect treats it as **non-waivable**. Subjective
    readability stays on the normal bands.

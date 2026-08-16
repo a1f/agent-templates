@@ -99,8 +99,10 @@ sections where applicable:
 
 Apply `#[must_use]` on constructors, builders, and fallible operations whose return value should
 not be silently dropped (the `must_use_candidate` clippy lint catches misses). Comment length and
-the test for an inline comment are in `comments.md`; promote a lingering `TODO` into a tracked
-issue rather than leaving it in code.
+the test for an inline comment are in `comments.md`; the `# Errors`, `# Panics`, and `# Safety`
+sections above are Rust's form of its contract sentence and stand outside its three-line cap —
+one line per condition, no story. Promote a lingering `TODO` into a tracked issue rather than
+leaving it in code.
 
 ## Unsafe Discipline
 

@@ -67,9 +67,10 @@ Resolve before the first dispatch:
   Reference each extra by its literal path under it; no dependency on a repo checkout.
 - **rules_root** — `~/.claude/at/rules`, composed by the installer from the canonical
   source. Pass rule files as **absolute** paths under it (a subagent's cwd is the target
-  repo — bare or repo-relative names won't resolve). Always `design-principles.md` and
-  `comments.md`; + `tdd.md` for behavioral RED/GREEN steps; + the language rule
-  (`python.md`, `typescript.md`, `rust.md`) per changed file type.
+  repo — bare or repo-relative names won't resolve). For `tdd-runner` and `worker-coder`:
+  always `design-principles.md` and `comments.md`; + `tdd.md` for behavioral RED/GREEN steps;
+  + the language rule (`python.md`, `typescript.md`, `rust.md`) per changed file type. Step 6
+  names each judge's rules.
 - **target_cwd** — the absolute path to the repository being changed. Run every target-repo
   command there: `git`, verification commands, package-manager setup, gate runs.
 - **run_root** — a writable directory for run state, defaulting to `<target_cwd>/.v1-runs`:
@@ -164,7 +165,8 @@ Resolve before the first dispatch:
    - any reviewer finding that is CRITICAL or has `score >= 70` (`has_critical: true`
      always blocks), unless the human explicitly waived it in the run log (logged
      `step: REVIEW, verdict: skip, note: "waived by human: <finding>"`);
-   - a comment-reviewer verdict of `fix` or `rewrite`, with its findings verbatim;
+   - a comment-reviewer verdict of `fix` or `rewrite`, with its findings verbatim, unless the
+     human waived those findings in the run log (same row shape as a reviewer waiver);
    - any critic verdict of `not_achieved` or `partial`, with its gaps.
    **Never waivable: a CRITICAL finding, a red gate, a black-letter language-rule
    violation** (a rule the language file states explicitly — keyword-only `*`, `Final[T]`,
@@ -179,8 +181,7 @@ Resolve before the first dispatch:
      (`mode: non_behavioral` for format/lint/type/rename; `mode: refactor` for a
      behavior-preserving restructure);
    - a **comment** finding goes to `worker-coder` `mode: non_behavioral` with the
-     comment-reviewer's findings verbatim — each carries the replacement text, so the
-     coder pastes, never re-decides.
+     comment-reviewer's findings verbatim.
    Then re-verify in proportion — never a blanket re-run: **always** re-run the gates; a
    gate red on this re-run is a blocker introduced by the round — it consumes the single
    permitted second round (routed per step 5's failure-type rules), and if still red after
@@ -192,8 +193,8 @@ Resolve before the first dispatch:
    re-scope** (waive-or-rescope decisions for the human, never another loop). On resume,
    log the human's waiver rows, then re-enter step 6 with waived findings excluded.
 8. **Done** → only when: all behaviors green, all gates green, no unwaived blocker per step
-   6's waivability rule, comment-reviewer `pass`, critic `achieved`, and any step-7 fix
-   re-verified per the proportional rule. Write the evidence handoff (see Evidence handoff), then ship it
+   6's waivability rule, comment-reviewer `pass` (or its findings waived by the human), critic
+   `achieved`, and any step-7 fix re-verified per the proportional rule. Write the evidence handoff (see Evidence handoff), then ship it
    without asking (see Decisions you own).
 
 ## JSONL logging contract (mandatory)

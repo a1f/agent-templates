@@ -19,18 +19,15 @@ code cannot show, never why your change is correct. The coder writes to this fil
    `///`). One sentence: what the caller gets, and why it exists when the name does not say.
    A second sentence only for a contract the signature and names cannot carry: a precondition,
    an error the body raises and the caller must handle, an ordering guarantee, a side effect.
-   Three lines is the cap.
 
 Every other comment is an **inline comment**, and an inline comment must earn its place.
 
 ## The test for an inline comment
 
 Ask: **would a competent reader change this line wrongly without the comment?** If yes, write
-one line that names the constraint. If no, write nothing. The code says what it does. The
-names and types say what things are. The test says what must hold. The commit message and PR
-body say why the change was made. A comment repeats none of them. If a function needs a
-comment above each block, extract the blocks (the phased function in `design-principles.md`)
-instead of narrating them.
+one line that names the constraint. If no, write nothing. If a function needs a comment above
+each block, extract the blocks (the phased function in `design-principles.md`) instead of
+narrating them.
 
 ## Where the reasoning goes
 
@@ -42,15 +39,13 @@ instead of narrating them.
 | what the code must do | the test |
 | how the code does it | the code |
 
-An interface comment names the contract. It does not narrate every way the contract can fail,
-and it does not defend the design.
-
 ## Size
 
-- An interface comment is one sentence; three lines at most.
+- An interface comment is one sentence; three lines at most. A section the language rule
+  requires (`# Errors`/`# Panics`/`# Safety` in `rust.md`, Doxygen tags in `cpp.md`) sits below
+  the sentence and outside the cap, one line per condition.
 - An inline comment is one line; two at most.
-- Sentence caps from `english.md` apply: 25 words. A comment states a fact, so it needs no
-  "because … which is how … hence" chain. Name the constraint and stop.
+- Sentence caps from `english.md` apply: 25 words.
 - There is no ration. A comment that passes the test is never slop, and a file with many
   such comments is fine. The caps bound each comment, not their number.
 
@@ -62,7 +57,7 @@ and it does not defend the design.
 | **defense** | a comment that argues the code is right, as a reply to a review that already happened | cut the argument; if a constraint hides in it (a security assumption, an ordering, an invariant), keep that as the one line |
 | **echo** | an inline comment that repeats the docstring, the commit message, or the test name | delete the copy |
 | **breadcrumb** | written about the change or the task, not the code: "added for", "used by X", "now", "previously", "per issue #123", "for a later slice" | delete; the PR body carries it |
-| **alternative history** | describes what the code does *not* do ("a Mount would instead …") | one clause naming the choice, or delete |
+| **alternative** | describes what the code does *not* do ("a Mount would instead …") | one clause naming the choice, or delete |
 | **restatement** | says what the next line plainly says | delete |
 | **emphasis** | CAPS, *italics*, "hence", "which is exactly how" | delete the emphasis; keep the fact if there is one |
 | **stale** | disagrees with the code beside it | fix or delete in the same change |
@@ -71,9 +66,9 @@ and it does not defend the design.
 ## When you add, fix, or refactor
 
 - A slice adds at most the comment its own line needs. Never write the reason for a fix
-  round into the code; the round's commit message already has it.
-- REFACTOR and FIX delete every comment the change made stale and every echo the change
-  exposed. Leaving a stale comment is a defect, not a nit.
+  round into the code; the PR body carries it.
+- A refactor or a fix round deletes every comment the change made stale and every echo the
+  change exposed. Leaving a stale comment is a defect, not a nit.
 - Match the comment density of the file you touch, unless that density breaks this file.
 
 ## Before and after

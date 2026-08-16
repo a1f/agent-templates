@@ -122,7 +122,8 @@ Prefer functions over classes unless state is needed. If a method doesn't use `s
 
 ## Docstrings
 
-One sentence: what the caller gets. Do not include `Args:`, `Returns:`, or `Raises:` sections --
+The docstring is the interface comment in `comments.md`: one sentence, what the caller gets; a
+second only for a contract the names cannot carry. Do not include `Args:`, `Returns:`, or `Raises:` sections --
 type hints and names are the documentation. Only write a module-level docstring if it adds info
 beyond the filename. Length, the test for an inline comment, and where the reasoning goes
 instead are in `comments.md`.

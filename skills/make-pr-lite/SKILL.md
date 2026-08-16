@@ -109,15 +109,15 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    | gate `setup` itself fails | stop and report (environment, not a coder bug) |
 5. **Panel + critic (judgment — once, on the green diff).** Dispatch the 3 reviewers and the
    comment-reviewer (one message), then the critic; read the returns directly. Each reviewer
-   finding's `score` is severity (1–100, higher = worse). **Deduplicate by `(file:line)`** (fall
-   back to `(file:issue)` when a finding has no line), keeping the highest-scoring per location.
-   Then block if any row fires:
+   finding's `score` is severity (1–100, higher = worse). **Deduplicate reviewer findings by
+   `(file:line)`** (fall back to `(file:issue)` when a finding has no line), keeping the
+   highest-scoring per location. Then block if any row fires:
 
    | Condition | Result |
    |---|---|
-   | any finding CRITICAL, `score >= 70`, or a reviewer's `has_critical` | block |
-   | summed `score` of `50–69` findings `>= 120` | block (findings `< 50` are advisory, never aggregate) |
-   | comment-reviewer verdict `fix` or `rewrite` | block; its findings go to the coder verbatim |
+   | any reviewer finding CRITICAL, `score >= 70`, or a reviewer's `has_critical` | block |
+   | summed `score` of `50–69` reviewer findings `>= 120` | block (findings `< 50` are advisory, never aggregate) |
+   | comment-reviewer verdict `fix` or `rewrite` (gate on its `verdict` only — its `score` is quality, not severity) | block; its findings go to the coder verbatim |
    | critic verdict `not_achieved` | block |
    | critic verdict `partial` | dispatch one second critic; block only if it also returns `partial`/`not_achieved` |
 

@@ -19,11 +19,12 @@ rule path in full before you read the diff. Every `git` command runs in `target_
 
 ## Scope
 
-Only the comment lines the diff **adds or changes**: docstrings, doc comments (`///`, JSDoc,
-Doxygen), inline comments, and file comments. Get the diff with `git diff <base>...HEAD`. Read
-the surrounding function or class so you can tell an echo from a first statement, and a stale
-comment from a true one. Do not review comments the diff did not touch, and do not review the
-code. If no base was provided, do not invent findings: return `score: 1`, `verdict: rewrite`,
+The comment lines the diff **adds or changes** — docstrings, doc comments (`///`, JSDoc,
+Doxygen), inline comments, and file comments — plus, for `missing`, every public interface the
+diff adds, and, for `stale`, a comment left beside a line the diff changed. Get the diff with
+`git diff <base>...HEAD`. Read the surrounding function or class so you can tell an echo from a
+first statement, and a stale comment from a true one. Otherwise do not review comments the diff
+did not touch, and do not review the code. If no base was provided, do not invent findings: return `score: 1`, `verdict: rewrite`,
 empty `findings`, and a `summary` that says the base ref was missing.
 
 ## How you judge
@@ -34,7 +35,11 @@ empty `findings`, and a `summary` that says the base ref was missing.
    change the line wrongly without it. Name the slop shape from the rule's table (`essay`,
    `defense`, `echo`, `breadcrumb`, `alternative`, `restatement`, `emphasis`, `stale`),
    `oversize` for a sound comment past its line cap, or `missing` for a public interface whose
-   non-obvious contract has no interface comment.
+   non-obvious contract has no interface comment. `english.md` supplies the 25-word sentence
+   cap. The language rule supplies the doc-comment form and any section it requires
+   (`# Errors`, `# Panics`, `# Safety` in `rust.md`; Doxygen tags in `cpp.md`): a required
+   section is not `oversize`, and a public item the language rule says must be documented is
+   `missing` without one.
 2. **Write the fix, not a request for one.** Each finding's `fix` is the exact replacement text
    the coder pastes in — the shortened sentence, the one-line constraint — or the word `delete`.
    Quote the comment's first line in `quote` so the coder finds it. When a comment mixes a
@@ -56,9 +61,8 @@ empty `findings`, and a `summary` that says the base ref was missing.
    comments.
 
 Do not pad. A clean diff returns an empty `findings` array and a high score. Do not reward a
-comment for being true or thorough — a model judge leans toward the longer explanation, and
-this review exists to lean the other way: the ten true lines cut from the rule's BAD example
-still cost 15 points.
+comment for being true or thorough: the ten lines cut from the rule's BAD example were true and
+still cost 23 points (the return example below).
 
 ## Verdict
 
@@ -73,8 +77,10 @@ do not add, rename, or drop required keys.** The authoritative schema is
 `schemas/comment-reviewer.schema.json`; the architect validates your return against it. The
 schema enforces `verdict` against its score band, so if they disagree, adjust the score, never
 the mapping. Allowed `shape` values: `essay`, `defense`, `echo`, `breadcrumb`, `alternative`,
-`restatement`, `emphasis`, `stale`, `missing`, `oversize`. Allowed `action` values: `cut`, `shorten`, `move`,
-`rewrite`, `add`.
+`restatement`, `emphasis`, `stale`, `missing`, `oversize`. Allowed `action` values: `cut` (remove
+the comment; `fix` is `delete`), `shorten` and `rewrite` (replace the comment with `fix`), `move`
+(remove the comment; `fix` is the one line that stays in code, or `delete` — the rest is PR-body
+material the architect carries), `add` (insert `fix` as the interface comment).
 
 ```json
 {

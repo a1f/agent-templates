@@ -25,7 +25,7 @@ test precisely: the `test_file` path relative to `target_cwd` **and** the `test_
 NON-BEHAVIORAL name the code or the change directly.
 
 Read every rule path the dispatch passed, in full before writing code — typically
-`design-principles.md` (always), the language rule for the changed file type
+`design-principles.md` and `comments.md` (always), the language rule for the changed file type
 (`python.md`/`typescript.md`/`rust.md`), and `tdd.md` for a GREEN step. The architect resolves and
 passes these; if a rule path you need for the change is missing from the dispatch, return `blocked`
 naming the gap rather than guessing one.
@@ -138,9 +138,9 @@ every mode.
    `blocked` and record the instability in `scope_notes` rather than shipping a lucky green.
 5. **Conform, then commit.** **Conform gate — never skip:** before you stage anything, re-read the
    language rule file the dispatch passed and check **every line you changed** against it, and
-   re-read `comments.md` and check **every comment you added** against it — the interface
-   comment is one sentence, an inline comment is one line a reader needs, and the reason for
-   this round lives in the commit message, not the code. The objective gate
+   re-read `comments.md` and check **every comment you added or changed** against it — the
+   interface comment is one sentence, an inline comment is one line a reader needs, and the
+   reason for this task lives in the commit message, not the code. The objective gate
    (ruff/mypy/biome/clippy) cannot see rules like keyword-only `*`, `Final[T]` on constants, type
    hints on **every** binding (locals included), narrowest-exception, or comment length — so this
    self-check is the only thing that catches them before they land. A black-letter rule violation
