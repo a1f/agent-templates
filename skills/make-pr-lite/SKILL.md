@@ -41,8 +41,9 @@ guarantees that.)
 - **gates** — preflight: pick `~/.claude/at/gates/<lang>.json` by the task's language(s) /
   `allowed_paths`. After the coder runs, re-check against `git diff --name-only <base>...HEAD`. A
   changed language with no profile → stop and report.
-- **rules to pass** — always `design-principles.md` and `comments.md`; `tdd.md` for behavioral
-  work; the language rule (`python.md`/`typescript.md`/`rust.md`) per changed file type.
+- **rules to pass** — always `design-principles.md`; `comments.md` to `coder-lite` and the
+  comment-reviewer only (comments are not the 3 reviewers' lens); `tdd.md` for behavioral work;
+  the language rule (`python.md`/`typescript.md`/`rust.md`) per changed file type.
 
 ## Agents
 
@@ -124,7 +125,8 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    CRITICAL, a red gate, and a black-letter language-rule violation are **never waivable**. No
    blockers → **Done**.
 6. **Fix once, re-verify in proportion.** Capture `git rev-parse HEAD` as `<pre_fix>`, then route
-   all blockers back as one batched `coder-lite` `mode: fix` (findings verbatim). After it lands:
+   all blockers back as one batched `coder-lite` `mode: fix` (findings verbatim; for a
+   comment-reviewer `move` finding, keep the cut text for the PR body). After it lands:
    **always** re-run the gates; re-review the fix with the reviewer(s) whose lens-group covers each
    routed blocker, passing `<pre_fix>` as the diff base so they see only the fix's hunks
    (`git diff <pre_fix>...HEAD`) — the comment-reviewer too, when the round touched a comment;
@@ -156,7 +158,7 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    without asking: branch first if still on the default branch, `git push -u origin <branch>`
    (`--force-with-lease` only if this run already pushed the branch before the squash), and
    `gh pr create` against the default branch (or the task-named target), referencing the
-   task/issue in the body. Summarize with the PR URL — done needs no human confirmation. Then
+   task/issue in the body and carrying the text every `move` finding cut. Summarize with the PR URL — done needs no human confirmation. Then
    invoke the `pr-explain` skill (Skill tool, args: the new PR number) — it publishes the
    explainer page from the evidence handoff and maintains the PR-body teaser; headless it
    degrades to markdown in the body on its own, so never skip it; a failure goes in the summary

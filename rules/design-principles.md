@@ -198,8 +198,8 @@ the design, not an afterthought. `comments.md` says what a comment may say and h
 may be; this section says only how comments serve design.
 
 - Comment the **interface** (what a caller needs to know to use it) separately from the
-  **implementation** (the one constraint a reader would otherwise break). The interface
-  comment is the abstraction.
+  **implementation** (the inline comment of `comments.md`: the one constraint a reader would
+  otherwise break). The interface comment is the abstraction.
 - Write the interface comment *first*, before the body — if it's hard to write, the
   interface is too complex (design feedback, for free).
 - Never write a comment that just restates the code, and never write one that argues for

@@ -34,9 +34,9 @@ empty `findings`, and a `summary` that says the base ref was missing.
    comment names one constraint in one line, two at most, and passes the test — a reader would
    change the line wrongly without it. Name the slop shape from the rule's table (`essay`,
    `defense`, `echo`, `breadcrumb`, `alternative`, `restatement`, `emphasis`, `stale`),
-   `oversize` for a sound comment past its line cap, or `missing` for a public interface whose
-   non-obvious contract has no interface comment. `english.md` supplies the 25-word sentence
-   cap. The language rule supplies the doc-comment form and any section it requires
+   `oversize` for a sound comment past its line cap or `english.md`'s 25-word sentence cap, or
+   `missing` for a public interface whose non-obvious contract has no interface comment. The
+   language rule supplies the doc-comment form and any section it requires
    (`# Errors`, `# Panics`, `# Safety` in `rust.md`; Doxygen tags in `cpp.md`): a required
    section is not `oversize`, and a public item the language rule says must be documented is
    `missing` without one.

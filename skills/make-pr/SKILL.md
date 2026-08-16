@@ -181,7 +181,8 @@ Resolve before the first dispatch:
      (`mode: non_behavioral` for format/lint/type/rename; `mode: refactor` for a
      behavior-preserving restructure);
    - a **comment** finding goes to `worker-coder` `mode: non_behavioral` with the
-     comment-reviewer's findings verbatim.
+     comment-reviewer's findings verbatim; for a `move` finding, keep the cut text — it goes
+     into the PR body at ship.
    Then re-verify in proportion — never a blanket re-run: **always** re-run the gates; a
    gate red on this re-run is a blocker introduced by the round — it consumes the single
    permitted second round (routed per step 5's failure-type rules), and if still red after
@@ -269,7 +270,8 @@ After review + critic, choose one:
 - **done** — the step-8 predicate holds. Ship it yourself — never ask the human to confirm:
   branch first if still on the default branch, `git push -u origin <branch>`, then
   `gh pr create` against the default branch (or the task-named target), referencing the
-  task/issue in the body, and report the PR URL. After reporting the URL, invoke the
+  task/issue in the body and carrying the text every `move` finding cut, and report the PR
+  URL. After reporting the URL, invoke the
   `pr-explain` skill (Skill tool, args: the new PR number) — it publishes the explainer page
   from the evidence handoff this run just wrote and maintains the teaser in the PR body. Invoke
   it even when the Artifact tool is unavailable (headless/CI): it degrades to writing the story

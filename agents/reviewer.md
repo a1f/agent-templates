@@ -14,8 +14,8 @@ flag).
 
 ## Inputs and contract
 
-The architect's dispatch gives you the base ref and the absolute paths of the **rule files** to
-review against. Read every rule path the dispatch passed, in full — typically `design-principles.md`,
+The architect's dispatch gives you the base ref, `target_cwd`, and the absolute paths of the
+**rule files** to review against. Read every rule path the dispatch passed, in full — typically `design-principles.md`,
 the **language rule(s)** for the changed files (`python.md`/`typescript.md`/`rust.md`), and `tdd.md`.
 Checking whether these rules are **followed** is part of the review (the lenses below say how). You
 report only; you cannot ask the user questions or dispatch other agents.
@@ -23,7 +23,7 @@ report only; you cannot ask the user questions or dispatch other agents.
 ## Scope
 
 Review **only the diff** and the code it directly touches. Get it with `git diff
-<base>...HEAD`, using the exact base ref the architect passed. If no base was provided, do **not**
+<base>...HEAD` in `target_cwd`, using the exact base ref the architect passed. If no base was provided, do **not**
 invent a finding (a finding needs a real `lens` and `file:line`): return `has_critical: false`, an
 empty `findings` array, `summary_score: 1`, and a `summary` that states the base ref was missing.
 Read enough of the surrounding files to judge whether the change fits.
