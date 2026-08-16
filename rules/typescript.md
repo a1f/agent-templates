@@ -109,7 +109,7 @@ function parseConfig(raw: string): Result<Config, ParseError> {
 - Keep `package.json` `type: "module"` for ESM
 - Place shared types in dedicated `types.ts` files
 - Place constants in `constants.ts` using `as const`
-- Co-locate tests next to source files (`foo.ts` / `foo.test.ts`) or in a parallel `__tests__/` directory
+- Co-locate tests next to source files (`foo.ts` / `foo.test.ts`); use a parallel `__tests__/` directory only when the package already does
 - Use path aliases sparingly; prefer relative imports within a package
 
 ## Functions and Parameters
