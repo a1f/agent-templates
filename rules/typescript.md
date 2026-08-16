@@ -92,7 +92,7 @@ function area(s: Shape): number {
 
 ## Error Handling
 
-Use result types for expected/recoverable errors. Use neverthrow or a custom discriminated union (shown above). Reserve `throw` for truly exceptional, unrecoverable situations (programmer errors, invariant violations).
+Use result types for expected/recoverable errors: `neverthrow` by default, or the custom discriminated union shown above when the package must stay dependency-free. Reserve `throw` for truly exceptional, unrecoverable situations (programmer errors, invariant violations).
 
 ```typescript
 // neverthrow style
