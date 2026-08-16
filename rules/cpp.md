@@ -98,7 +98,7 @@ Use coroutines only with established library support (cppcoro, Boost.Asio, libun
 - Document all public API types and functions with Doxygen-style comments (`///` or `/** */`)
 - Add `@throws` when the caller must handle an error, and `@param`/`@return` only for a contract
   the signature cannot carry (a unit, a range, a lifetime), never to repeat a type. The tags sit
-  below the one-sentence summary and outside its three-line cap in `comments.md`, one line per tag
+  below the contract sentence and outside its three-line cap in `comments.md`, one line per tag
 - Prefer self-documenting names and types over verbose comments; length and the test for an
   inline comment are in `comments.md`
 
