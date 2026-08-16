@@ -62,8 +62,7 @@ partition the reviewer's five lenses:
 2. **rules-conformance + test-form** — lenses `readability`, `test`.
 3. **quality** — lens `quality` (covers simplicity/reuse).
 
-The comment-reviewer gets the base ref, `comments.md`, `english.md`, the language rule, and the
-density script path `~/.claude/at/scripts/comment_density.py`.
+The comment-reviewer gets the base ref, `comments.md`, `english.md`, and the language rule.
 
 The critic gets the task spec, task type (`behavioral` if any slice has a test, else
 `non_behavioral`), base, diff, changed test files, the coder's per-behavior RED evidence, the green
@@ -128,9 +127,8 @@ gate output, and the reviewers' findings. Each reviewer finding carries a 1–10
    all blockers back as one batched `coder-lite` `mode: fix` (findings verbatim). After it lands:
    **always** re-run the gates; re-review the fix with the reviewer(s) whose lens-group covers each
    routed blocker, passing `<pre_fix>` as the diff base so they see only the fix's hunks
-   (`git diff <pre_fix>...HEAD`); re-run the comment-reviewer on the **full** `<base>...HEAD`
-   diff when the round touched a comment (its density ratio only means something over the whole
-   diff); re-run the critic **only if** the fix changed behavior or coverage. One fix round (separate from step 4's budget); a second only if round 1 introduced a
+   (`git diff <pre_fix>...HEAD`) — the comment-reviewer too, when the round touched a comment;
+   re-run the critic **only if** the fix changed behavior or coverage. One fix round (separate from step 4's budget); a second only if round 1 introduced a
    new blocker.
    Then Done, or escalate the remainder to the human as waive-or-rescope.
 7. **Done.** When all behaviors and gates are green, no CRITICAL / `>=70` / aggregate blocker,

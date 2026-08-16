@@ -4,21 +4,12 @@
   "title": "Comment reviewer agent return",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "role", "score", "verdict", "density", "summary", "findings"],
+  "required": ["schema_version", "role", "score", "verdict", "summary", "findings"],
   "properties": {
     "schema_version": { "$ref": "_defs.schema.json#/$defs/schema_version" },
     "role": { "const": "comment-reviewer" },
     "score": { "type": "integer", "minimum": 1, "maximum": 100 },
     "verdict": { "enum": ["pass", "fix", "rewrite"] },
-    "density": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["comment_lines_added", "code_lines_added"],
-      "properties": {
-        "comment_lines_added": { "type": "integer", "minimum": 0 },
-        "code_lines_added": { "type": "integer", "minimum": 0 }
-      }
-    },
     "summary": { "type": "string" },
     "findings": {
       "type": "array",

@@ -77,7 +77,7 @@ The workflow's pieces now live at the repo root (no longer under a `v1/` directo
 - `skills/make-pr/SKILL.md` — the driver (this skill): orchestration loop, JSONL logging contract, decision rules
 - `agents/` — `worker-coder.md` (GREEN/REFACTOR/non-behavioral), `tdd-runner.md` (RED), `reviewer.md`, `comment-reviewer.md`, `critic.md`
 - `schemas/` — authoritative return-shape contracts the architect validates against (`_defs` + one per role)
-- `scripts/` — `validate_return.py`, `check_prompt_schemas.py`, `comment_density.py` (the comment-reviewer's measured comment/code ratio), plus pyproject/tests; run via `uv`
+- `scripts/` — `validate_return.py`, `check_prompt_schemas.py`, plus pyproject/tests; run via `uv`
 - `gates/` — declarative hard gates: `python.json`, `typescript.json`, `rust.json`
 - `rules/` — `design-principles.md`, `comments.md`, `tdd.md`, `python.md`, `typescript.md`, `rust.md`; resolved by the architect via `rules_root` and shipped into each project's `.claude/rules/` by the installer
 - `runs/` — gitignored placeholder; real run logs go to `<target_cwd>/.v1-runs` (`run_root`)

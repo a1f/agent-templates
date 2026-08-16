@@ -141,7 +141,7 @@ Four language-agnostic rules install alongside the language rules and load on br
 | Rule | File | Loads on | Covers |
 |------|------|----------|--------|
 | Design principles | `rules/design-principles.md` | any source file | deep modules, information hiding, naming, complexity (Ousterhout) |
-| Comments | `rules/comments.md` | any source file | the two comments always allowed, the test for an inline comment, size caps, where the reasoning goes instead, the slop shapes |
+| Comments | `rules/comments.md` | any source file | the two comments always allowed, the test for an inline comment, per-comment caps, where the reasoning goes instead, the slop shapes |
 | TDD | `rules/tdd.md` | test files | red→green→refactor, vertical slices, public-interface tests |
 | English | `rules/english.md` | every file | one word one meaning, simple tenses, 20/25-word sentences, banned words, when a picture earns its place (ASD-STE100) |
 

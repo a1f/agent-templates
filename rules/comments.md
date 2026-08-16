@@ -49,9 +49,10 @@ and it does not defend the design.
 
 - An interface comment is one sentence; three lines at most.
 - An inline comment is one line; two at most.
-- A function's comment lines never exceed its code lines. Past one third, look for a cut.
 - Sentence caps from `english.md` apply: 25 words. A comment states a fact, so it needs no
   "because … which is how … hence" chain. Name the constraint and stop.
+- There is no ration. A comment that passes the test is never slop, and a file with many
+  such comments is fine. The caps bound each comment, not their number.
 
 ## Slop shapes — delete on sight
 

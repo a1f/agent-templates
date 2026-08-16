@@ -157,8 +157,7 @@ Resolve before the first dispatch:
    `reviewer` and `comment-reviewer` **in one message** (parallel), each with the base ref
    (each runs `git diff <base>...HEAD` itself). The reviewer gets `design-principles.md`,
    the language rule per changed file type, and `tdd.md`; the comment-reviewer gets
-   `comments.md`, `english.md`, the language rule, and the density script path
-   `~/.claude/at/scripts/comment_density.py`. Then dispatch `critic` with the task spec,
+   `comments.md`, `english.md`, and the language rule. Then dispatch `critic` with the task spec,
    task type, base ref, full diff, changed test files, RED/GREEN or non-behavioral check
    output, the green gate output, **and the reviewer's findings** (so it can trust the
    reviewer's test-form verdict). Collect **all blockers from the three in one pass**:
@@ -186,10 +185,9 @@ Resolve before the first dispatch:
    gate red on this re-run is a blocker introduced by the round — it consumes the single
    permitted second round (routed per step 5's failure-type rules), and if still red after
    that, stop / re-scope. Re-review **only** `git diff <pre_fix>...HEAD` with `reviewer` — a
-   scoped re-review cannot re-litigate approved code. Re-run `comment-reviewer` on the
-   **full** `git diff <base>...HEAD` when the round touched a comment — its density ratio
-   only means something over the whole diff. Re-run `critic` **only if** the fix changed
-   behavior or coverage. One fix round; a second only if round 1 introduced a new
+   scoped re-review cannot re-litigate approved code; the same scoped diff goes to
+   `comment-reviewer` when the round touched a comment. Re-run `critic` **only if** the fix
+   changed behavior or coverage. One fix round; a second only if round 1 introduced a new
    blocker. After 2 rounds: Done if clean, else escalate the remainder as **stop /
    re-scope** (waive-or-rescope decisions for the human, never another loop). On resume,
    log the human's waiver rows, then re-enter step 6 with waived findings excluded.
