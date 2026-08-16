@@ -35,8 +35,7 @@ deeper there — but still cover all five, and always report a CRITICAL you spot
 
 1. **Quality / design** — violations of `design-principles.md`: shallow modules, information
    leakage, pass-through methods, repetition, leaky abstractions. Also flag a project whose
-   committed config does not report branch coverage — and, only where the language rule asks
-   for a threshold (`typescript.md`), lacks one.
+   committed config does not report branch coverage (a report, never a threshold — `tdd.md`).
 2. **Bugs / correctness** — logic errors, off-by-one, unhandled edge cases, error/exception
    gaps, resource leaks, race conditions, incorrect async/await, broken invariants.
 3. **Security** — injection, unsafe deserialization, authz/authn gaps, secret exposure,

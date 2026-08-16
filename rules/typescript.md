@@ -149,9 +149,9 @@ function createUser(opts: { name: string; email: string; role: Role }): User {
 
 Test discipline (vitest, behavior through the public interface) lives in `tdd.md`. The gate runs
 `vitest` with `--passWithNoTests=false` so a test-less change cannot pass green. Configure
-coverage provider, branch thresholds, strict compiler flags, enum/barrel restrictions, and Biome
-rules in committed project config (`vitest.config.*`, `tsconfig*.json`, `biome.json`) rather than
-only on the gate command line.
+the coverage provider and its branch report (a diagnostic, never a threshold — see `tdd.md`),
+strict compiler flags, enum/barrel restrictions, and Biome rules in committed project config
+(`vitest.config.*`, `tsconfig*.json`, `biome.json`) rather than only on the gate command line.
 
 ## Logging
 

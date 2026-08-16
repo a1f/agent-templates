@@ -92,7 +92,8 @@ existing groups, so on stable these two are reviewer-enforced conventions; to au
 ## Documentation
 
 Doc comments (`///`) required on all public items: one complete sentence, what the caller gets; a
-second only for a contract the signature cannot carry. Include these sections where applicable:
+second only for a contract the signature cannot carry and no section below takes. Include these
+sections where applicable:
 
 - `# Errors` — when the function returns `Result`, list the error conditions.
 - `# Panics` — document any conditions under which the function panics.
@@ -101,9 +102,9 @@ second only for a contract the signature cannot carry. Include these sections wh
 Apply `#[must_use]` on constructors, builders, and fallible operations whose return value should
 not be silently dropped (the `must_use_candidate` clippy lint catches misses). Comment length and
 the test for an inline comment are in `comments.md`; the `# Errors`, `# Panics`, and `# Safety`
-sections above are Rust's form of its contract sentence and stand outside its three-line cap —
-one line per condition, no story. Promote a lingering `TODO` into a tracked issue rather than
-leaving it in code.
+sections above carry the error, panic, and safety contracts in place of that second sentence;
+they sit below the interface comment and outside its three-line cap — one line per condition, no
+story. Promote a lingering `TODO` into a tracked issue rather than leaving it in code.
 
 ## Unsafe Discipline
 
@@ -141,8 +142,8 @@ Native `async fn` in traits is stable — use it directly. But it cannot express
 returned future, so a future obtained through a generic or `dyn` bound will not satisfy `tokio::spawn`
 on the multithreaded runtime; when you must spawn the result, return `-> impl Future<Output = …> +
 Send` explicitly, annotate the trait with `#[trait_variant::make(Send)]`, or fall back to
-`#[async_trait]` (which boxes a `Send` future). Reach for `#[async_trait]` for dyn-compatibility **or**
-when you need that `Send` bound for spawning.
+`#[async_trait]` (which boxes a `Send` future). Reach for `#[async_trait]` when you need
+dyn-compatibility.
 
 - `tokio::select!` to multiplex futures; `tokio::sync::mpsc` for async channels.
 - Offload CPU-bound or blocking work to `tokio::task::spawn_blocking`; never block the async
