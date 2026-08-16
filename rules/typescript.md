@@ -159,6 +159,7 @@ only on the gate command line.
 
 ## Documentation
 
-One-sentence JSDoc: what the caller gets. Parameter types and return types are in the signature;
-do not duplicate them in JSDoc `@param`/`@returns` tags. Length and the test for an inline
-comment are in `comments.md`.
+The JSDoc is the interface comment in `comments.md`: one sentence, what the caller gets; a second
+only for a contract the signature cannot carry. Parameter types and return types are in the
+signature; do not duplicate them in JSDoc `@param`/`@returns` tags. Length and the test for an
+inline comment are in `comments.md`.

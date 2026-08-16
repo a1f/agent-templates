@@ -103,7 +103,8 @@ every mode.
   (lint/format/typecheck/build) pass. The architect owns the **final** gate run — your job is to
   make the change cleanly and sanity-check it, not to declare the gates green.
 - **Scope:** make exactly that change, nothing more. Purely **mechanical** edits to test files are
-  fine — propagating a rename or reformatting only (never weakening; see Hard constraints).
+  fine — propagating a rename, reformatting, or a comment-only edit (never an assertion, fixture,
+  or input; see Hard constraints).
 
 ## How you work
 

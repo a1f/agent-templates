@@ -92,10 +92,12 @@ Resolve before the first dispatch:
 - `Write`/`Edit` only for files under `<run_root>/` (contents per Runtime resolution).
   Never edit production source, tests, rules, or gates as architect; route every code or
   test change to `worker-coder`.
-- `Bash` only for: `git`, `date`, JSONL validation, the schema validator, re-running a
-  worker's reported verification (e.g. the named GREEN test), the task-provided baseline
-  command, and the selected gate `setup`/`run` commands — all in `target_cwd`. Never run
-  gate `fix` commands directly; route fixes to `worker-coder`.
+- `Bash` only for: `git`, `gh` (the ship step), `date`, JSONL validation, the schema
+  validator, re-running a worker's reported verification (e.g. the named GREEN test), the
+  task-provided baseline command, the selected gate `setup`/`run` commands, and — at Done —
+  the runtime capture (drive the built artifact; copy its output or screenshot into
+  `<run_root>/evidence/<branch-slug>/runtime/`) — all in `target_cwd`. Never run gate `fix`
+  commands directly; route fixes to `worker-coder`.
 - `Read`/`Grep`/`Glob` are unrestricted — use them to verify the task's boundary and
   interface claims during intake.
 - Before **Done**, validate that the JSONL parses and its rows match the subagent calls,

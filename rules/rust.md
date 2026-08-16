@@ -21,9 +21,10 @@ encode.
 - **Async runtime:** Tokio (async-std is discontinued).
 - **Error handling:** thiserror (libraries) + anyhow (applications); eyre is an acceptable
   alternative for rich application error reports.
-- **Tests:** `cargo test` (unit + integration + doc tests). Use **cargo-nextest** as the local
-  runner (faster parallelism, better output) — it does **not** run doc tests, so keep
-  `cargo test --doc` alongside it. **proptest** for property-based tests (per-value shrinking).
+- **Tests:** `cargo test` (unit + integration + doc tests). Where the project adopts
+  **cargo-nextest** as the local runner (faster parallelism, better output), keep
+  `cargo test --doc` alongside it — nextest does **not** run doc tests. **proptest** for
+  property-based tests (per-value shrinking).
 - **CI checks:** `cargo doc --no-deps`, `cargo audit`, `cargo deny` (known vulnerabilities + license violations).
 
 ## Naming
