@@ -8,14 +8,15 @@ Target TypeScript 5.8+. Use strict mode, modern ESM, and current tooling through
 
 ## Compiler Configuration
 
-Use `module: "nodenext"` (Node.js — it sets `moduleResolution` automatically) or, for bundled apps, `module: "preserve"` (TS 5.4+, which implies `moduleResolution: "bundler"`). If you instead use `module: "esnext"`, you must also set `moduleResolution: "bundler"` explicitly — alone it falls back to the legacy `classic` resolver, which cannot read package `exports` maps. Always enable strict mode plus additional flags:
+Use `module: "nodenext"` (Node.js — it sets `moduleResolution` automatically) or, for bundled apps, `module: "preserve"` (TS 5.4+, which implies `moduleResolution: "bundler"`). If you instead use `module: "esnext"`, you must also set `moduleResolution: "bundler"` explicitly — alone it falls back to the legacy `classic` resolver, which cannot read package `exports` maps. Always enable strict mode plus these flags (the last one lets imports carry the `.ts` extension the No Barrel Exports example uses):
 
 ```json
 {
   "strict": true,
   "noUncheckedIndexedAccess": true,
   "exactOptionalPropertyTypes": true,
-  "noPropertyAccessFromIndexSignature": true
+  "noPropertyAccessFromIndexSignature": true,
+  "rewriteRelativeImportExtensions": true
 }
 ```
 
@@ -91,7 +92,7 @@ function area(s: Shape): number {
 
 ## Error Handling
 
-Use result types for expected/recoverable errors. Use neverthrow or a custom discriminated union (shown above). Reserve `throw` for truly exceptional, unrecoverable situations (programmer errors, invariant violations).
+Use result types for expected/recoverable errors: `neverthrow` by default, or the custom discriminated union shown above when the package must stay dependency-free. Reserve `throw` for truly exceptional, unrecoverable situations (programmer errors, invariant violations).
 
 ```typescript
 // neverthrow style
@@ -108,7 +109,7 @@ function parseConfig(raw: string): Result<Config, ParseError> {
 - Keep `package.json` `type: "module"` for ESM
 - Place shared types in dedicated `types.ts` files
 - Place constants in `constants.ts` using `as const`
-- Co-locate tests next to source files (`foo.ts` / `foo.test.ts`) or in a parallel `__tests__/` directory
+- Co-locate tests next to source files (`foo.ts` / `foo.test.ts`); use a parallel `__tests__/` directory only when the package already does
 - Use path aliases sparingly; prefer relative imports within a package
 
 ## Functions and Parameters
@@ -148,9 +149,9 @@ function createUser(opts: { name: string; email: string; role: Role }): User {
 
 Test discipline (vitest, behavior through the public interface) lives in `tdd.md`. The gate runs
 `vitest` with `--passWithNoTests=false` so a test-less change cannot pass green. Configure
-coverage provider, branch thresholds, strict compiler flags, enum/barrel restrictions, and Biome
-rules in committed project config (`vitest.config.*`, `tsconfig*.json`, `biome.json`) rather than
-only on the gate command line.
+the coverage provider and its branch report (a diagnostic, never a threshold — see `tdd.md`),
+strict compiler flags, enum/barrel restrictions, and Biome rules in committed project config
+(`vitest.config.*`, `tsconfig*.json`, `biome.json`) rather than only on the gate command line.
 
 ## Logging
 
@@ -159,4 +160,7 @@ only on the gate command line.
 
 ## Documentation
 
-Single-sentence JSDoc explaining WHY the function exists, not WHAT it does. Parameter types and return types are in the signature; do not duplicate them in JSDoc `@param`/`@returns` tags.
+The JSDoc is the interface comment in `comments.md`: one sentence, what the caller gets; a second
+only for a contract the signature cannot carry. Parameter types and return types are in the
+signature; do not duplicate them in JSDoc `@param`/`@returns` tags. Length and the test for an
+inline comment are in `comments.md`.

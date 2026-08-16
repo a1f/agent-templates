@@ -21,10 +21,11 @@ encode.
 - **Async runtime:** Tokio (async-std is discontinued).
 - **Error handling:** thiserror (libraries) + anyhow (applications); eyre is an acceptable
   alternative for rich application error reports.
-- **Tests:** `cargo test` (unit + integration + doc tests). Use **cargo-nextest** as the local
-  runner (faster parallelism, better output) — it does **not** run doc tests, so keep
-  `cargo test --doc` alongside it. **proptest** for property-based tests (per-value shrinking).
-- **CI checks:** `cargo doc --no-deps`, `cargo audit`, `cargo deny` (known vulnerabilities + license violations).
+- **Tests:** `cargo test` (unit + integration + doc tests). Where the project adopts
+  **cargo-nextest** as the local runner (faster parallelism, better output), keep
+  `cargo test --doc` alongside it — nextest does **not** run doc tests. **proptest** for
+  property-based tests (per-value shrinking).
+- **CI checks:** `cargo doc --no-deps`, `cargo audit`, `cargo deny check` (known vulnerabilities + license violations).
 
 ## Naming
 
@@ -90,7 +91,8 @@ existing groups, so on stable these two are reviewer-enforced conventions; to au
 
 ## Documentation
 
-Doc comments (`///`) required on all public items, written as complete sentences. Include these
+Doc comments (`///`) required on all public items: one complete sentence, what the caller gets; a
+second only for a contract the signature cannot carry and no section below takes. Include these
 sections where applicable:
 
 - `# Errors` — when the function returns `Result`, list the error conditions.
@@ -98,8 +100,11 @@ sections where applicable:
 - `# Safety` — required on every `unsafe fn`; document the invariants the caller must uphold.
 
 Apply `#[must_use]` on constructors, builders, and fallible operations whose return value should
-not be silently dropped (the `must_use_candidate` clippy lint catches misses). Comments explain
-*why*, not *what*; promote a lingering `TODO` into a tracked issue rather than leaving it in code.
+not be silently dropped (the `must_use_candidate` clippy lint catches misses). Comment length and
+the test for an inline comment are in `comments.md`; the `# Errors`, `# Panics`, and `# Safety`
+sections above carry the error, panic, and safety contracts in place of that second sentence;
+they sit below the interface comment and outside its three-line cap — one line per condition, no
+story. Promote a lingering `TODO` into a tracked issue rather than leaving it in code.
 
 ## Unsafe Discipline
 
@@ -137,8 +142,8 @@ Native `async fn` in traits is stable — use it directly. But it cannot express
 returned future, so a future obtained through a generic or `dyn` bound will not satisfy `tokio::spawn`
 on the multithreaded runtime; when you must spawn the result, return `-> impl Future<Output = …> +
 Send` explicitly, annotate the trait with `#[trait_variant::make(Send)]`, or fall back to
-`#[async_trait]` (which boxes a `Send` future). Reach for `#[async_trait]` for dyn-compatibility **or**
-when you need that `Send` bound for spawning.
+`#[async_trait]` (which boxes a `Send` future). Reach for `#[async_trait]` when you need
+dyn-compatibility.
 
 - `tokio::select!` to multiplex futures; `tokio::sync::mpsc` for async channels.
 - Offload CPU-bound or blocking work to `tokio::task::spawn_blocking`; never block the async

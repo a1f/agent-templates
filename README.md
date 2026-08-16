@@ -100,8 +100,8 @@ Top-level skills that run full workflows by composing lower-level skills.
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
-| **make-pr** | `/make-pr` | Drive a scoped task to done via a per-behavior TDD loop (tdd-runner + worker-coder), run gates, then review/critic. Best for high-risk work |
-| **make-pr-lite** | `/make-pr-lite` | Lighter, cheaper sibling of make-pr for low-risk/greenfield PRs: one self-TDD coder + gates + a parallel review panel. Trades the live per-behavior RED witness for a test-form review lens |
+| **make-pr** | `/make-pr` | Drive a scoped task to done via a per-behavior TDD loop (tdd-runner + worker-coder), run gates, then reviewer + comment-reviewer + critic. Best for high-risk work |
+| **make-pr-lite** | `/make-pr-lite` | Lighter, cheaper sibling of make-pr for low-risk/greenfield PRs: one self-TDD coder + gates + a parallel review panel (3 reviewers + comment-reviewer) + critic. Trades the live per-behavior RED witness for a test-form review lens |
 | **dispatch** | `/dispatch` | Start the unblocked PRs from a plan in parallel — approval-gated, then one tmux window per PR, each in its own worktree running an agent on `/make-pr <ref> <PR#>` |
 | **pr-babysit** | `/pr-babysit` | Poll PR until ready to merge, fix review/CI issues |
 | **latest-rebase** | `/latest-rebase` | Rebase current branch onto latest main |
@@ -136,11 +136,12 @@ Opinionated coding standards that load automatically when editing matching files
 
 ### Cross-cutting rules
 
-Three language-agnostic rules install alongside the language rules and load on broader globs:
+Four language-agnostic rules install alongside the language rules and load on broader globs:
 
 | Rule | File | Loads on | Covers |
 |------|------|----------|--------|
 | Design principles | `rules/design-principles.md` | any source file | deep modules, information hiding, naming, complexity (Ousterhout) |
+| Comments | `rules/comments.md` | any source file | the two comments always allowed, the test for an inline comment, per-comment caps, where the reasoning goes instead, the slop shapes |
 | TDD | `rules/tdd.md` | test files | red→green→refactor, vertical slices, public-interface tests |
 | English | `rules/english.md` | every file | one word one meaning, simple tenses, 20/25-word sentences, banned words, when a picture earns its place (ASD-STE100) |
 

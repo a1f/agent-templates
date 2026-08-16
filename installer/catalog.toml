@@ -89,6 +89,10 @@ name = "coder-lite"
 
 [[units]]
 kind = "agent"
+name = "comment-reviewer"
+
+[[units]]
+kind = "agent"
 name = "critic"
 
 [[units]]
@@ -104,6 +108,10 @@ kind = "agent"
 name = "worker-coder"
 
 # --- rules (rules/<name>.md) ---
+[[units]]
+kind = "rule"
+name = "comments"
+
 [[units]]
 kind = "rule"
 name = "cpp"
@@ -150,7 +158,9 @@ units = [
   "agent/tdd-runner",
   "agent/worker-coder",
   "agent/reviewer",
+  "agent/comment-reviewer",
   "agent/critic",
+  "rule/comments",
   "rule/design-principles",
   "rule/english",
   "rule/tdd",
@@ -163,7 +173,9 @@ units = [
   "skill/make-pr-lite",
   "agent/coder-lite",
   "agent/reviewer",
+  "agent/comment-reviewer",
   "agent/critic",
+  "rule/comments",
   "rule/design-principles",
   "rule/english",
   "rule/tdd",

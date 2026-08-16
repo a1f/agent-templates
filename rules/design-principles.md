@@ -193,20 +193,18 @@ and obvious**.
 
 ## Comments
 
-Comments exist to capture what the code cannot: the *why*, the abstraction, and the
-non-obvious. They are part of the design, not an afterthought.
+Comments capture what the code cannot: the abstraction and the non-obvious. They are part of
+the design, not an afterthought. `comments.md` says what a comment may say and how long it
+may be; this section says only how comments serve design.
 
 - Comment the **interface** (what a caller needs to know to use it) separately from the
-  **implementation** (why it works this way). The interface comment is the abstraction.
+  **implementation** (the inline comment of `comments.md`: the one constraint a reader would
+  otherwise break). The interface comment is the abstraction.
 - Write the interface comment *first*, before the body — if it's hard to write, the
   interface is too complex (design feedback, for free).
-- Never write a comment that just restates the code. Document the things that are *not*
-  obvious from reading it.
-- Comments describe *why*, not *what*. The code already says what.
-- **The interface comment is a complete contract when the signature and names are not enough.**
-  Prefer concise language-rule docstrings, but include any non-obvious preconditions, errors,
-  side effects, or ordering guarantees a caller needs. Do not duplicate obvious parameter or
-  return types just to be exhaustive.
+- Never write a comment that just restates the code, and never write one that argues for
+  the code. The reasoning behind a design lives in the commit message, the PR body, or a
+  design doc (`comments.md`).
 
 ## Consistency
 
@@ -228,8 +226,8 @@ and correctly, without surprises. **Non-obvious code is a defect**, even when it
 
 - If a reader must pause to work out what a piece of code does, or could reasonably read it
   wrong, that is a problem — fix it with clearer names and structure first.
-- When the *why* still isn't obvious from well-named code, that is what a comment is for (see
-  Comments) — but reach for structure before commentary.
+- When a constraint still isn't visible from well-named code, that is what a comment is for
+  (see Comments) — but reach for structure before commentary.
 - Avoid surprises: don't give something a name or signature that implies behavior it lacks, and
   don't hide a side effect where a reader won't expect it. The obvious reading should be correct.
 
@@ -269,6 +267,7 @@ design, and sometimes a third that beats both.
 - **Re-validated input** — the same external value checked in many places instead of parsed once at the boundary.
 - **Conjoined methods** — two pieces only understandable by reading both back-to-back.
 - **Comment repeats code** — or, you can't write a comment without restating the body.
+- **Comment argues** — a paragraph of reasoning above a line; the reasoning belongs in the commit message, the PR body, or a design doc (`comments.md`).
 - **Hard to name / hard to describe** — the unit's responsibilities aren't clean.
 - **Inconsistency** — a new pattern for something the codebase already does one established way.
 - **Non-obvious code** — a reader must stop and puzzle out what it does, or could read it wrong.

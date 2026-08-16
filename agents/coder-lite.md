@@ -86,8 +86,11 @@ touch them.
   failing and return `blocked` rather than shipping a lucky green.
 - **Conform gate — never skip.** Before staging, re-read the language rule and check **every line
   you changed** against it (linters miss rules like keyword-only `*`, `Final[T]`, per-binding type
-  hints, narrowest-exception). A **black-letter** violation (one the rule states explicitly) is a
-  blocker: fix it before staging, or return `blocked` if a rule genuinely conflicts with scope.
+  hints, narrowest-exception), then re-read `comments.md` and check **every comment you added or
+  changed**: one sentence for an interface, one line a reader needs inline, and the reasoning
+  behind a change in the PR's commit message, never in the code. A **black-letter** violation
+  (one the rule states explicitly) is a blocker: fix it before staging, or return `blocked` if a
+  rule genuinely conflicts with scope.
 - **Commit.** One PR = **one commit**. Stage only the files this PR intentionally changed
   (`git diff --cached --name-only` must list exactly those — capture it before `git commit`).
   Conventional subject (`feat:`/`fix:`/`refactor:`/`chore:`). In `fix` mode, make a **single new
