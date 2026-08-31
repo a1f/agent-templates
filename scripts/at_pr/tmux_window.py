@@ -7,6 +7,8 @@ import subprocess
 from dataclasses import dataclass
 from typing import Final
 
+from .constants import WINDOW_ID_PATTERN
+
 TMUX: Final[str] = "tmux"
 WINDOW_ID_FORMAT: Final[str] = "#{window_id}"
 
@@ -39,7 +41,12 @@ class TmuxServer:
         return window_id in window_ids
 
     def kill_window(self, *, window_id: str) -> None:
-        """Close the window with that id; a window already gone is not an error."""
+        """Close the window with that id; a window already gone is not an error.
+
+        If the target is not a tmux window id, this raises ValueError.
+        """
+        if WINDOW_ID_PATTERN.fullmatch(window_id) is None:
+            raise ValueError(f"{window_id!r} is not a tmux window id")
         arguments: tuple[str, ...] = ("kill-window", "-t", window_id)
         with contextlib.suppress(subprocess.CalledProcessError):
             self._run(arguments=arguments)

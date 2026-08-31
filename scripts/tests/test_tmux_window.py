@@ -89,3 +89,16 @@ def test_kill_window_on_a_missing_window_is_a_no_op(tmux_server: TmuxServer) -> 
     tmux_server.kill_window(window_id=window_id)
 
     assert not tmux_server.window_exists(window_id=window_id)
+
+
+def test_kill_window_refuses_a_target_that_is_not_a_window_id(
+    tmux_server: TmuxServer,
+) -> None:
+    window_id: str = tmux_server.open_window(name=WINDOW_NAME)
+    targets_that_are_not_window_ids: tuple[str, ...] = (WINDOW_NAME, "")
+
+    for target in targets_that_are_not_window_ids:
+        with pytest.raises(ValueError):
+            tmux_server.kill_window(window_id=target)
+
+    assert tmux_server.window_exists(window_id=window_id)
