@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 from dataclasses import dataclass
 from typing import Final
@@ -38,9 +39,10 @@ class TmuxServer:
         return window_id in window_ids
 
     def kill_window(self, *, window_id: str) -> None:
-        """Close the window with that id."""
+        """Close the window with that id; a window already gone is not an error."""
         arguments: tuple[str, ...] = ("kill-window", "-t", window_id)
-        self._run(arguments=arguments)
+        with contextlib.suppress(subprocess.CalledProcessError):
+            self._run(arguments=arguments)
 
     def _run(self, *, arguments: tuple[str, ...]) -> str:
         """Run tmux against this server with these arguments and return its stdout."""

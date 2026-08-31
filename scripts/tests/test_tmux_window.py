@@ -80,3 +80,12 @@ def test_kill_window_closes_an_open_window(tmux_server: TmuxServer) -> None:
     tmux_server.kill_window(window_id=window_id)
 
     assert not tmux_server.window_exists(window_id=window_id)
+
+
+def test_kill_window_on_a_missing_window_is_a_no_op(tmux_server: TmuxServer) -> None:
+    window_id: str = tmux_server.open_window(name=WINDOW_NAME)
+    tmux_server.kill_window(window_id=window_id)
+
+    tmux_server.kill_window(window_id=window_id)
+
+    assert not tmux_server.window_exists(window_id=window_id)
