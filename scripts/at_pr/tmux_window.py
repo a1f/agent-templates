@@ -1,16 +1,12 @@
-"""Windows on a tmux server, driven by the tmux binary rather than a tmux library."""
+"""Windows on a tmux server, driven by the tmux binary."""
 
 from __future__ import annotations
 
 import contextlib
 import subprocess
 from dataclasses import dataclass
-from typing import Final
 
-from .constants import WINDOW_ID_PATTERN
-
-TMUX: Final[str] = "tmux"
-WINDOW_ID_FORMAT: Final[str] = "#{window_id}"
+from .constants import TMUX, WINDOW_ID_FORMAT, WINDOW_ID_PATTERN
 
 
 @dataclass(frozen=True)

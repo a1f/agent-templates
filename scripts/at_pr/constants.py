@@ -7,3 +7,6 @@ from typing import Final
 
 # tmux resolves a bare target by name, and an empty target to the current window.
 WINDOW_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^@[0-9]+$")
+
+TMUX: Final[str] = "tmux"
+WINDOW_ID_FORMAT: Final[str] = "#{window_id}"
