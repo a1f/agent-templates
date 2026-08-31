@@ -43,6 +43,7 @@ addopts = [
   "--cov=validate_return",
   "--cov=check_prompt_schemas",
   "--cov=dispatch",
+  "--cov=at_pr",
   "--cov-report=term-missing",
 ]
 filterwarnings = ["error"]
