@@ -72,3 +72,11 @@ def test_open_window_makes_a_live_window_under_the_given_name(
     assert tmux_server.window_exists(window_id=window_id)
     listing: frozenset[str] = window_listing(socket=private_socket)
     assert f"{window_id} {WINDOW_NAME}" in listing
+
+
+def test_kill_window_closes_an_open_window(tmux_server: TmuxServer) -> None:
+    window_id: str = tmux_server.open_window(name=WINDOW_NAME)
+
+    tmux_server.kill_window(window_id=window_id)
+
+    assert not tmux_server.window_exists(window_id=window_id)
